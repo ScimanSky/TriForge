@@ -32,3 +32,7 @@ pnpm build
 ## Archive
 
 The imported SwimForge code is preserved on branch `archive/swimforge-import` and tag `swimforge-import-before-reset`.
+
+## Strategy
+
+- [TriForge Crypto Triathlon Project](docs/triforge-crypto-triathlon-project.md)
