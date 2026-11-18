@@ -1,10 +1,28 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+captures/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Firebase config of the real project. Each developer downloads their own.
+android/app/google-services.json
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Secrets
 .env
-.env.local
-.env*.local
-.next
-node_modules
-coverage
-dist
-supabase/.temp
-*.tsbuildinfo
-*.log
+.env.*
+!.env.example
+
+.DS_Store

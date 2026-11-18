@@ -1,0 +1,123 @@
+"""Turn a Garmin Connect activity summary into a TriForge activity document.
+
+The output is the shape stored in Firestore under
+``users/{uid}/activities/{id}`` and read by the Android app. Field names are
+camelCase because the app reads them directly.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+SWIM_TYPES = {"swimming", "lap_swimming", "open_water_swimming"}
+
+# Garmin's typeKey has many variants per sport. Anything containing one of
+# these markers belongs to that sport; the explicit sets cover the rest.
+BIKE_TYPES = {
+    "cycling",
+    "bmx",
+    "cyclocross",
+    "virtual_ride",
+    "recumbent_cycling",
+}
+RUN_TYPES = {"running", "virtual_run", "obstacle_run", "ultra_run"}
+
+
+def sport_for(type_key: str | None) -> str:
+    """Map a Garmin activity typeKey to swim, bike, run or other."""
+    key = (type_key or "").lower()
+    if key in SWIM_TYPES or "swimming" in key:
+        return "swim"
+    if key in BIKE_TYPES or "cycling" in key or "biking" in key or "bike" in key:
+        return "bike"
+    if key in RUN_TYPES or key.endswith("_running"):
+        return "run"
+    return "other"
+
+
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _rounded(value: Any) -> int | None:
+    number = _number(value)
+    return None if number is None else int(round(number))
+
+
+def _parse_gmt(value: Any) -> datetime | None:
+    """Parse Garmin's ``startTimeGMT`` ("2026-03-14 06:30:00") as UTC."""
+    if not isinstance(value, str) or not value:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def document_id(garmin_activity_id: Any) -> str:
+    return f"garmin_{garmin_activity_id}"
+
+
+def normalize_activity(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the Firestore document for one Garmin activity.
+
+    Returns None when the activity has no id or no start time, because it
+    could not be placed on a timeline or deduplicated.
+    """
+    activity_id = raw.get("activityId")
+    start = _parse_gmt(raw.get("startTimeGMT"))
+    if activity_id is None or start is None:
+        return None
+
+    activity_type = raw.get("activityType") or {}
+    type_key = activity_type.get("typeKey") if isinstance(activity_type, dict) else None
+    sport = sport_for(type_key)
+
+    cadence = (
+        raw.get("averageRunningCadenceInStepsPerMinute")
+        if sport == "run"
+        else raw.get("averageBikingCadenceInRevPerMinute")
+        if sport == "bike"
+        else raw.get("averageSwimCadenceInStrokesPerMinute")
+    )
+
+    doc: dict[str, Any] = {
+        "source": "garmin",
+        "externalId": str(activity_id),
+        "sport": sport,
+        "type": type_key or "unknown",
+        "name": raw.get("activityName") or "",
+        "startTime": start,
+        "startTimeLocal": raw.get("startTimeLocal") or "",
+        "durationSec": _rounded(raw.get("duration")) or 0,
+        "movingDurationSec": _rounded(raw.get("movingDuration")),
+        "distanceMeters": _number(raw.get("distance")) or 0.0,
+        "elevationGainMeters": _number(raw.get("elevationGain")),
+        "avgHr": _rounded(raw.get("averageHR")),
+        "maxHr": _rounded(raw.get("maxHR")),
+        "calories": _rounded(raw.get("calories")),
+        "avgSpeedMps": _number(raw.get("averageSpeed")),
+        "avgPowerWatts": _rounded(raw.get("avgPower")),
+        "normPowerWatts": _rounded(raw.get("normPower")),
+        "avgCadence": _rounded(cadence),
+        "trainingLoad": _number(raw.get("activityTrainingLoad")),
+        "aerobicTe": _number(raw.get("aerobicTrainingEffect")),
+        "anaerobicTe": _number(raw.get("anaerobicTrainingEffect")),
+        "vo2max": _number(raw.get("vO2MaxValue")),
+    }
+
+    if sport == "swim":
+        doc["openWater"] = type_key == "open_water_swimming"
+        doc["poolLengthMeters"] = _number(raw.get("poolLength"))
+        doc["swolf"] = _rounded(raw.get("averageSwolf"))
+        doc["strokes"] = _rounded(raw.get("strokes"))
+        doc["lengths"] = _rounded(raw.get("activeLengths"))
+
+    return doc

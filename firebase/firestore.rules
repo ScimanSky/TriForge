@@ -1,0 +1,41 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      // Athlete profile.
+      allow read, create, update: if isOwner(uid);
+      allow delete: if false;
+
+      // Activities. The Garmin service writes its own with admin rights,
+      // which bypass these rules. The app may only write what it imported
+      // from Health Connect, and may never forge or alter a Garmin activity.
+      match /activities/{activityId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.source == 'health_connect';
+        allow update: if isOwner(uid)
+          && resource.data.source == 'health_connect'
+          && request.resource.data.source == 'health_connect';
+        allow delete: if isOwner(uid)
+          && resource.data.source == 'health_connect';
+      }
+
+      // Connection status of external sources. Written only by the server.
+      match /integrations/{provider} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+
+      // Encrypted Garmin tokens and MFA state. Server only.
+      match /private/{document=**} {
+        allow read, write: if false;
+      }
+    }
+  }
+}

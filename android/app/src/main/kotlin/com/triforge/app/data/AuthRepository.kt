@@ -1,0 +1,51 @@
+package com.triforge.app.data
+
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.UserProfileChangeRequest
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.tasks.await
+
+class AuthRepository(
+    private val auth: FirebaseAuth,
+    private val firestore: FirebaseFirestore,
+) {
+
+    /** The signed-in athlete's id, or null when signed out. */
+    val userId: Flow<String?> = callbackFlow {
+        val listener = FirebaseAuth.AuthStateListener { trySend(it.currentUser?.uid) }
+        auth.addAuthStateListener(listener)
+        awaitClose { auth.removeAuthStateListener(listener) }
+    }.distinctUntilChanged()
+
+    val displayName: String
+        get() = auth.currentUser?.displayName.orEmpty()
+
+    val email: String
+        get() = auth.currentUser?.email.orEmpty()
+
+    suspend fun signIn(email: String, password: String) {
+        auth.signInWithEmailAndPassword(email, password).await()
+    }
+
+    suspend fun register(name: String, email: String, password: String) {
+        val user = auth.createUserWithEmailAndPassword(email, password).await().user ?: return
+        user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name).build()).await()
+        firestore.collection("users").document(user.uid)
+            .set(
+                mapOf("displayName" to name, "createdAt" to FieldValue.serverTimestamp()),
+                SetOptions.merge(),
+            )
+            .await()
+    }
+
+    fun signOut() = auth.signOut()
+
+    /** A fresh ID token for calls to the Garmin service. */
+    suspend fun idToken(): String? = auth.currentUser?.getIdToken(false)?.await()?.token
+}

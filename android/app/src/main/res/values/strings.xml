@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TriForge</string>
+
+    <!-- Setup -->
+    <string name="setup_title">Firebase non è configurato</string>
+    <string name="setup_body">Scarica google-services.json dalla console Firebase, copialo in android/app e ricompila l\'app.</string>
+
+    <!-- Auth -->
+    <string name="auth_tagline">Allenati meglio in tutte e tre le discipline.</string>
+    <string name="auth_name">Nome</string>
+    <string name="auth_email">Email</string>
+    <string name="auth_password">Password</string>
+    <string name="auth_sign_in">Accedi</string>
+    <string name="auth_register">Crea account</string>
+    <string name="auth_switch_to_register">Non hai un account? Registrati</string>
+    <string name="auth_switch_to_sign_in">Hai già un account? Accedi</string>
+    <string name="auth_error_fields">Inserisci email e password.</string>
+    <string name="auth_error_name">Inserisci il tuo nome.</string>
+    <string name="auth_error_credentials">Email o password non corretti.</string>
+    <string name="auth_error_email_in_use">Esiste già un account con questa email.</string>
+    <string name="auth_error_weak_password">La password deve avere almeno 6 caratteri.</string>
+    <string name="auth_error_network">Connessione assente. Riprova.</string>
+    <string name="auth_error_generic">Accesso non riuscito. Riprova.</string>
+
+    <!-- Navigation -->
+    <string name="nav_today">Oggi</string>
+    <string name="nav_activities">Attività</string>
+    <string name="nav_profile">Profilo</string>
+
+    <!-- Sports -->
+    <string name="sport_swim">Nuoto</string>
+    <string name="sport_bike">Bici</string>
+    <string name="sport_run">Corsa</string>
+    <string name="sport_other">Altro</string>
+
+    <!-- Today -->
+    <string name="today_this_week">Questa settimana</string>
+    <string name="today_week_total">%1$d sessioni · %2$s</string>
+    <string name="today_sessions">%1$d sessioni</string>
+    <string name="today_vs_last_week">%1$s%% rispetto alla settimana scorsa</string>
+    <string name="today_trend_title">Ultime 8 settimane</string>
+    <string name="today_trend_caption">Ore di allenamento per settimana</string>
+    <string name="today_recent">Ultime attività</string>
+    <string name="today_empty_title">Nessuna attività, per ora</string>
+    <string name="today_empty_body">Collega Garmin o Health Connect dal Profilo per importare i tuoi allenamenti.</string>
+    <string name="load_error">Non riesco a caricare le attività. Controlla la connessione.</string>
+
+    <!-- Activities -->
+    <string name="activities_all">Tutte</string>
+    <string name="activities_empty">Qui compariranno i tuoi allenamenti delle ultime 12 settimane.</string>
+    <string name="activity_untitled">Allenamento</string>
+    <string name="activity_hr">%1$d bpm</string>
+    <string name="source_garmin">Garmin</string>
+    <string name="source_health_connect">Health Connect</string>
+
+    <!-- Profile -->
+    <string name="profile_sources">Sorgenti dati</string>
+    <string name="profile_sign_out">Esci</string>
+
+    <string name="garmin_title">Garmin Connect</string>
+    <string name="garmin_not_configured">Il servizio Garmin non è ancora configurato in questa build.</string>
+    <string name="garmin_intro">Accedi con le credenziali Garmin Connect. La password viene usata una sola volta per collegare l\'account e non viene salvata.</string>
+    <string name="garmin_email">Email Garmin</string>
+    <string name="garmin_password">Password Garmin</string>
+    <string name="garmin_connect">Collega</string>
+    <string name="garmin_mfa_intro">Garmin ha inviato un codice di verifica. Inseriscilo qui.</string>
+    <string name="garmin_mfa_code">Codice</string>
+    <string name="garmin_mfa_confirm">Conferma</string>
+    <string name="garmin_connected_as">Collegato come %1$s</string>
+    <string name="garmin_connected">Collegato</string>
+    <string name="garmin_last_sync">Ultima sincronizzazione: %1$s</string>
+    <string name="garmin_never_synced">Non ancora sincronizzato</string>
+    <string name="garmin_reconnect">Garmin ha chiuso la sessione. Collega di nuovo l\'account.</string>
+    <string name="garmin_sync">Sincronizza</string>
+    <string name="garmin_disconnect">Scollega</string>
+    <string name="garmin_synced">%1$d attività sincronizzate.</string>
+    <string name="garmin_error_credentials">Email o password Garmin non corretti.</string>
+    <string name="garmin_error_mfa_code">Codice non valido. Riprova.</string>
+    <string name="garmin_error_mfa_expired">Il codice è scaduto. Ripeti l\'accesso.</string>
+    <string name="garmin_error_rate_limited">Garmin sta limitando gli accessi. Riprova tra %1$d minuti.</string>
+    <string name="garmin_error_unavailable">Garmin non risponde. Riprova più tardi.</string>
+    <string name="garmin_error_not_connected">L\'account Garmin non è collegato.</string>
+    <string name="garmin_error_network">Connessione assente. Riprova.</string>
+    <string name="garmin_error_generic">Operazione non riuscita. Riprova.</string>
+
+    <string name="hc_title">Health Connect</string>
+    <string name="hc_intro">Legge gli allenamenti che Garmin Connect e altre app salvano sul telefono. Utile come seconda via se il collegamento diretto a Garmin non funziona.</string>
+    <string name="hc_unavailable">Health Connect non è disponibile su questo dispositivo.</string>
+    <string name="hc_needs_update">Installa o aggiorna Health Connect dal Play Store per usarlo.</string>
+    <string name="hc_grant">Consenti l\'accesso</string>
+    <string name="hc_import">Importa allenamenti</string>
+    <string name="hc_imported">%1$d allenamenti importati da Health Connect.</string>
+    <string name="hc_error">Importazione da Health Connect non riuscita.</string>
+
+    <!-- Health permissions rationale -->
+    <string name="rationale_title">Perché TriForge legge i tuoi dati</string>
+    <string name="rationale_body">TriForge legge da Health Connect gli allenamenti di nuoto, bici e corsa, con distanza, frequenza cardiaca e calorie, per mostrarti le statistiche e adattare i consigli di allenamento. I dati vengono salvati nel tuo account TriForge e non vengono condivisi con altri. Puoi revocare l\'accesso in qualsiasi momento dalle impostazioni di Health Connect.</string>
+</resources>
