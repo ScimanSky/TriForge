@@ -1,38 +1,12 @@
 # TriForge
 
-TriForge is a triathlon-first Crypto Move-to-Earn and GameFi MVP. The first release is off-chain: athletes log swim, bike, and run sessions, earn XP, complete missions, and receive simulated Forge Credits in a ledger.
+App per triatleti (nuoto, bici, corsa) orientata all'allenamento e al miglioramento.
 
-## Stack
+Il repository è stato azzerato per ripartire da zero. La direzione del progetto:
 
-- Next.js App Router
-- TypeScript
-- Tailwind CSS
-- Supabase Auth + Postgres
-- Vercel Hobby deployment
+- dati e statistiche da Strava, Garmin e altri dispositivi
+- coaching AI per l'allenamento
+- una sezione nutrizione gestita da un coach AI dedicato
+- una sezione social in stile Strava
 
-## Local Setup
-
-```bash
-pnpm install
-cp .env.example .env.local
-pnpm dev
-```
-
-Create a Supabase project, paste the values into `.env.local`, then run `supabase/schema.sql` in the Supabase SQL editor.
-
-## Checks
-
-```bash
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-```
-
-## Archive
-
-The imported SwimForge code is preserved on branch `archive/swimforge-import` and tag `swimforge-import-before-reset`.
-
-## Strategy
-
-- [TriForge Crypto Triathlon Project](docs/triforge-crypto-triathlon-project.md)
+Il codice precedente (MVP Move-to-Earn) resta consultabile nella storia git, fino al commit `7265512`.
