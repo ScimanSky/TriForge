@@ -28,8 +28,20 @@ object ActivityMapper {
             distanceMeters = number(fields["distanceMeters"])?.toDouble()?.coerceAtLeast(0.0) ?: 0.0,
             elevationGainMeters = number(fields["elevationGainMeters"])?.toDouble(),
             avgHr = number(fields["avgHr"])?.toInt(),
+            maxHr = number(fields["maxHr"])?.toInt(),
             calories = number(fields["calories"])?.toInt(),
             trainingLoad = number(fields["trainingLoad"])?.toDouble(),
+            avgPowerWatts = number(fields["avgPowerWatts"])?.toInt(),
+            normPowerWatts = number(fields["normPowerWatts"])?.toInt(),
+            avgCadence = number(fields["avgCadence"])?.toInt(),
+            aerobicTe = number(fields["aerobicTe"])?.toDouble(),
+            anaerobicTe = number(fields["anaerobicTe"])?.toDouble(),
+            vo2max = number(fields["vo2max"])?.toDouble(),
+            openWater = fields["openWater"] as? Boolean,
+            poolLengthMeters = number(fields["poolLengthMeters"])?.toDouble(),
+            swolf = number(fields["swolf"])?.toInt(),
+            strokes = number(fields["strokes"])?.toInt(),
+            lengths = number(fields["lengths"])?.toInt(),
         )
     }
 

@@ -14,7 +14,7 @@ class Settings:
     # disables the endpoint.
     scheduler_secret: str = ""
     # How far back the first sync of a new connection reaches.
-    initial_sync_days: int = 90
+    initial_sync_days: int = 120
     # Overlap re-read on every later sync, so edits made on Garmin are picked up.
     resync_overlap_days: int = 3
     # Pause after Garmin answers 429, before the service contacts it again.
@@ -30,7 +30,7 @@ def load_settings() -> Settings:
     return Settings(
         token_encryption_key=key,
         scheduler_secret=os.environ.get("SCHEDULER_SECRET", ""),
-        initial_sync_days=int(os.environ.get("INITIAL_SYNC_DAYS", "90")),
+        initial_sync_days=int(os.environ.get("INITIAL_SYNC_DAYS", "120")),
         resync_overlap_days=int(os.environ.get("RESYNC_OVERLAP_DAYS", "3")),
         rate_limit_cooldown_seconds=int(
             os.environ.get("RATE_LIMIT_COOLDOWN_SECONDS", "900")

@@ -40,7 +40,7 @@ Tutto sotto `users/{uid}`:
 | --- | --- | --- |
 | `TOKEN_ENCRYPTION_KEY` | sì | Chiave Fernet. Da tenere in Secret Manager |
 | `SCHEDULER_SECRET` | no | Segreto per `/internal/sync-all`. Se vuoto l'endpoint è disattivato |
-| `INITIAL_SYNC_DAYS` | no | Giorni importati alla prima sincronizzazione (90) |
+| `INITIAL_SYNC_DAYS` | no | Giorni importati alla prima sincronizzazione (120, cioè le 16 settimane che l'app mostra) |
 | `RESYNC_OVERLAP_DAYS` | no | Giorni riletti a ogni sincronizzazione successiva (3) |
 | `RATE_LIMIT_COOLDOWN_SECONDS` | no | Pausa dopo un 429 di Garmin (900) |
 

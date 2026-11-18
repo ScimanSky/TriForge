@@ -89,7 +89,7 @@ def test_first_sync_reaches_back_the_initial_window(service, gateway, store, clo
     assert result.synced == 3
     tokens, start, end = gateway.fetch_calls[0]
     assert tokens == '{"t": 1}'
-    assert start == date(2026, 8, 20)
+    assert start == date(2026, 7, 21)
     assert end == date(2026, 11, 18)
     assert set(store.activities[UID]) == {"garmin_1", "garmin_2", "garmin_3"}
     assert store.activities[UID]["garmin_2"]["sport"] == "swim"

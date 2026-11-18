@@ -29,7 +29,7 @@ class TrainingViewModel(uid: String, repository: ActivityRepository) : ViewModel
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrainingState.Loading)
 
     companion object {
-        const val WINDOW_WEEKS = 12L
+        const val WINDOW_WEEKS = 16L
 
         /** Monday of the week [WINDOW_WEEKS] weeks back, so whole weeks are loaded. */
         fun windowStart(today: LocalDate = LocalDate.now(), zone: ZoneId = ZoneId.systemDefault()) =
