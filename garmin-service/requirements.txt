@@ -1,0 +1,6 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+garminconnect==0.3.20
+firebase-admin==6.6.0
+cryptography==44.0.0
+pydantic[email]==2.10.4
