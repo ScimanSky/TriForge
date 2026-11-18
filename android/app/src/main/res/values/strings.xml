@@ -7,7 +7,9 @@
     <string name="setup_body">Scarica google-services.json dalla console Firebase, copialo in android/app e ricompila l\'app.</string>
 
     <!-- Auth -->
-    <string name="auth_tagline">Allenati meglio in tutte e tre le discipline.</string>
+    <string name="auth_headline">Tre sport.\nUn solo piano.</string>
+    <string name="auth_tagline">Le tue attività Garmin, le statistiche di nuoto, bici e corsa, e presto un coach che costruisce la settimana.</string>
+    <string name="auth_next_step">Colleghi Garmin e Health Connect al passo successivo.</string>
     <string name="auth_name">Nome</string>
     <string name="auth_email">Email</string>
     <string name="auth_password">Password</string>
@@ -34,31 +36,169 @@
     <string name="sport_run">Corsa</string>
     <string name="sport_other">Altro</string>
 
+    <!-- Common -->
+    <string name="action_back">Indietro</string>
+    <string name="action_expand">Apri</string>
+    <string name="action_collapse">Chiudi</string>
+    <string name="value_none">–</string>
+    <string name="period_last_weeks">ultime %1$d settimane</string>
+    <string name="period_weeks_short">%1$d sett.</string>
+    <string name="unit_km">km</string>
+    <string name="unit_m">m</string>
+    <string name="unit_hours">ore</string>
+    <string name="unit_h">h</string>
+    <string name="unit_kg">kg</string>
+    <string name="unit_cm">cm</string>
+    <string name="unit_bpm">bpm</string>
+    <string name="unit_watt">watt</string>
+    <string name="unit_min_100m">min/100 m</string>
+    <string name="unit_min_km">min/km</string>
+    <string name="unit_bpm_value">%1$d bpm</string>
+    <string name="unit_watt_value">%1$d W</string>
+    <string name="unit_m_value">%1$s m</string>
+    <string name="unit_kcal_value">%1$s kcal</string>
+
     <!-- Today -->
+    <string name="today_greeting">Ciao</string>
+    <string name="today_greeting_name">Ciao %1$s</string>
+    <string name="today_form_title">Forma</string>
+    <string name="today_form_period">ultimi %1$d giorni</string>
+    <string name="today_fitness">Fitness</string>
+    <string name="today_fatigue">Fatica</string>
+    <string name="today_form">Forma</string>
+    <string name="today_form_chart">Andamento di fitness e fatica. Oggi fitness %1$d, fatica %2$d.</string>
     <string name="today_this_week">Questa settimana</string>
-    <string name="today_week_total">%1$d sessioni · %2$s</string>
-    <string name="today_sessions">%1$d sessioni</string>
-    <string name="today_vs_last_week">%1$s%% rispetto alla settimana scorsa</string>
-    <string name="today_trend_title">Ultime 8 settimane</string>
-    <string name="today_trend_caption">Ore di allenamento per settimana</string>
+    <string name="today_week_total">%1$s · %2$d attività</string>
+    <string name="today_usual">media %1$s</string>
+    <string name="today_sport_stats">Statistiche per sport</string>
+    <string name="today_last_activity">Ultima attività</string>
     <string name="today_recent">Ultime attività</string>
     <string name="today_empty_title">Nessuna attività, per ora</string>
-    <string name="today_empty_body">Collega Garmin o Health Connect dal Profilo per importare i tuoi allenamenti.</string>
+    <string name="today_empty_body">Collega Garmin o Health Connect per importare i tuoi allenamenti e vedere forma, volumi e statistiche.</string>
+    <string name="today_connect_source">Collega una sorgente</string>
     <string name="load_error">Non riesco a caricare le attività. Controlla la connessione.</string>
 
     <!-- Activities -->
     <string name="activities_all">Tutte</string>
-    <string name="activities_empty">Qui compariranno i tuoi allenamenti delle ultime 12 settimane.</string>
+    <string name="activities_empty">Qui compariranno i tuoi allenamenti delle ultime 16 settimane.</string>
+    <string name="activities_garmin_off">Garmin non collegato</string>
+    <string name="activities_garmin_reconnect">Garmin da ricollegare dal Profilo</string>
+    <string name="activities_synced_now">Garmin sincronizzato adesso</string>
+    <string name="activities_synced_minutes">Garmin sincronizzato %1$d′ fa</string>
+    <string name="activities_synced_hours">Garmin sincronizzato %1$d h fa</string>
+    <string name="activities_synced_on">Garmin sincronizzato il %1$s</string>
+    <string name="activities_hours_title">Ore per sport</string>
+    <string name="activities_hours_chart">Ore di allenamento per sport nelle ultime %1$d settimane. Questa settimana %2$s.</string>
+    <string name="activities_last_week">Settimana scorsa</string>
+    <string name="activities_week_of">Settimana del %1$s</string>
     <string name="activity_untitled">Allenamento</string>
-    <string name="activity_hr">%1$d bpm</string>
     <string name="source_garmin">Garmin</string>
     <string name="source_health_connect">Health Connect</string>
 
+    <!-- Sport tab -->
+    <string name="sport_empty_title">Nessuna attività di %1$s</string>
+    <string name="sport_empty_body">Le statistiche compaiono dopo il primo allenamento sincronizzato.</string>
+    <string name="sport_kpi_volume">Volume</string>
+    <string name="sport_kpi_change">%1$s%% sul periodo prima</string>
+    <string name="sport_kpi_sessions">Sedute</string>
+    <string name="sport_kpi_per_week">%1$s a settimana</string>
+    <string name="sport_kpi_pace">Passo medio</string>
+    <string name="sport_kpi_speed">Velocità media</string>
+    <string name="sport_kpi_per_session">Per seduta</string>
+    <string name="sport_kpi_average">in media</string>
+    <string name="sport_kpi_elevation">Dislivello</string>
+    <string name="sport_volume_title">Volume settimanale</string>
+    <string name="sport_volume_caption">Sotto ogni barra il numero della settimana.</string>
+    <string name="sport_volume_chart">Volume delle ultime %1$d settimane. Questa settimana %2$s.</string>
+    <string name="sport_trend_pace">Passo medio</string>
+    <string name="sport_trend_speed">Velocità media</string>
+    <string name="sport_trend_note">per settimana</string>
+    <string name="sport_trend_chart">Andamento settimanale, da %1$s a %2$s.</string>
+    <string name="sport_trend_from">sett. %1$d · %2$s</string>
+    <string name="sport_trend_to">sett. %1$d · %2$s</string>
+    <string name="sport_technical_title">Metriche tecniche</string>
+    <string name="sport_technical_summary">FC media %1$d</string>
+    <string name="sport_technical_caption">Medie delle sedute del periodo.</string>
+    <string name="sport_technical_empty">Le tue attività di questo periodo non portano dati tecnici.</string>
+    <string name="sport_records_title">Record personali</string>
+    <string name="sport_records_empty">Ancora nessun record: serve almeno un\'attività con distanza.</string>
+    <string name="record_longest_distance">Distanza più lunga</string>
+    <string name="record_longest_duration">Seduta più lunga</string>
+    <string name="record_fastest_pace">Passo migliore</string>
+    <string name="record_fastest_speed">Velocità migliore</string>
+
+    <!-- Metrics -->
+    <string name="metric_avg_hr">FC media</string>
+    <string name="metric_max_hr">FC massima</string>
+    <string name="metric_avg_power">Potenza media</string>
+    <string name="metric_norm_power">Potenza normalizzata</string>
+    <string name="metric_cadence_spm">Cadenza (passi/min)</string>
+    <string name="metric_cadence_rpm">Cadenza (rpm)</string>
+    <string name="metric_cadence_strokes">Bracciate al minuto</string>
+    <string name="metric_swolf">SWOLF</string>
+    <string name="metric_strokes">Bracciate</string>
+    <string name="metric_lengths">Vasche</string>
+    <string name="metric_pool">Vasca</string>
+    <string name="metric_water">Ambiente</string>
+    <string name="metric_open_water">Acque libere</string>
+    <string name="metric_aerobic_te">Effetto aerobico</string>
+    <string name="metric_anaerobic_te">Effetto anaerobico</string>
+    <string name="metric_vo2max">VO2 max</string>
+    <string name="metric_calories">Calorie</string>
+
+    <!-- Activity detail -->
+    <string name="detail_missing">Questa attività non è più disponibile.</string>
+    <string name="detail_time">tempo</string>
+    <string name="detail_pace">passo %1$s</string>
+    <string name="detail_elevation">m dislivello</string>
+    <string name="detail_load">carico</string>
+    <string name="detail_compare_pace">Passo a confronto</string>
+    <string name="detail_compare_speed">Velocità a confronto</string>
+    <string name="detail_compare_count">ultime %1$d uscite</string>
+    <string name="detail_compare_chart">Le ultime %1$d uscite dello stesso sport. Questa: %2$s. La migliore: %3$s.</string>
+    <string name="detail_compare_this">Questa: %1$s</string>
+    <string name="detail_compare_best">Migliore: %1$s</string>
+    <string name="detail_hr_title">Frequenza cardiaca</string>
+    <string name="detail_technique_title">Tecnica</string>
+    <string name="detail_effect_title">Effetto dell\'allenamento</string>
+    <string name="detail_effect_summary">aerobico %1$s</string>
+    <string name="detail_effect_caption">Effetto aerobico e anaerobico vanno da 0 a 5, come li calcola Garmin.</string>
+
     <!-- Profile -->
+    <string name="profile_title">Il tuo profilo atleta</string>
     <string name="profile_sources">Sorgenti dati</string>
+    <string name="source_connected">Collegato</string>
+    <string name="source_active">Attivo</string>
+    <string name="source_coming">In arrivo</string>
+    <string name="strava_title">Strava</string>
+    <string name="profile_goal">Obiettivo</string>
+    <string name="goal_sprint">Sprint</string>
+    <string name="goal_olympic">Olimpico</string>
+    <string name="goal_half">70.3</string>
+    <string name="goal_full">Ironman</string>
+    <string name="goal_fitness">Solo forma</string>
+    <string name="profile_race">Gara obiettivo</string>
+    <string name="profile_race_date">Data</string>
+    <string name="profile_race_date_hint">gg/mm/aaaa</string>
+    <string name="profile_weekly_hours">Ore a settimana</string>
+    <string name="profile_body">Fisico</string>
+    <string name="profile_weight">Peso</string>
+    <string name="profile_height">Altezza</string>
+    <string name="profile_max_hr">FC max</string>
+    <string name="profile_thresholds">Soglie</string>
+    <string name="profile_css">Nuoto · CSS</string>
+    <string name="profile_ftp">Bici · FTP</string>
+    <string name="profile_run_pace">Corsa · passo soglia</string>
+    <string name="profile_thresholds_hint">Le soglie servono al coach per calcolare zone e carico. Scrivi i passi come 1:48. Se non le conosci lascia vuoto.</string>
+    <string name="profile_save">Salva</string>
+    <string name="profile_saving">Salvataggio…</string>
+    <string name="profile_saved">Profilo salvato.</string>
+    <string name="profile_error_fields">Controlla i campi evidenziati: il valore non è leggibile o è fuori scala.</string>
+    <string name="profile_error_save">Salvataggio non riuscito. Riprova.</string>
     <string name="profile_sign_out">Esci</string>
 
     <string name="garmin_title">Garmin Connect</string>
+    <string name="garmin_subtitle">Attività e dati di allenamento</string>
     <string name="garmin_not_configured">Il servizio Garmin non è ancora configurato in questa build.</string>
     <string name="garmin_intro">Accedi con le credenziali Garmin Connect. La password viene usata una sola volta per collegare l\'account e non viene salvata.</string>
     <string name="garmin_email">Email Garmin</string>
@@ -85,6 +225,7 @@
     <string name="garmin_error_generic">Operazione non riuscita. Riprova.</string>
 
     <string name="hc_title">Health Connect</string>
+    <string name="hc_subtitle">Riserva ufficiale Android</string>
     <string name="hc_intro">Legge gli allenamenti che Garmin Connect e altre app salvano sul telefono. Utile come seconda via se il collegamento diretto a Garmin non funziona.</string>
     <string name="hc_unavailable">Health Connect non è disponibile su questo dispositivo.</string>
     <string name="hc_needs_update">Installa o aggiorna Health Connect dal Play Store per usarlo.</string>

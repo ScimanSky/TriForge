@@ -10,6 +10,9 @@ fun activity(
     durationSec: Long = 3600,
     distanceMeters: Double = 10_000.0,
     elevationGainMeters: Double? = null,
+    trainingLoad: Double? = null,
+    avgHr: Int? = null,
+    avgCadence: Int? = null,
 ) = Activity(
     id = id,
     source = source,
@@ -19,4 +22,7 @@ fun activity(
     durationSec = durationSec,
     distanceMeters = distanceMeters,
     elevationGainMeters = elevationGainMeters,
+    trainingLoad = trainingLoad,
+    avgHr = avgHr,
+    avgCadence = avgCadence,
 )

@@ -10,10 +10,15 @@ import com.triforge.app.data.GarminRepository
 import com.triforge.app.data.GarminStatus
 import com.triforge.app.data.HealthConnectAvailability
 import com.triforge.app.data.HealthConnectRepository
+import com.triforge.app.data.ProfileRepository
 import com.triforge.app.ui.TrainingViewModel
+import com.triforge.domain.ProfileField
+import com.triforge.domain.ProfileForm
+import com.triforge.domain.ProfileFormResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -32,6 +37,12 @@ data class ProfileUiState(
     val healthConnectGranted: Boolean = false,
     val healthConnectBusy: Boolean = false,
     val healthConnectNotice: Notice? = null,
+    val form: ProfileForm = ProfileForm(),
+    /** True once the athlete has typed something that is not saved yet. */
+    val formDirty: Boolean = false,
+    val formErrors: Set<ProfileField> = emptySet(),
+    val formSaving: Boolean = false,
+    val formNotice: Notice? = null,
 )
 
 class ProfileViewModel(
@@ -39,6 +50,7 @@ class ProfileViewModel(
     private val auth: AuthRepository,
     private val garmin: GarminRepository,
     private val healthConnect: HealthConnectRepository,
+    private val profiles: ProfileRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
@@ -57,7 +69,59 @@ class ProfileViewModel(
         viewModelScope.launch {
             garmin.status(uid).collect { status -> _state.update { it.copy(garmin = status) } }
         }
+        viewModelScope.launch {
+            profiles.profile(uid)
+                // Without the stored profile the form simply starts empty.
+                .catch { }
+                .collect { profile ->
+                    // What the athlete is typing wins over what is stored.
+                    _state.update { if (it.formDirty) it else it.copy(form = ProfileForm.of(profile)) }
+                }
+        }
         refreshHealthConnect()
+    }
+
+    // -- Athlete profile --------------------------------------------------
+
+    fun editForm(change: (ProfileForm) -> ProfileForm) {
+        _state.update {
+            it.copy(form = change(it.form), formDirty = true, formErrors = emptySet(), formNotice = null)
+        }
+    }
+
+    fun saveProfile() {
+        val current = _state.value
+        if (current.formSaving) return
+        when (val result = current.form.parse()) {
+            is ProfileFormResult.Invalid -> _state.update {
+                it.copy(formErrors = result.fields, formNotice = Notice(R.string.profile_error_fields, isError = true))
+            }
+
+            is ProfileFormResult.Valid -> {
+                _state.update { it.copy(formSaving = true, formNotice = null) }
+                viewModelScope.launch {
+                    val notice = try {
+                        profiles.save(uid, result.profile)
+                        Notice(R.string.profile_saved)
+                    } catch (error: Exception) {
+                        Notice(R.string.profile_error_save, isError = true)
+                    }
+                    _state.update {
+                        if (notice.isError) {
+                            it.copy(formSaving = false, formNotice = notice)
+                        } else {
+                            // Shown back as stored, so "1.48" becomes "1:48".
+                            it.copy(
+                                form = ProfileForm.of(result.profile),
+                                formSaving = false,
+                                formDirty = false,
+                                formNotice = notice,
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // -- Garmin -----------------------------------------------------------

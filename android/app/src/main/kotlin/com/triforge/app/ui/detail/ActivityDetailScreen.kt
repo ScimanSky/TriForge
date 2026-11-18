@@ -1,0 +1,299 @@
+package com.triforge.app.ui.detail
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.triforge.app.R
+import com.triforge.app.ui.common.CardHeader
+import com.triforge.app.ui.common.CenteredMessage
+import com.triforge.app.ui.common.CollapsibleCard
+import com.triforge.app.ui.common.KeyValueRow
+import com.triforge.app.ui.common.LineChart
+import com.triforge.app.ui.common.LineSeries
+import com.triforge.app.ui.common.SportIconBox
+import com.triforge.app.ui.common.StatGrid
+import com.triforge.app.ui.common.TriCard
+import com.triforge.app.ui.common.labelRes
+import com.triforge.app.ui.common.sourceLabel
+import com.triforge.app.ui.theme.SportColors
+import com.triforge.app.ui.theme.TriIcons
+import com.triforge.domain.Activity
+import com.triforge.domain.Formatters
+import com.triforge.domain.Sport
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlin.math.roundToInt
+
+/** How many earlier sessions of the same sport the comparison chart shows. */
+private const val HISTORY_COUNT = 10
+
+private val startFormat = DateTimeFormatter.ofPattern("EEE d MMM, H:mm", Locale.ITALY)
+
+/**
+ * One activity in full. [history] is the athlete's loaded activities, newest
+ * first, used to place this session among the recent ones of its sport.
+ */
+@Composable
+fun ActivityDetailScreen(
+    activity: Activity?,
+    history: List<Activity>,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (activity == null) {
+            BackButton(onBack)
+            CenteredMessage(stringResource(R.string.detail_missing))
+            return@Column
+        }
+
+        Header(activity, onBack)
+        HeadlineCard(activity)
+        ComparisonCard(activity, history)
+        HeartRateCard(activity)
+        TechniqueCard(activity)
+        EffectCard(activity)
+    }
+}
+
+@Composable
+private fun BackButton(onBack: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onBack),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = TriIcons.Back,
+            contentDescription = stringResource(R.string.action_back),
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+@Composable
+private fun Header(activity: Activity, onBack: () -> Unit) {
+    val start = remember(activity.startTime) {
+        startFormat.format(activity.startTime.atZone(ZoneId.systemDefault()))
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        BackButton(onBack)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = activity.name.ifBlank { stringResource(R.string.activity_untitled) },
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "${stringResource(activity.sport.labelRes())} · $start · ${activity.sourceLabel()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        SportIconBox(activity.sport)
+    }
+}
+
+private fun whole(value: Double): String = "%,d".format(Locale.ITALY, value.roundToInt())
+
+private fun oneDecimal(value: Double): String = "%.1f".format(Locale.ITALY, value)
+
+/** The six numbers an athlete looks for first. Only those the source gave are shown. */
+@Composable
+private fun HeadlineCard(activity: Activity) {
+    val sport = activity.sport
+    val stats = buildList {
+        if (activity.distanceMeters > 0) {
+            if (sport == Sport.SWIM) {
+                add(whole(activity.distanceMeters) to stringResource(R.string.unit_m))
+            } else {
+                add(Formatters.kilometers(activity.distanceMeters) to stringResource(R.string.unit_km))
+            }
+        }
+        add(Formatters.clock(activity.durationSec) to stringResource(R.string.detail_time))
+        Formatters.paceValue(sport, activity.distanceMeters, activity.durationSec)?.let { value ->
+            val label = if (sport == Sport.BIKE) {
+                Formatters.paceUnit(sport)
+            } else {
+                stringResource(R.string.detail_pace, Formatters.paceUnit(sport))
+            }
+            add(value to label)
+        }
+        activity.avgHr?.let { add(it.toString() to stringResource(R.string.metric_avg_hr)) }
+        activity.elevationGainMeters?.takeIf { it > 0 }?.let {
+            add(whole(it) to stringResource(R.string.detail_elevation))
+        }
+        activity.trainingLoad?.takeIf { it > 0 }?.let {
+            add(whole(it) to stringResource(R.string.detail_load))
+        }
+    }
+    TriCard { StatGrid(stats) }
+}
+
+/** This session's pace or speed next to the previous ones of the same sport. */
+@Composable
+private fun ComparisonCard(activity: Activity, history: List<Activity>) {
+    val sport = activity.sport
+    if (sport == Sport.OTHER || activity.distanceMeters <= 0 || activity.durationSec <= 0) return
+    val isSpeed = sport == Sport.BIKE
+
+    val sessions = remember(activity.id, history) {
+        history
+            .filter {
+                it.sport == sport && it.distanceMeters > 0 && it.durationSec > 0 &&
+                    !it.startTime.isAfter(activity.startTime)
+            }
+            .take(HISTORY_COUNT)
+            .reversed()
+    }
+    if (sessions.size < 3) return
+
+    val values = sessions.map {
+        val secondsPerMeter = it.durationSec / it.distanceMeters
+        (if (isSpeed) 3.6 / secondsPerMeter else secondsPerMeter).toFloat()
+    }
+    val best = sessions.minBy { it.durationSec / it.distanceMeters }
+    val thisPace = Formatters.pace(sport, activity.distanceMeters, activity.durationSec).orEmpty()
+    val bestPace = Formatters.pace(sport, best.distanceMeters, best.durationSec).orEmpty()
+
+    TriCard {
+        CardHeader(
+            title = stringResource(if (isSpeed) R.string.detail_compare_speed else R.string.detail_compare_pace),
+            trailing = stringResource(R.string.detail_compare_count, sessions.size),
+        )
+        LineChart(
+            series = listOf(LineSeries(values, SportColors.of(sport), filled = true)),
+            description = stringResource(R.string.detail_compare_chart, sessions.size, thisPace, bestPace),
+            invert = !isSpeed,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.detail_compare_this, thisPace),
+                style = MaterialTheme.typography.bodySmall,
+                color = SportColors.of(sport),
+            )
+            Text(
+                text = stringResource(R.string.detail_compare_best, bestPace),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeartRateCard(activity: Activity) {
+    val avg = activity.avgHr
+    val max = activity.maxHr
+    if (avg == null && max == null) return
+
+    CollapsibleCard(
+        title = stringResource(R.string.detail_hr_title),
+        summary = avg?.let { stringResource(R.string.unit_bpm_value, it) },
+        initiallyExpanded = true,
+    ) {
+        avg?.let { KeyValueRow(stringResource(R.string.metric_avg_hr), stringResource(R.string.unit_bpm_value, it)) }
+        max?.let { KeyValueRow(stringResource(R.string.metric_max_hr), stringResource(R.string.unit_bpm_value, it)) }
+    }
+}
+
+@Composable
+private fun TechniqueCard(activity: Activity) {
+    val rows = buildList {
+        activity.avgPowerWatts?.let {
+            add(stringResource(R.string.metric_avg_power) to stringResource(R.string.unit_watt_value, it))
+        }
+        activity.normPowerWatts?.let {
+            add(stringResource(R.string.metric_norm_power) to stringResource(R.string.unit_watt_value, it))
+        }
+        activity.avgCadence?.let {
+            val label = when (activity.sport) {
+                Sport.BIKE -> R.string.metric_cadence_rpm
+                Sport.SWIM -> R.string.metric_cadence_strokes
+                else -> R.string.metric_cadence_spm
+            }
+            add(stringResource(label) to it.toString())
+        }
+        activity.swolf?.let { add(stringResource(R.string.metric_swolf) to it.toString()) }
+        activity.strokes?.let { add(stringResource(R.string.metric_strokes) to whole(it.toDouble())) }
+        activity.lengths?.let { add(stringResource(R.string.metric_lengths) to it.toString()) }
+        if (activity.openWater == true) {
+            add(stringResource(R.string.metric_water) to stringResource(R.string.metric_open_water))
+        } else {
+            activity.poolLengthMeters?.takeIf { it > 0 }?.let {
+                add(stringResource(R.string.metric_pool) to stringResource(R.string.unit_m_value, whole(it)))
+            }
+        }
+    }
+    if (rows.isEmpty()) return
+
+    CollapsibleCard(title = stringResource(R.string.detail_technique_title)) {
+        rows.forEach { (label, value) -> KeyValueRow(label, value) }
+    }
+}
+
+@Composable
+private fun EffectCard(activity: Activity) {
+    val rows = buildList {
+        activity.aerobicTe?.let { add(stringResource(R.string.metric_aerobic_te) to oneDecimal(it)) }
+        activity.anaerobicTe?.let { add(stringResource(R.string.metric_anaerobic_te) to oneDecimal(it)) }
+        activity.vo2max?.let { add(stringResource(R.string.metric_vo2max) to oneDecimal(it)) }
+        activity.calories?.let {
+            add(stringResource(R.string.metric_calories) to stringResource(R.string.unit_kcal_value, whole(it.toDouble())))
+        }
+    }
+    if (rows.isEmpty()) return
+
+    CollapsibleCard(
+        title = stringResource(R.string.detail_effect_title),
+        summary = activity.aerobicTe?.let { stringResource(R.string.detail_effect_summary, oneDecimal(it)) },
+    ) {
+        rows.forEach { (label, value) -> KeyValueRow(label, value) }
+        Text(
+            text = stringResource(R.string.detail_effect_caption),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
+}

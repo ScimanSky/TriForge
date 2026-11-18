@@ -66,5 +66,35 @@ attività di Health Connect: quelle di Garmin le scrive soltanto il server.
 
 ## Interfaccia
 
-Le schermate di questo passo sono volutamente essenziali. I colori vengono dal
-prototipo di design; la UI definitiva seguirà quel prototipo.
+Le schermate seguono il prototipo di design approvato: tema scuro, Space
+Grotesk per titoli e numeri, Inter per il testo, un colore per sport (nuoto
+azzurro, bici giallo, corsa viola). Colori, caratteri e icone stanno in
+`ui/theme`; card, sezioni collassabili e grafici in `ui/common`.
+
+Tre regole valgono per ogni schermata nuova:
+
+- le statistiche si mostrano sempre con card e grafici, mai come elenchi di
+  numeri;
+- quando i dati sono tanti, il dettaglio va in sezioni collassabili
+  (`CollapsibleCard`) e in vista restano solo i numeri principali;
+- si mostra solo ciò che le fonti forniscono davvero: una card senza dati non
+  compare, e nessun valore è inventato.
+
+Schermate: Accesso, Oggi (forma degli ultimi 42 giorni, settimana in corso
+rispetto alla media delle quattro precedenti), Attività (schede Tutte, Nuoto,
+Bici, Corsa, con le statistiche per sport), Dettaglio attività, Profilo atleta
+(sorgenti dati, obiettivo, fisico, soglie).
+
+L'app carica le ultime 16 settimane di attività, e la prima sincronizzazione
+Garmin ne importa altrettante (`INITIAL_SYNC_DAYS`, 120 giorni).
+
+Fitness, fatica e forma sono due medie mobili del carico di allenamento che
+arriva dall'orologio, a 42 e a 7 giorni (`FitnessModel`). Il profilo atleta sta
+nello stesso documento `users/{uid}`, nei campi `goal`, `raceName`, `raceDate`,
+`weeklyHours`, `weightKg`, `heightCm`, `maxHr`, `cssSecPer100m`, `ftpWatts` e
+`thresholdPaceSecPerKm`.
+
+Mancano ancora, perché servono dati che oggi non vengono salvati: mappa e
+grafici interni all'attività (tracce e parziali), tempo nelle zone, sonno e HRV,
+usura dell'attrezzatura. Coach, nutrizione e social arrivano con i passi
+successivi del piano.

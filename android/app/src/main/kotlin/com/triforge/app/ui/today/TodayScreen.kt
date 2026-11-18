@@ -1,20 +1,22 @@
 package com.triforge.app.ui.today
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,213 +25,314 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.triforge.app.R
 import com.triforge.app.ui.TrainingState
 import com.triforge.app.ui.common.ActivityRow
+import com.triforge.app.ui.common.CardHeader
 import com.triforge.app.ui.common.CenteredMessage
+import com.triforge.app.ui.common.LegendDot
+import com.triforge.app.ui.common.LineChart
+import com.triforge.app.ui.common.LineSeries
+import com.triforge.app.ui.common.LoadingBox
+import com.triforge.app.ui.common.PrimaryButton
+import com.triforge.app.ui.common.ProgressBar
+import com.triforge.app.ui.common.SectionLabel
+import com.triforge.app.ui.common.StatCell
+import com.triforge.app.ui.common.TriCard
 import com.triforge.app.ui.common.labelRes
 import com.triforge.app.ui.theme.SportColors
+import com.triforge.app.ui.theme.TriColors
+import com.triforge.app.ui.theme.TriIcons
+import com.triforge.app.ui.theme.numberStyle
 import com.triforge.domain.Activity
+import com.triforge.domain.FitnessModel
+import com.triforge.domain.FormPoint
 import com.triforge.domain.Formatters
 import com.triforge.domain.Sport
-import com.triforge.domain.SportTotals
+import com.triforge.domain.SportStats
 import com.triforge.domain.TrainingStats
 import com.triforge.domain.WeekSummary
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
-private const val TREND_WEEKS = 8
-private const val RECENT_COUNT = 5
+/** Weeks the current one is measured against. */
+private const val BASELINE_WEEKS = 4
+
+private val headerDate = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALY)
 
 @Composable
-fun TodayScreen(state: TrainingState, modifier: Modifier = Modifier) {
+fun TodayScreen(
+    state: TrainingState,
+    name: String,
+    onOpenProfile: () -> Unit,
+    onOpenActivity: (String) -> Unit,
+    onOpenStats: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     when (state) {
-        TrainingState.Loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
+        TrainingState.Loading -> LoadingBox(modifier)
 
         TrainingState.Failed -> CenteredMessage(stringResource(R.string.load_error), modifier = modifier)
 
-        is TrainingState.Loaded -> Dashboard(state.activities, modifier)
+        is TrainingState.Loaded -> Dashboard(
+            activities = state.activities,
+            name = name,
+            onOpenProfile = onOpenProfile,
+            onOpenActivity = onOpenActivity,
+            onOpenStats = onOpenStats,
+            modifier = modifier,
+        )
     }
 }
 
 @Composable
-private fun Dashboard(activities: List<Activity>, modifier: Modifier = Modifier) {
-    val trend = remember(activities) {
-        TrainingStats.weeklyTrend(activities, TREND_WEEKS, LocalDate.now(), ZoneId.systemDefault())
+private fun Dashboard(
+    activities: List<Activity>,
+    name: String,
+    onOpenProfile: () -> Unit,
+    onOpenActivity: (String) -> Unit,
+    onOpenStats: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val today = LocalDate.now()
+    val zone = ZoneId.systemDefault()
+    val trend = remember(activities, today) {
+        TrainingStats.weeklyTrend(activities, BASELINE_WEEKS + 1, today, zone)
     }
-    val thisWeek = trend.last()
-    val lastWeek = trend[trend.size - 2]
+    val form = remember(activities, today) { FitnessModel.series(activities, today, zone) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = stringResource(R.string.today_this_week),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = stringResource(
-                        R.string.today_week_total,
-                        thisWeek.sessions,
-                        Formatters.duration(thisWeek.durationSec),
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        items(TrainingStats.triathlonSports, key = { it.name }) { sport ->
-            SportCard(current = thisWeek.of(sport), previous = lastWeek.of(sport))
-        }
-
-        item { TrendCard(trend) }
+        item { Header(today, name, onOpenProfile) }
 
         if (activities.isEmpty()) {
             item {
-                CenteredMessage(
-                    title = stringResource(R.string.today_empty_title),
-                    body = stringResource(R.string.today_empty_body),
-                )
+                TriCard {
+                    Text(
+                        text = stringResource(R.string.today_empty_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = stringResource(R.string.today_empty_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 16.dp),
+                    )
+                    PrimaryButton(
+                        text = stringResource(R.string.today_connect_source),
+                        onClick = onOpenProfile,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         } else {
+            if (form.isNotEmpty()) item { FormCard(form) }
+            item { WeekCard(current = trend.last(), baseline = trend.dropLast(1), onOpenStats = onOpenStats) }
+            item { SectionLabel(stringResource(R.string.today_last_activity)) }
             item {
-                Text(
-                    text = stringResource(R.string.today_recent),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+                val last = activities.first()
+                ActivityRow(last, onClick = { onOpenActivity(last.id) })
             }
-            items(activities.take(RECENT_COUNT), key = { it.id }) { ActivityRow(it) }
         }
     }
 }
 
 @Composable
-private fun SportCard(current: SportTotals, previous: SportTotals) {
-    val color = SportColors.of(current.sport)
-    val change = TrainingStats.percentChange(current.distanceMeters, previous.distanceMeters)
+private fun Header(today: LocalDate, name: String, onOpenProfile: () -> Unit) {
+    val date = remember(today) { headerDate.format(today).replaceFirstChar { it.titlecase(Locale.ITALY) } }
+    val firstName = name.trim().substringBefore(' ')
+    val initials = Formatters.initials(name)
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = stringResource(current.sport.labelRes()),
-            style = MaterialTheme.typography.labelLarge,
-            color = color,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = Formatters.distance(current.sport, current.distanceMeters),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = listOfNotNull(
-                stringResource(R.string.today_sessions, current.sessions),
-                Formatters.duration(current.durationSec),
-                Formatters.pace(current.sport, current.distanceMeters, current.durationSec),
-            ).joinToString(" · "),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (change != null) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = stringResource(R.string.today_vs_last_week, if (change > 0) "+$change" else "$change"),
-                style = MaterialTheme.typography.bodySmall,
+                text = date,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = if (firstName.isEmpty()) {
+                    stringResource(R.string.today_greeting)
+                } else {
+                    stringResource(R.string.today_greeting_name, firstName)
+                },
+                style = MaterialTheme.typography.headlineSmall,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(TriColors.avatar)
+                .clickable(
+                    onClickLabel = stringResource(R.string.nav_profile),
+                    role = Role.Button,
+                    onClick = onOpenProfile,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (initials.isEmpty()) {
+                Icon(
+                    imageVector = TriIcons.Person,
+                    contentDescription = stringResource(R.string.nav_profile),
+                    modifier = Modifier.size(22.dp),
+                )
+            } else {
+                Text(text = initials, style = numberStyle(15.sp))
+            }
+        }
+    }
+}
+
+private fun signed(value: Double): String {
+    val rounded = value.roundToInt()
+    return if (rounded < 0) "−${-rounded}" else "+$rounded"
+}
+
+/** Fitness, fatigue and their gap, from the training load the watch reports. */
+@Composable
+private fun FormCard(points: List<FormPoint>) {
+    val latest = points.last()
+    val fitnessColor = MaterialTheme.colorScheme.primary
+    val fatigueColor = TriColors.textDim
+    val fitnessLabel = stringResource(R.string.today_fitness)
+    val fatigueLabel = stringResource(R.string.today_fatigue)
+
+    TriCard {
+        CardHeader(
+            title = stringResource(R.string.today_form_title),
+            trailing = stringResource(R.string.today_form_period, points.size),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 14.dp, bottom = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            StatCell(latest.fitness.roundToInt().toString(), fitnessLabel, Modifier.weight(1f))
+            StatCell(latest.fatigue.roundToInt().toString(), fatigueLabel, Modifier.weight(1f))
+            StatCell(
+                value = signed(latest.form),
+                label = stringResource(R.string.today_form),
+                modifier = Modifier.weight(1f),
+                valueColor = if (latest.form >= 0) TriColors.good else TriColors.warn,
+            )
+        }
+        LineChart(
+            series = listOf(
+                LineSeries(points.map { it.fatigue.toFloat() }, fatigueColor, dashed = true),
+                LineSeries(points.map { it.fitness.toFloat() }, fitnessColor, filled = true),
+            ),
+            description = stringResource(
+                R.string.today_form_chart,
+                latest.fitness.roundToInt(),
+                latest.fatigue.roundToInt(),
+            ),
+        )
+        Row(
+            modifier = Modifier.padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            LegendDot(fitnessColor, fitnessLabel)
+            LegendDot(fatigueColor, fatigueLabel)
+        }
+    }
+}
+
+/** This week per discipline, against the athlete's own recent average. */
+@Composable
+private fun WeekCard(current: WeekSummary, baseline: List<WeekSummary>, onOpenStats: () -> Unit) {
+    TriCard {
+        CardHeader(
+            title = stringResource(R.string.today_this_week),
+            trailing = stringResource(
+                R.string.today_week_total,
+                Formatters.duration(current.durationSec),
+                current.sessions,
+            ),
+        )
+        Spacer(Modifier.height(6.dp))
+        TrainingStats.triathlonSports.forEach { sport -> SportProgress(sport, current, baseline) }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp)
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button, onClick = onOpenStats),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.today_sport_stats),
+                style = MaterialTheme.typography.labelLarge,
+                color = TriColors.accentText,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = TriIcons.ChevronRight,
+                contentDescription = null,
+                tint = TriColors.accentText,
+                modifier = Modifier.size(20.dp),
             )
         }
     }
 }
 
-private val weekLabel = DateTimeFormatter.ofPattern("d/M", Locale.ITALY)
-
-/** Stacked bars of weekly training time, one segment per discipline. */
 @Composable
-private fun TrendCard(trend: List<WeekSummary>) {
-    val sports = TrainingStats.triathlonSports + Sport.OTHER
-    val peak = trend.maxOf { it.durationSec }.coerceAtLeast(1)
+private fun SportProgress(sport: Sport, current: WeekSummary, baseline: List<WeekSummary>) {
+    val byTime = SportStats.measuresVolumeByTime(sport)
+    val now = current.of(sport)
+    val nowValue = if (byTime) now.durationSec.toDouble() else now.distanceMeters
+    val usual = if (baseline.isEmpty()) {
+        0.0
+    } else {
+        baseline.sumOf { week ->
+            val totals = week.of(sport)
+            if (byTime) totals.durationSec.toDouble() else totals.distanceMeters
+        } / baseline.size
+    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.today_trend_title),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = stringResource(R.string.today_trend_caption),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(120.dp)
-                .padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            trend.forEach { week ->
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    verticalArrangement = Arrangement.Bottom,
-                ) {
-                    // Empty space above the bar, then one segment per sport.
-                    val idle = (peak - week.durationSec).toFloat()
-                    if (idle > 0f) Box(Modifier.weight(idle))
-                    sports.forEach { sport ->
-                        val seconds = week.of(sport).durationSec.toFloat()
-                        if (seconds > 0f) {
-                            Box(
-                                Modifier
-                                    .weight(seconds)
-                                    .fillMaxWidth()
-                                    .background(SportColors.of(sport)),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            trend.forEach { week ->
+    fun text(value: Double) =
+        if (byTime) Formatters.duration(value.toLong()) else Formatters.distance(sport, value)
+
+    Column(modifier = Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(sport.labelRes()),
+                style = MaterialTheme.typography.labelLarge,
+                color = SportColors.of(sport),
+                modifier = Modifier.weight(1f),
+            )
+            Text(text = text(nowValue), style = numberStyle(17.sp))
+            if (usual > 0) {
                 Text(
-                    text = weekLabel.format(week.weekStart),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = stringResource(R.string.today_usual, text(usual)),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
                 )
             }
         }
+        ProgressBar(
+            fraction = when {
+                usual > 0 -> (nowValue / usual).toFloat()
+                nowValue > 0 -> 1f
+                else -> 0f
+            },
+            color = SportColors.of(sport),
+        )
     }
 }

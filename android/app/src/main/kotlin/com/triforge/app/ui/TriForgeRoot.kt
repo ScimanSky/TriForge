@@ -1,19 +1,16 @@
 package com.triforge.app.ui
 
+import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,11 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -38,15 +37,22 @@ import com.triforge.app.ui.activities.ActivitiesScreen
 import com.triforge.app.ui.auth.AuthScreen
 import com.triforge.app.ui.auth.AuthViewModel
 import com.triforge.app.ui.common.CenteredMessage
+import com.triforge.app.ui.common.LoadingBox
+import com.triforge.app.ui.detail.ActivityDetailScreen
 import com.triforge.app.ui.profile.ProfileScreen
 import com.triforge.app.ui.profile.ProfileViewModel
+import com.triforge.app.ui.theme.TriColors
+import com.triforge.app.ui.theme.TriIcons
 import com.triforge.app.ui.today.TodayScreen
 
 private enum class Tab(val route: String, @StringRes val label: Int, val icon: ImageVector) {
-    TODAY("today", R.string.nav_today, Icons.Filled.Home),
-    ACTIVITIES("activities", R.string.nav_activities, Icons.AutoMirrored.Filled.List),
-    PROFILE("profile", R.string.nav_profile, Icons.Filled.Person),
+    TODAY("today", R.string.nav_today, TriIcons.Home),
+    ACTIVITIES("activities", R.string.nav_activities, TriIcons.Activity),
+    PROFILE("profile", R.string.nav_profile, TriIcons.Person),
 }
+
+private const val ACTIVITY_ID = "id"
+private const val ACTIVITY_ROUTE = "activity/{$ACTIVITY_ID}"
 
 @Composable
 fun TriForgeRoot(container: AppContainer) {
@@ -67,9 +73,7 @@ fun TriForgeRoot(container: AppContainer) {
         val session by sessionViewModel.session.collectAsStateWithLifecycle()
 
         when (val current = session) {
-            Session.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            Session.Loading -> LoadingBox()
 
             Session.SignedOut -> {
                 val authViewModel: AuthViewModel = viewModel(
@@ -80,6 +84,15 @@ fun TriForgeRoot(container: AppContainer) {
 
             is Session.SignedIn -> SignedIn(current.uid, container)
         }
+    }
+}
+
+/** Switches tab the way a bottom bar should: one copy of each, state kept. */
+private fun NavHostController.openTab(tab: Tab) {
+    navigate(tab.route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }
 
@@ -94,31 +107,40 @@ private fun SignedIn(uid: String, container: AppContainer) {
     val profileViewModel: ProfileViewModel = viewModel(
         key = "profile-$uid",
         factory = viewModelFactory {
-            initializer { ProfileViewModel(uid, container.auth, container.garmin, container.healthConnect) }
+            initializer {
+                ProfileViewModel(uid, container.auth, container.garmin, container.healthConnect, container.profiles)
+            }
         },
     )
     val training by trainingViewModel.state.collectAsStateWithLifecycle()
+    val profile by profileViewModel.state.collectAsStateWithLifecycle()
 
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    val openActivity: (String) -> Unit = { id -> navController.navigate("activity/${Uri.encode(id)}") }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar {
-                Tab.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = currentRoute == tab.route,
-                        onClick = {
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(tab.icon, contentDescription = null) },
-                        label = { Text(stringResource(tab.label)) },
-                    )
+            // A single activity is a detail page: no tabs under it.
+            if (currentRoute != ACTIVITY_ROUTE) {
+                NavigationBar(containerColor = TriColors.navBar, tonalElevation = 0.dp) {
+                    Tab.entries.forEach { tab ->
+                        NavigationBarItem(
+                            selected = currentRoute == tab.route,
+                            onClick = { navController.openTab(tab) },
+                            icon = { Icon(tab.icon, contentDescription = null) },
+                            label = { Text(stringResource(tab.label)) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = TriColors.accentText,
+                                selectedTextColor = TriColors.accentText,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                    }
                 }
             }
         },
@@ -128,9 +150,32 @@ private fun SignedIn(uid: String, container: AppContainer) {
             startDestination = Tab.TODAY.route,
             modifier = Modifier.padding(padding),
         ) {
-            composable(Tab.TODAY.route) { TodayScreen(training) }
-            composable(Tab.ACTIVITIES.route) { ActivitiesScreen(training) }
+            composable(Tab.TODAY.route) {
+                TodayScreen(
+                    state = training,
+                    name = profile.name,
+                    onOpenProfile = { navController.openTab(Tab.PROFILE) },
+                    onOpenActivity = openActivity,
+                    onOpenStats = { navController.openTab(Tab.ACTIVITIES) },
+                )
+            }
+            composable(Tab.ACTIVITIES.route) {
+                ActivitiesScreen(state = training, garmin = profile.garmin, onOpenActivity = openActivity)
+            }
             composable(Tab.PROFILE.route) { ProfileScreen(profileViewModel) }
+            composable(ACTIVITY_ROUTE) { entry ->
+                val id = entry.arguments?.getString(ACTIVITY_ID)
+                val activities = (training as? TrainingState.Loaded)?.activities.orEmpty()
+                if (training is TrainingState.Loading) {
+                    LoadingBox()
+                } else {
+                    ActivityDetailScreen(
+                        activity = activities.firstOrNull { it.id == id },
+                        history = activities,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+            }
         }
     }
 }
