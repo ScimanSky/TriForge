@@ -1,9 +1,10 @@
 name: CI
 
+# Runs on pull requests only, and each job only when its part of the repo
+# changed, to keep Actions usage low. Main is covered because every change
+# reaches it through a pull request that already ran these checks.
 on:
   pull_request:
-  push:
-    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -13,8 +14,41 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      android: ${{ steps.diff.outputs.android }}
+      garmin: ${{ steps.diff.outputs.garmin }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          files=$(git diff --name-only "$BASE...$HEAD")
+          echo "$files"
+          workflow=false
+          if echo "$files" | grep -q '^\.github/workflows/'; then workflow=true; fi
+          if $workflow || echo "$files" | grep -q '^android/'; then
+            echo "android=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "android=false" >> "$GITHUB_OUTPUT"
+          fi
+          if $workflow || echo "$files" | grep -q '^garmin-service/'; then
+            echo "garmin=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "garmin=false" >> "$GITHUB_OUTPUT"
+          fi
+
   android:
     name: Android app
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -32,6 +66,8 @@ jobs:
 
   garmin-service:
     name: Garmin service
+    needs: changes
+    if: needs.changes.outputs.garmin == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
