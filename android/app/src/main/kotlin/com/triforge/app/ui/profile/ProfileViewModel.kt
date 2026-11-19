@@ -136,6 +136,27 @@ class ProfileViewModel(
         }
     }
 
+    /**
+     * Stores a CSS the app estimated from the athlete's swims, keeping the
+     * rest of the profile. A form being edited takes the new value too.
+     */
+    fun useCss(secPer100: Int) {
+        val updated = _state.value.stored.copy(cssSecPer100m = secPer100)
+        viewModelScope.launch {
+            try {
+                profiles.save(uid, updated)
+                _state.update {
+                    it.copy(
+                        stored = updated,
+                        form = if (it.formDirty) it.form else ProfileForm.of(updated),
+                    )
+                }
+            } catch (error: Exception) {
+                _state.update { it.copy(formNotice = Notice(R.string.profile_error_save, isError = true)) }
+            }
+        }
+    }
+
     // -- Garmin -----------------------------------------------------------
 
     fun connectGarmin(email: String, password: String) = garminCall {

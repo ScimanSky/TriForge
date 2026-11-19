@@ -38,6 +38,10 @@ data class Activity(
     val swolf: Int? = null,
     val strokes: Int? = null,
     val lengths: Int? = null,
+    /** Garmin's average distance per stroke over the swim, in metres. */
+    val strokeDistanceMeters: Double? = null,
+    /** A swim's laps, in order, when the source recorded them. Rests are laps with no distance. */
+    val laps: List<SwimLap> = emptyList(),
 ) {
     /** Time in motion when the source measured it, the whole duration otherwise. */
     val movingSec: Long
@@ -59,3 +63,29 @@ data class Activity(
     /** Seconds stopped inside the session, or null when the source did not measure them. */
     val restSec: Long? get() = movingDurationSec?.let { (durationSec - movingSec).coerceAtLeast(0) }
 }
+
+/**
+ * One lap of a swim. In the pool it is one interval between presses of the
+ * lap button, and a rest at the wall is a lap with no distance; in open water
+ * it is one of the watch's auto laps.
+ */
+data class SwimLap(
+    val distanceMeters: Double,
+    val durationSec: Double,
+    val strokes: Int? = null,
+    val swolf: Int? = null,
+    val avgHr: Int? = null,
+    /** "free", "back", "breast", "fly", "drill", "mixed" or null. */
+    val stroke: String? = null,
+    val lengths: List<SwimLength> = emptyList(),
+) {
+    val isRest: Boolean get() = distanceMeters <= 0.0
+}
+
+data class SwimLength(
+    val distanceMeters: Double,
+    val durationSec: Double,
+    val strokes: Int? = null,
+    val swolf: Int? = null,
+    val stroke: String? = null,
+)

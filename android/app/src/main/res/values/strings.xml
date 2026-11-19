@@ -558,4 +558,59 @@
     <string name="reconsent_body">Prima di continuare, rileggi in breve cosa è cambiato e conferma i consensi.</string>
     <string name="reconsent_health_title">Dati sulla salute disattivati</string>
     <string name="reconsent_health_body">Hai revocato il consenso e abbiamo cancellato i dati sanitari. Per usare di nuovo TriForge riattivalo; altrimenti puoi eliminare l\'account.</string>
+
+    <!-- Swim detail from the laps -->
+    <string name="swim_per_100">/100 m</string>
+    <string name="swim_headline_dps">m per bracciata</string>
+    <string name="swim_headline_tss">TSS · da vasche</string>
+    <string name="swim_repeats_pace_title">Passo per ripetuta</string>
+    <string name="swim_repeats_pace_css">/100 m · linea = CSS %1$s</string>
+    <string name="swim_repeats_chart">Passo di %1$d ripetute, dalla più veloce a %2$s alla più lenta a %3$s ogni 100 metri.</string>
+    <string name="swim_repeats_caption">La larghezza di ogni barra è la distanza, il colore la zona di passo.</string>
+    <string name="swim_repeats_no_css">La larghezza di ogni barra è la distanza. Con la CSS nel profilo vedi anche le zone.</string>
+    <string name="swim_hold_pace">Tenuta del passo</string>
+    <string name="swim_hold_very_steady">molto regolare</string>
+    <string name="swim_hold_steady">regolare</string>
+    <string name="swim_hold_uneven">irregolare</string>
+    <string name="swim_hold_pace_note">Ultima ripetuta del %1$s contro la prima, ogni 100 m. Variazione tra le ripetute %2$s%%.</string>
+    <string name="swim_hold_stroke">Bracciata sotto fatica</string>
+    <string name="swim_hold_stroke_shorter">si accorcia a fine serie</string>
+    <string name="swim_hold_stroke_kept">tenuta fino in fondo</string>
+    <string name="swim_hold_stroke_note">Metri per bracciata da %1$s a %2$s; colpi da %3$d a %4$d al minuto.</string>
+    <string name="swim_efficiency_title">Efficienza di bracciata</string>
+    <string name="swim_efficiency_freestyle">stile libero</string>
+    <string name="swim_efficiency_dps">per bracciata</string>
+    <string name="swim_efficiency_rate">colpi/min</string>
+    <string name="swim_efficiency_same">come la media</string>
+    <string name="swim_efficiency_above">+%1$s sulla media</string>
+    <string name="swim_efficiency_below">−%1$s sulla media</string>
+    <string name="swim_efficiency_caption">Media delle tue nuotate in piscina delle 8 settimane prima. In acque libere la bracciata è più corta: le due cose non si mescolano.</string>
+    <string name="swim_zones_title">Zone di passo</string>
+    <string name="swim_zones_summary">%1$s in Z%2$d</string>
+    <string name="swim_zones_caption">Metri per zona calcolati sulla tua CSS, con le stesse cinque zone di bici e corsa.</string>
+    <string name="swim_table_title">Ripetute e vasche</string>
+    <string name="swim_table_summary">%1$d ripetute</string>
+    <string name="swim_table_summary_lengths">%1$d ripetute · %2$d vasche</string>
+    <string name="swim_table_repeat">ripetuta</string>
+    <string name="swim_table_pace">passo</string>
+    <string name="swim_table_rest">rec.</string>
+    <string name="swim_table_all">Tutte le %1$d ripetute</string>
+    <string name="swim_table_less">Meno ripetute</string>
+    <string name="swim_table_lengths">Mostra le %1$d vasche</string>
+    <string name="swim_table_hide_lengths">Nascondi le vasche</string>
+
+    <!-- Nuoto tab -->
+    <string name="swim_css_title">CSS stimata dalle tue nuotate</string>
+    <string name="swim_css_confidence_high">affidabilità alta</string>
+    <string name="swim_css_confidence_medium">affidabilità media</string>
+    <string name="swim_css_in_profile">nel profilo: %1$s</string>
+    <string name="swim_css_no_profile">nel profilo: nessuna</string>
+    <string name="swim_css_best">Migliore %1$d m</string>
+    <string name="swim_css_caption">Calcolata dalle tue ripetute più veloci degli ultimi 90 giorni, come un test 400 + 200. La CSS regola zone di passo e carico del nuoto, e il coach la usa per le sedute.</string>
+    <string name="swim_css_use">Usa %1$s nel profilo</string>
+    <string name="swim_dps_title">Metri per bracciata</string>
+    <string name="swim_dps_scope">stile libero, piscina</string>
+    <string name="swim_dps_chart">Metri per bracciata nelle ultime %1$d settimane, da %2$s a %3$s.</string>
+    <string name="swim_dps_change">in %1$d settimane</string>
+    <string name="swim_dps_caption">Bracciata più lunga a parità di colpi: vai più veloce con meno fatica, e scendi dalla bici con più energia.</string>
 </resources>

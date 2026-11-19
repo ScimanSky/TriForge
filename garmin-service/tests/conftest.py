@@ -26,6 +26,8 @@ class FakeGateway:
         self.login_calls: list[tuple[str, str]] = []
         self.mfa_calls: list[tuple[Any, str]] = []
         self.fetch_calls: list[tuple[str, date, date]] = []
+        self.swim_splits: dict[str, dict[str, Any]] = {}
+        self.swims_with_laps_seen: list[frozenset[str]] = []
 
     def login(self, email: str, password: str) -> Session | MfaChallenge:
         self.login_calls.append((email, password))
@@ -39,11 +41,21 @@ class FakeGateway:
             raise self.mfa_result
         return self.mfa_result
 
-    def fetch(self, tokens: str, start: date, end: date) -> GarminData:
+    def fetch(
+        self,
+        tokens: str,
+        start: date,
+        end: date,
+        swims_with_laps: frozenset[str] = frozenset(),
+    ) -> GarminData:
         self.fetch_calls.append((tokens, start, end))
+        self.swims_with_laps_seen.append(swims_with_laps)
         if self.fetch_error:
             raise self.fetch_error
-        return GarminData(self.activities, self.health, Session(tokens=self.refreshed_tokens))
+        splits = {k: v for k, v in self.swim_splits.items() if k not in swims_with_laps}
+        return GarminData(
+            self.activities, self.health, Session(tokens=self.refreshed_tokens), splits
+        )
 
 
 class Clock:

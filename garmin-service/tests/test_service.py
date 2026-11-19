@@ -220,3 +220,22 @@ def test_sync_all_continues_past_a_failing_user(service, gateway, store):
 
     assert service.sync_all() == {"ok": 1, "failed": 1}
     assert store.status["b"]["lastSyncStatus"] == "ok"
+
+
+def test_swim_laps_are_stored_once_and_kept_on_later_syncs(service, gateway, store):
+    service.connect(UID, "ada@example.com", "hunter2")
+    swim = activity(7)
+    swim["activityType"] = {"typeKey": "lap_swimming"}
+    gateway.activities = [swim]
+    gateway.swim_splits = {"7": {"lapDTOs": [{"distance": 100.0, "duration": 110.0}]}}
+
+    service.sync(UID)
+    assert store.activities[UID]["garmin_7"]["laps"] == [
+        {"distanceMeters": 100.0, "durationSec": 110.0}
+    ]
+
+    # The next sync does not ask for the laps again, and the merge keeps them.
+    service.sync(UID, days_back=30)
+    assert gateway.swims_with_laps_seen[-1] == frozenset({"7"})
+    assert store.activities[UID]["garmin_7"]["hasLaps"] is True
+    assert len(store.activities[UID]["garmin_7"]["laps"]) == 1

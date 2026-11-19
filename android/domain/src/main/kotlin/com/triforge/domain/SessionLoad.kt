@@ -21,7 +21,8 @@ data class SessionLoad(
  * Order of preference for each session:
  * 1. bike with power and FTP: hours x (NP/FTP)^2 x 100;
  * 2. run with threshold pace: hours x (speed/threshold speed)^2 x 100;
- * 3. swim with CSS: hours x (speed/CSS)^3 x 100 (cube: water drag);
+ * 3. swim with CSS: hours x (speed/CSS)^3 x 100 (cube: water drag),
+ *    interval by interval when the laps are known;
  * 4. Garmin training load, rescaled to TSS on the athlete's own sessions
  *    that have both measures;
  * 5. duration only, at a typical intensity for the sport.
@@ -89,6 +90,9 @@ object SessionLoadModel {
 
             Sport.SWIM -> {
                 val css = profile.cssSecPer100m
+                SwimAnalysis.lapTss(activity, css)?.let {
+                    return SessionLoad(activity, it, LoadMethod.SWIM_PACE, LoadQuality.HIGH)
+                }
                 if (css != null && css > 0 && activity.distanceMeters > 0) {
                     // Speed and time are both those of the swimming itself.
                     // Over the whole session the rests at the wall drag the
