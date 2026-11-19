@@ -2,13 +2,20 @@ package com.triforge.app.ui.coach
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -17,6 +24,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,8 +32,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.triforge.app.R
 import com.triforge.app.ui.common.CollapsibleCard
@@ -55,7 +69,10 @@ import com.triforge.domain.coach.SupplementTiming
 @Composable
 fun NutriProfileEditor(initial: NutritionProfile, first: Boolean, saving: Boolean, onSave: (NutritionProfile) -> Unit) {
     var draft by remember(initial) { mutableStateOf(initial) }
-    var likes by rememberSaveable(initial) { mutableStateOf(initial.likes.joinToString(", ")) }
+    // What is typed in a list field but not added yet: saving adds it too, so nothing typed is lost.
+    var likeInput by rememberSaveable(initial) { mutableStateOf("") }
+    var allergyInput by rememberSaveable(initial) { mutableStateOf("") }
+    var intoleranceInput by rememberSaveable(initial) { mutableStateOf("") }
     var otherAllergies by rememberSaveable(initial) { mutableStateOf(initial.otherAllergies) }
     var otherIntolerances by rememberSaveable(initial) { mutableStateOf(initial.otherIntolerances) }
     var notes by rememberSaveable(initial) { mutableStateOf(initial.notes) }
@@ -116,12 +133,14 @@ fun NutriProfileEditor(initial: NutritionProfile, first: Boolean, saving: Boolea
                     TriChip(allergen.label, selected = allergen in draft.allergies, onClick = { draft = draft.copy(allergies = draft.allergies.toggle(allergen)) })
                 }
             }
-            TriTextField(
-                value = otherAllergies,
-                onValueChange = { otherAllergies = it.take(NutritionProfile.TEXT_MAX) },
+            TextItems(
+                items = NutritionProfile.parseList(otherAllergies),
+                onChange = { otherAllergies = joinCapped(it) },
+                input = allergyInput,
+                onInput = { allergyInput = it },
                 label = stringResource(R.string.nutri_other),
                 placeholder = stringResource(R.string.nutri_other_allergy_hint),
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                fits = ::fitsOther,
             )
         }
 
@@ -136,27 +155,30 @@ fun NutriProfileEditor(initial: NutritionProfile, first: Boolean, saving: Boolea
                     TriChip(item.label, selected = item in draft.intolerances, onClick = { draft = draft.copy(intolerances = draft.intolerances.toggle(item)) })
                 }
             }
-            TriTextField(
-                value = otherIntolerances,
-                onValueChange = { otherIntolerances = it.take(NutritionProfile.TEXT_MAX) },
+            TextItems(
+                items = NutritionProfile.parseList(otherIntolerances),
+                onChange = { otherIntolerances = joinCapped(it) },
+                input = intoleranceInput,
+                onInput = { intoleranceInput = it },
                 label = stringResource(R.string.nutri_other),
                 placeholder = stringResource(R.string.nutri_other_intolerance_hint),
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                fits = ::fitsOther,
             )
         }
 
         CollapsibleCard(
             title = stringResource(R.string.nutri_section_likes),
-            summary = count(NutritionProfile.parseList(likes).size),
-            initiallyExpanded = first,
+            summary = count(draft.likes.size),
+            initiallyExpanded = first || draft.likes.isNotEmpty(),
         ) {
             Hint(stringResource(R.string.nutri_likes_hint))
-            TriTextField(
-                value = likes,
-                onValueChange = { likes = it.take(NutritionProfile.TEXT_MAX * 2) },
+            TextItems(
+                items = draft.likes,
+                onChange = { draft = draft.copy(likes = it) },
+                input = likeInput,
+                onInput = { likeInput = it },
                 label = stringResource(R.string.nutri_likes_field),
                 placeholder = stringResource(R.string.nutri_likes_placeholder),
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
         }
 
@@ -176,19 +198,21 @@ fun NutriProfileEditor(initial: NutritionProfile, first: Boolean, saving: Boolea
             }
             var food by rememberSaveable { mutableStateOf("") }
             var except by rememberSaveable { mutableStateOf("") }
-            TriTextField(food, { food = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_dislike_food), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_dislike_food_hint))
-            TriTextField(except, { except = it.take(NutritionProfile.TEXT_MAX) }, stringResource(R.string.nutri_dislike_exceptions), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_dislike_exceptions_hint))
-            SecondaryButton(
-                stringResource(R.string.nutri_add),
-                enabled = food.isNotBlank() && draft.dislikes.size < NutritionProfile.MAX_ITEMS,
-                compact = true,
-                onClick = {
+            val canAdd = food.isNotBlank() && draft.dislikes.size < NutritionProfile.MAX_ITEMS
+            val firstField = remember { FocusRequester() }
+            val add = {
+                if (canAdd) {
                     NutritionProfile.dislike(food, except)?.let { draft = draft.copy(dislikes = draft.dislikes + it) }
                     food = ""
                     except = ""
-                },
-                modifier = Modifier.padding(top = 10.dp),
-            )
+                    firstField.requestFocus()
+                }
+            }
+            AddGroup {
+                TriTextField(food, { food = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_dislike_food), Modifier.fillMaxWidth().padding(top = 8.dp).focusRequester(firstField), placeholder = stringResource(R.string.nutri_dislike_food_hint), keyboardOptions = NextField)
+                TriTextField(except, { except = it.take(NutritionProfile.TEXT_MAX) }, stringResource(R.string.nutri_dislike_exceptions), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_dislike_exceptions_hint), keyboardOptions = LastField, keyboardActions = KeyboardActions(onDone = { add() }))
+                SecondaryButton(stringResource(R.string.nutri_add), enabled = canAdd, compact = true, onClick = add, modifier = Modifier.padding(top = 10.dp))
+            }
         }
 
         CollapsibleCard(
@@ -221,22 +245,24 @@ fun NutriProfileEditor(initial: NutritionProfile, first: Boolean, saving: Boolea
             var name by rememberSaveable { mutableStateOf("") }
             var dose by rememberSaveable { mutableStateOf("") }
             var timing by rememberSaveable { mutableStateOf(SupplementTiming.DAILY.key) }
-            TriTextField(name, { name = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_supplement_name), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_supplement_name_hint))
-            TriTextField(dose, { dose = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_supplement_dose), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_supplement_dose_hint))
-            Label(stringResource(R.string.nutri_supplement_when))
-            Chips { SupplementTiming.entries.forEach { TriChip(it.label, selected = timing == it.key, onClick = { timing = it.key }) } }
-            SecondaryButton(
-                stringResource(R.string.nutri_add),
-                enabled = name.isNotBlank() && draft.supplements.size < NutritionProfile.MAX_SUPPLEMENTS,
-                compact = true,
-                onClick = {
+            val canAdd = name.isNotBlank() && draft.supplements.size < NutritionProfile.MAX_SUPPLEMENTS
+            val firstField = remember { FocusRequester() }
+            val add = {
+                if (canAdd) {
                     val item = Supplement(name.trim(), dose.trim(), SupplementTiming.of(timing) ?: SupplementTiming.DAILY)
                     draft = draft.copy(supplements = draft.supplements + item)
                     name = ""
                     dose = ""
-                },
-                modifier = Modifier.padding(top = 10.dp),
-            )
+                    firstField.requestFocus()
+                }
+            }
+            AddGroup {
+                TriTextField(name, { name = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_supplement_name), Modifier.fillMaxWidth().padding(top = 8.dp).focusRequester(firstField), placeholder = stringResource(R.string.nutri_supplement_name_hint), keyboardOptions = NextField)
+                TriTextField(dose, { dose = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_supplement_dose), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_supplement_dose_hint), keyboardOptions = LastField, keyboardActions = KeyboardActions(onDone = { add() }))
+                Label(stringResource(R.string.nutri_supplement_when))
+                Chips { SupplementTiming.entries.forEach { TriChip(it.label, selected = timing == it.key, onClick = { timing = it.key }) } }
+                SecondaryButton(stringResource(R.string.nutri_add), enabled = canAdd, compact = true, onClick = add, modifier = Modifier.padding(top = 10.dp))
+            }
         }
 
         CollapsibleCard(
@@ -254,19 +280,21 @@ fun NutriProfileEditor(initial: NutritionProfile, first: Boolean, saving: Boolea
             }
             var name by rememberSaveable { mutableStateOf("") }
             var perDay by rememberSaveable { mutableStateOf("") }
-            TriTextField(name, { name = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_drink_name), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_drink_name_hint))
-            TriTextField(perDay, { perDay = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_drink_per_day), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_drink_per_day_hint))
-            SecondaryButton(
-                stringResource(R.string.nutri_add),
-                enabled = name.isNotBlank() && draft.drinks.size < NutritionProfile.MAX_DRINKS,
-                compact = true,
-                onClick = {
+            val canAdd = name.isNotBlank() && draft.drinks.size < NutritionProfile.MAX_DRINKS
+            val firstField = remember { FocusRequester() }
+            val add = {
+                if (canAdd) {
                     draft = draft.copy(drinks = draft.drinks + Drink(name.trim(), perDay.trim()))
                     name = ""
                     perDay = ""
-                },
-                modifier = Modifier.padding(top = 10.dp),
-            )
+                    firstField.requestFocus()
+                }
+            }
+            AddGroup {
+                TriTextField(name, { name = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_drink_name), Modifier.fillMaxWidth().padding(top = 8.dp).focusRequester(firstField), placeholder = stringResource(R.string.nutri_drink_name_hint), keyboardOptions = NextField)
+                TriTextField(perDay, { perDay = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_drink_per_day), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_drink_per_day_hint), keyboardOptions = LastField, keyboardActions = KeyboardActions(onDone = { add() }))
+                SecondaryButton(stringResource(R.string.nutri_add), enabled = canAdd, compact = true, onClick = add, modifier = Modifier.padding(top = 10.dp))
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -305,9 +333,9 @@ fun NutriProfileEditor(initial: NutritionProfile, first: Boolean, saving: Boolea
             onClick = {
                 onSave(
                     draft.copy(
-                        likes = NutritionProfile.parseList(likes),
-                        otherAllergies = otherAllergies.trim(),
-                        otherIntolerances = otherIntolerances.trim(),
+                        likes = merge(draft.likes, likeInput),
+                        otherAllergies = joinCapped(merge(NutritionProfile.parseList(otherAllergies), allergyInput)),
+                        otherIntolerances = joinCapped(merge(NutritionProfile.parseList(otherIntolerances), intoleranceInput)),
                         notes = notes.trim(),
                     ),
                 )
@@ -321,6 +349,82 @@ fun NutriProfileEditor(initial: NutritionProfile, first: Boolean, saving: Boolea
 private fun <T> Set<T>.toggle(item: T): Set<T> = if (item in this) this - item else this + item
 
 private fun count(n: Int): String? = if (n == 0) null else n.toString()
+
+/** The list plus what was typed, split on commas, without duplicates and within the limits. */
+private fun merge(items: List<String>, typed: String): List<String> =
+    NutritionProfile.parseList((items + typed).joinToString(","))
+
+/** Joins the items of an «Altro» field, dropping the last ones if the text would get too long. */
+private fun joinCapped(items: List<String>): String {
+    var kept = items
+    while (kept.joinToString(", ").length > NutritionProfile.TEXT_MAX) kept = kept.dropLast(1)
+    return kept.joinToString(", ")
+}
+
+/** An «Altro» field is saved as one text: a new item is accepted only if the whole text still fits. */
+private fun fitsOther(items: List<String>): Boolean = items.joinToString(", ").length <= NutritionProfile.TEXT_MAX
+
+private val NextField = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next)
+private val LastField = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done)
+
+/**
+ * The fields and the «Aggiungi» button of a list section. While one of its
+ * fields has the focus the whole group is scrolled above the keyboard, so the
+ * button stays reachable without closing it.
+ */
+@Composable
+private fun AddGroup(content: @Composable ColumnScope.() -> Unit) {
+    val requester = remember { BringIntoViewRequester() }
+    var focused by remember { mutableStateOf(false) }
+    val keyboard = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(focused, keyboard) { if (focused) requester.bringIntoView() }
+    Column(Modifier.bringIntoViewRequester(requester).onFocusChanged { focused = it.hasFocus }, content = content)
+}
+
+/**
+ * A list of plain names (favourite foods, other allergies): the items with
+ * their remove button, then one field and «Aggiungi». The keyboard's confirm
+ * key adds too and leaves the keyboard open for the next one.
+ */
+@Composable
+private fun TextItems(
+    items: List<String>,
+    onChange: (List<String>) -> Unit,
+    input: String,
+    onInput: (String) -> Unit,
+    label: String,
+    placeholder: String,
+    fits: (List<String>) -> Boolean = { true },
+) {
+    items.forEachIndexed { index, item ->
+        ItemRow(
+            title = item,
+            subtitle = null,
+            removeLabel = stringResource(R.string.nutri_remove, item),
+            onRemove = { onChange(items.filterIndexed { i, _ -> i != index }) },
+        )
+    }
+    val merged = merge(items, input)
+    val canAdd = input.isNotBlank() && items.size < NutritionProfile.MAX_ITEMS && fits(merged)
+    val add = {
+        if (canAdd) {
+            onChange(merged)
+            onInput("")
+        }
+    }
+    AddGroup {
+        TriTextField(
+            value = input,
+            onValueChange = { onInput(it.take(NutritionProfile.TEXT_MAX)) },
+            label = label,
+            placeholder = placeholder,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            keyboardOptions = LastField,
+            keyboardActions = KeyboardActions(onDone = { add() }),
+        )
+        SecondaryButton(stringResource(R.string.nutri_add), enabled = canAdd, compact = true, onClick = add, modifier = Modifier.padding(top = 10.dp))
+    }
+}
 
 @Composable
 private fun redMeatLabel(n: Int?): String = when (n) {
