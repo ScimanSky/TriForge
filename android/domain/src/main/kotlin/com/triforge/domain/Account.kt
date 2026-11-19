@@ -37,7 +37,7 @@ data class Consent(
  * substantial change to the texts requires.
  */
 object LegalTexts {
-    const val VERSION = "2026-11-19"
+    const val VERSION = "2026-11-19.2"
 }
 
 /** The account side of `users/{uid}`: who the athlete is and what they agreed to. */

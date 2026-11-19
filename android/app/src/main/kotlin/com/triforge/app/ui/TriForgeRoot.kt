@@ -16,6 +16,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -39,6 +40,11 @@ import com.triforge.app.ui.auth.AuthScreen
 import com.triforge.app.ui.auth.AuthViewModel
 import com.triforge.app.ui.common.CenteredMessage
 import com.triforge.app.ui.common.LoadingBox
+import com.triforge.app.ui.coach.AthleteSource
+import com.triforge.app.ui.coach.CoachScreen
+import com.triforge.app.ui.coach.CoachViewModel
+import com.triforge.app.ui.coach.NutriScreen
+import com.triforge.app.ui.coach.NutriViewModel
 import com.triforge.app.ui.detail.ActivityDetailScreen
 import com.triforge.app.ui.profile.EditProfileScreen
 import com.triforge.app.ui.profile.ProfileScreen
@@ -65,6 +71,8 @@ import androidx.compose.ui.platform.LocalContext
 private enum class Tab(val route: String, @StringRes val label: Int, val icon: ImageVector) {
     TODAY("today", R.string.nav_today, TriIcons.Home),
     ACTIVITIES("activities", R.string.nav_activities, TriIcons.Activity),
+    COACH("coach", R.string.nav_coach, TriIcons.Coach),
+    NUTRI("nutriai", R.string.nav_nutri, TriIcons.Nutrition),
     PROFILE("profile", R.string.nav_profile, TriIcons.Person),
 }
 
@@ -173,6 +181,19 @@ private fun SignedIn(uid: String, container: AppContainer) {
             initializer { RecoveryViewModel(uid, container.activities, container.wellness, container.profiles) }
         },
     )
+    // The two coaches: separate view models driving separate agents. Both
+    // read the athlete's data from the view models above.
+    val athleteSource = remember(uid) {
+        AthleteSource(trainingViewModel.state, recoveryViewModel.state, container.profiles.profile(uid))
+    }
+    val coachViewModel: CoachViewModel = viewModel(
+        key = "coach-$uid",
+        factory = viewModelFactory { initializer { CoachViewModel(uid, container.coachAgent, container.coaching, athleteSource) } },
+    )
+    val nutriViewModel: NutriViewModel = viewModel(
+        key = "nutri-$uid",
+        factory = viewModelFactory { initializer { NutriViewModel(uid, container.nutriAgent, container.coaching, athleteSource) } },
+    )
     val training by trainingViewModel.state.collectAsStateWithLifecycle()
     val recovery by recoveryViewModel.state.collectAsStateWithLifecycle()
     val profile by profileViewModel.state.collectAsStateWithLifecycle()
@@ -205,7 +226,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
                             selected = currentRoute == tab.route,
                             onClick = { navController.openTab(tab) },
                             icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(stringResource(tab.label)) },
+                            label = { Text(stringResource(tab.label), maxLines = 1) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = TriColors.accentText,
                                 selectedTextColor = TriColors.accentText,
@@ -240,6 +261,21 @@ private fun SignedIn(uid: String, container: AppContainer) {
             }
             composable(Tab.ACTIVITIES.route) {
                 ActivitiesScreen(state = training, garmin = profile.garmin, onOpenActivity = openActivity)
+            }
+            composable(Tab.COACH.route) {
+                CoachScreen(
+                    viewModel = coachViewModel,
+                    aiAllowed = account.account.aiCoachAllowed,
+                    profile = profile.stored,
+                    onEnableAi = { accountViewModel.setAiCoach(true) },
+                )
+            }
+            composable(Tab.NUTRI.route) {
+                NutriScreen(
+                    viewModel = nutriViewModel,
+                    aiAllowed = account.account.aiCoachAllowed,
+                    onEnableAi = { accountViewModel.setAiCoach(true) },
+                )
             }
             composable(Tab.PROFILE.route) {
                 ProfileScreen(

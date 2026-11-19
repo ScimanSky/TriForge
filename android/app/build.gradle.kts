@@ -25,6 +25,19 @@ val garminServiceUrl: String =
         ?: providers.gradleProperty("triforge.garminServiceUrl").orNull
         ?: "").trim().trimEnd('/')
 
+// Gemini model and region behind the two AI coaches (Firebase AI Logic,
+// Vertex AI backend). Overridable in android/local.properties as
+// triforge.aiModel and triforge.aiLocation, so a newer model needs no code change.
+val aiModel: String = localProperties.getProperty("triforge.aiModel")?.trim()?.takeIf { it.isNotEmpty() }
+    ?: "gemini-3.5-flash"
+val aiLocation: String = localProperties.getProperty("triforge.aiLocation")?.trim()?.takeIf { it.isNotEmpty() }
+    ?: "europe-west3"
+
+// App Check guards Firebase AI Logic. Test builds use the debug provider with
+// a secret registered on the project (Firebase console › App Check › Manage
+// debug tokens). It lives only in android/local.properties, never in git.
+val appCheckDebugToken: String = localProperties.getProperty("triforge.appCheckDebugToken")?.trim().orEmpty()
+
 // The version is the number of commits behind the build. Every merge on main
 // makes it higher, so each test build sent to a phone is newer than the one
 // installed: that is how the in-app update recognises it. Nothing to bump by
@@ -50,10 +63,16 @@ android {
         versionName = "0.1.$commitCount"
 
         buildConfigField("String", "GARMIN_SERVICE_URL", "\"$garminServiceUrl\"")
+        buildConfigField("String", "AI_MODEL", "\"$aiModel\"")
+        buildConfigField("String", "AI_LOCATION", "\"$aiLocation\"")
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "APP_CHECK_DEBUG_TOKEN", "\"$appCheckDebugToken\"")
+        }
         release {
+            buildConfigField("String", "APP_CHECK_DEBUG_TOKEN", "\"\"")
             isMinifyEnabled = false
         }
     }
@@ -97,6 +116,9 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.ai)
+    implementation(libs.firebase.appcheck.playintegrity)
+    debugImplementation(libs.firebase.appcheck.debug)
     // In-app updates for test builds. Every build gets the API, which does
     // nothing on its own; only debug builds, the ones sent to testers, carry
     // the SDK that downloads and installs. It must never ship to a store.

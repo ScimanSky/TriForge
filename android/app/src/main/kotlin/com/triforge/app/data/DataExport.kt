@@ -51,6 +51,17 @@ class DataExport(
             }
             root.put(name, documents)
         }
+        // The two AI coaches: each one's document (plan, brief, eating
+        // profile) and its own chat.
+        val coaching = JSONObject()
+        user.collection("coaching").get().await().documents.forEach { document ->
+            val messages = JSONObject()
+            document.reference.collection("messages").get().await().documents.forEach { message ->
+                messages.put(message.id, toJson(message.data.orEmpty()))
+            }
+            coaching.put(document.id, toJson(document.data.orEmpty()).put("messages", messages))
+        }
+        root.put("coaching", coaching)
         return root
     }
 

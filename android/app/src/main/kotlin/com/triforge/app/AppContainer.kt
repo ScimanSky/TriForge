@@ -5,15 +5,25 @@ import android.content.Intent
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.triforge.app.ai.CoachAgent
+import com.triforge.app.ai.CoachSchemas
+import com.triforge.app.ai.GeminiCoachAgent
 import com.triforge.app.data.AccountRepository
 import com.triforge.app.data.ActivityRepository
 import com.triforge.app.data.AuthRepository
 import com.triforge.app.data.CloudService
+import com.triforge.app.data.CoachRepository
 import com.triforge.app.data.DataExport
 import com.triforge.app.data.GarminRepository
 import com.triforge.app.data.HealthConnectRepository
 import com.triforge.app.data.ProfileRepository
 import com.triforge.app.data.WellnessRepository
+import com.triforge.domain.coach.CoachMapper
+import com.triforge.domain.coach.CoachRole
+import com.triforge.domain.coach.NutritionDay
+import com.triforge.domain.coach.WeekPlan
+import com.triforge.domain.TrainingStats
+import java.time.LocalDate
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -29,6 +39,11 @@ class AppContainer(context: Context) {
      * below may be touched in that case: Firebase would throw.
      */
     val firebaseConfigured: Boolean = FirebaseApp.getApps(appContext).isNotEmpty()
+
+    init {
+        // Before any Firebase call: AI Logic refuses requests without App Check.
+        if (firebaseConfigured) AppCheckSetup.install(appContext, FirebaseApp.getInstance())
+    }
 
     private val firestore by lazy { FirebaseFirestore.getInstance() }
 
@@ -64,6 +79,25 @@ class AppContainer(context: Context) {
     val dataExport by lazy { DataExport(firestore, auth) }
 
     val wellness by lazy { WellnessRepository(firestore) }
+
+    val coaching by lazy { CoachRepository(firestore) }
+
+    /**
+     * The two AI coaches: two agents with their own instructions and their
+     * own model, which meet only on the shared board in Firestore.
+     */
+    val coachAgent: CoachAgent<WeekPlan> by lazy {
+        GeminiCoachAgent(CoachRole.COACH, BuildConfig.AI_MODEL, BuildConfig.AI_LOCATION, CoachSchemas.weekPlan) {
+            // Always this week: the model's own dates are only trusted inside it.
+            CoachMapper.weekPlanFromFields(it, TrainingStats.weekStart(LocalDate.now()))
+        }
+    }
+
+    val nutriAgent: CoachAgent<NutritionDay> by lazy {
+        GeminiCoachAgent(CoachRole.NUTRI_AI, BuildConfig.AI_MODEL, BuildConfig.AI_LOCATION, CoachSchemas.nutritionDay) {
+            CoachMapper.nutritionDayFromFields(it, LocalDate.now())
+        }
+    }
 
     /** In-app updates of test builds. Use only when [firebaseConfigured]. */
     val updater by lazy { AppUpdater() }

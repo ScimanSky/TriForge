@@ -1,7 +1,7 @@
 <!-- BOZZA da far verificare a un professionista prima della pubblicazione. I campi tra parentesi quadre vanno completati dal titolare. -->
 # Informativa privacy
 
-Versione 2026-11-19. Questa informativa spiega come TriForge tratta i tuoi dati personali, ai sensi degli articoli 13 e 14 del Regolamento (UE) 2016/679 (GDPR) e del Codice in materia di protezione dei dati personali (D.Lgs. 196/2003).
+Versione 2026-11-19.2. Questa informativa spiega come TriForge tratta i tuoi dati personali, ai sensi degli articoli 13 e 14 del Regolamento (UE) 2016/679 (GDPR) e del Codice in materia di protezione dei dati personali (D.Lgs. 196/2003).
 
 ## 1. Chi è il titolare
 
@@ -25,7 +25,7 @@ TriForge non usa strumenti di pubblicità, di analisi del comportamento o di pro
 
 - **Fornirti l'app** (account, profilo, statistiche): esecuzione del contratto, cioè dei termini di servizio (articolo 6, paragrafo 1, lettera b).
 - **Analizzare i dati sulla salute** per statistiche, forma, carico e recupero: il tuo **consenso esplicito** (articolo 9, paragrafo 2, lettera a). È necessario perché l'app esiste per questo; puoi revocarlo in ogni momento.
-- **Coach AI**, quando sarà disponibile: il tuo consenso, facoltativo e separato (articolo 6, paragrafo 1, lettera a, e articolo 9, paragrafo 2, lettera a). Senza, il coach non riceve i tuoi dati.
+- **Coach AI** (il Coach di allenamento e NutriAI, il nutrizionista): il tuo consenso, facoltativo e separato (articolo 6, paragrafo 1, lettera a, e articolo 9, paragrafo 2, lettera a). Senza, il coach non riceve i tuoi dati.
 - **Dimostrare i consensi** che hai dato: obbligo di legge (articolo 7, paragrafo 1, e articolo 6, paragrafo 1, lettera c).
 - **Sicurezza** del servizio e prevenzione degli abusi, tramite i registri tecnici: legittimo interesse del titolare (articolo 6, paragrafo 1, lettera f).
 
@@ -40,7 +40,7 @@ Le comunicazioni sono cifrate (TLS). I dati sono conservati su infrastruttura Go
 ## 6. Chi riceve i dati
 
 - **Google** (Google Ireland Limited e Google LLC), come responsabile del trattamento per i servizi Firebase e Google Cloud: autenticazione, database, server del servizio Garmin, custodia delle chiavi, pianificazione della sincronizzazione, registri.
-- **Google, per il coach AI** (modelli Gemini tramite Firebase AI Logic), solo se lo attivi e solo quando la funzione sarà disponibile.
+- **Google, per il coach AI** (modelli Gemini tramite Firebase AI Logic e Vertex AI, con elaborazione in Europa, regione europe-west3, Francoforte), solo se lo attivi: ricevono i dati di allenamento, recupero e profilo alimentare necessari a ogni richiesta, mai nome, email o foto.
 - **Garmin**: TriForge si collega a Garmin Connect su tua richiesta per scaricare i tuoi dati. Garmin tratta i dati del tuo account Garmin come titolare autonomo, secondo la propria informativa. Il collegamento usa un'interfaccia non ufficiale, che Garmin potrebbe limitare o interrompere.
 - **Autorità**, se la legge lo impone.
 
@@ -67,7 +67,7 @@ Se ritieni che il trattamento violi il GDPR, puoi proporre reclamo al **Garante 
 
 ## 10. Decisioni automatizzate
 
-L'app calcola in automatico indici come forma, fatica e bilancio carico-recupero, e in futuro il coach AI proporrà allenamenti. Sono suggerimenti: non producono effetti giuridici né incidono in modo analogo su di te, e puoi sempre ignorarli. TriForge non è un dispositivo medico e non fa diagnosi.
+L'app calcola in automatico indici come forma, fatica e bilancio carico-recupero, e, se lo attivi, il coach AI propone allenamenti e NutriAI obiettivi nutrizionali e pasti. Sono suggerimenti: non producono effetti giuridici né incidono in modo analogo su di te, e puoi sempre ignorarli. TriForge non è un dispositivo medico e non fa diagnosi.
 
 ## 11. Età minima
 

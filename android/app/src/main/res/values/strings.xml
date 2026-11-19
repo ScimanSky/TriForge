@@ -8,7 +8,7 @@
 
     <!-- Auth -->
     <string name="auth_headline">Tre sport.\nUn solo piano.</string>
-    <string name="auth_tagline">Le tue attività Garmin, le statistiche di nuoto, bici e corsa, e presto un coach che costruisce la settimana.</string>
+    <string name="auth_tagline">Le tue attività Garmin, le statistiche di nuoto, bici e corsa, un coach che costruisce la settimana e NutriAI, il nutrizionista.</string>
     <string name="auth_next_step">Dopo l’accesso ti chiediamo i consensi per la privacy e colleghi Garmin o Health Connect.</string>
     <string name="auth_name">Nome</string>
     <string name="auth_email">Email</string>
@@ -454,7 +454,7 @@
     <string name="privacy_intro_body">Qui decidi cosa può usare TriForge, scarichi una copia di tutto e puoi cancellare l\'account quando vuoi.</string>
     <string name="privacy_consents">Consensi</string>
     <string name="privacy_health_hint">Necessario: senza, l\'app non può calcolare statistiche e recupero.</string>
-    <string name="privacy_ai_hint">Facoltativo. Arriva con il coach AI: fino ad allora non viene inviato nulla.</string>
+    <string name="privacy_ai_hint">Facoltativo. Senza questo consenso il Coach e NutriAI restano spenti e non viene inviato nulla.</string>
     <string name="privacy_given_on">Dato il %1$s</string>
     <string name="privacy_refused_on">Negato il %1$s</string>
     <string name="privacy_accepted_on">Accettata il %1$s · versione %2$s</string>
@@ -507,7 +507,7 @@
     <string name="consent_health_title">Dati sulla salute</string>
     <string name="consent_health_body">Acconsento al trattamento dei miei dati sulla salute (frequenza cardiaca, HRV, sonno, allenamenti, come mi sento) per statistiche, carico e recupero.</string>
     <string name="consent_ai_title">Coach AI</string>
-    <string name="consent_ai_body">Acconsento all\'invio dei miei allenamenti e dati di recupero a Google (modelli Gemini) per ricevere consigli personalizzati. Il coach arriva con un prossimo aggiornamento.</string>
+    <string name="consent_ai_body">Acconsento all\'invio dei miei allenamenti, dei dati di recupero e del profilo alimentare a Google (modelli Gemini, elaborazione in Europa) per ricevere i consigli personalizzati del Coach e di NutriAI.</string>
 
     <!-- First launch -->
     <string name="onboarding_welcome_title">Benvenuto in TriForge</string>
@@ -516,7 +516,7 @@
     <string name="onboarding_feature_stats_body">Volumi, passi, soglie e record, con grafici per ogni disciplina.</string>
     <string name="onboarding_feature_recovery_title">Carico e recupero</string>
     <string name="onboarding_feature_recovery_body">HRV, frequenza a riposo, sonno e check-in ti dicono quando spingere e quando mollare.</string>
-    <string name="onboarding_feature_coach_title">Coach AI, presto</string>
+    <string name="onboarding_feature_coach_title">Coach AI</string>
     <string name="onboarding_feature_coach_body">Un allenatore e NutriAI, il nutrizionista, che costruiscono la settimana su di te.</string>
     <string name="onboarding_feature_privacy_title">Privacy prima di tutto</string>
     <string name="onboarding_feature_privacy_body">Decidi tu cosa condividere. Copia ed eliminazione dei dati in un tocco.</string>

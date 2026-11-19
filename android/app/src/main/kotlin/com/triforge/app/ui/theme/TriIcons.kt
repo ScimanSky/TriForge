@@ -120,6 +120,16 @@ object TriIcons {
 
     val Close by lazy { stroke("Close", "M6 6 l12 12 M18 6 l-12 12") }
 
+    val Send by lazy { stroke("Send", "M5 12 h14 M13 6 l6 6 l-6 6") }
+
+    /** The Coach tab: a speech bubble with a spark. */
+    val Coach by lazy { stroke("Coach", "M4 5 h16 v11 h-11 l-5 4 Z M12 8 l1 2 l2 1 l-2 1 l-1 2 l-1 -2 l-2 -1 l2 -1 Z") }
+
+    /** NutriAI's tab: a fruit with its leaf. */
+    val Nutrition by lazy {
+        stroke("Nutrition", "M12 8 c-2.5 -2.5 -8 -1.5 -8 3.5 S8 21 12 21 s8 -4.5 8 -9.5 s-5.5 -6 -8 -3.5 Z M12 8 c0 -2 1 -4 3.5 -5")
+    }
+
     fun of(sport: Sport): ImageVector = when (sport) {
         Sport.SWIM -> Swim
         Sport.BIKE -> Bike
