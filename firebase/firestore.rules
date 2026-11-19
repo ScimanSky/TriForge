@@ -59,21 +59,28 @@ service cloud.firestore {
           && request.resource.data.sick is bool;
       }
 
-      // The two AI coaches. Each has its own document (plan, brief for the
-      // other coach, and for NutriAI the eating profile) and its own chat.
-      // Only the athlete's app writes here, and only while signed in.
+      // The AI coaches. `coach` holds the week the three sport coaches
+      // write together and its brief for NutriAI; `nutriai` holds NutriAI's
+      // day, brief and the eating profile. Each of the three sport coaches
+      // (swim, bike, run) and NutriAI has its own chat. Only the athlete's
+      // app writes here, and only while signed in.
       match /coaching/{role} {
-        allow read, write: if isOwner(uid) && role in ['coach', 'nutriai'];
+        function knownRole() {
+          return role in ['coach', 'nutriai', 'swim', 'bike', 'run'];
+        }
+        allow read, write: if isOwner(uid) && knownRole();
 
         match /messages/{messageId} {
           function validMessage() {
-            return request.resource.data.keys().hasOnly(['from', 'text', 'at', 'proposal', 'status'])
+            return request.resource.data.keys().hasOnly(['from', 'text', 'at', 'proposal', 'status', 'handoff'])
               && request.resource.data.from in ['athlete', 'coach']
               && request.resource.data.text is string
-              && request.resource.data.text.size() <= 8000;
+              && request.resource.data.text.size() <= 8000
+              && (!('handoff' in request.resource.data)
+                || request.resource.data.handoff in ['swim', 'bike', 'run', 'nutriai']);
           }
           allow read, delete: if isOwner(uid);
-          allow create: if isOwner(uid) && role in ['coach', 'nutriai'] && validMessage()
+          allow create: if isOwner(uid) && knownRole() && validMessage()
             && request.resource.data.at == request.time;
           allow update: if isOwner(uid) && validMessage()
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);

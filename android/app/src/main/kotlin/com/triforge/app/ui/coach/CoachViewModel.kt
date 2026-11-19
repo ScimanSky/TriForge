@@ -12,10 +12,10 @@ import com.triforge.app.data.ProposalStatus
 import com.triforge.domain.Sport
 import com.triforge.domain.TrainingStats
 import com.triforge.domain.coach.AthleteContext
+import com.triforge.domain.coach.AthleteData
 import com.triforge.domain.coach.CoachBriefs
 import com.triforge.domain.coach.CoachMapper
 import com.triforge.domain.coach.CoachPrompts
-import com.triforge.domain.coach.CoachRole
 import com.triforge.domain.coach.CoachTable
 import com.triforge.domain.coach.NutriSafety
 import com.triforge.domain.coach.RecentTraining
@@ -49,24 +49,26 @@ data class CoachUiState(
     val loaded: Boolean = false,
     /** This week's plan, or null when the coach has not written it yet. */
     val plan: WeekPlan? = null,
-    val chat: List<ChatEntry> = emptyList(),
+    /** One chat per sport coach. */
+    val chats: Map<Sport, List<ChatEntry>> = emptyMap(),
     /** NutriAI's latest note for the Coach, shown so the athlete sees them work together. */
     val nutriNote: String = "",
     val task: CoachTask? = null,
     /** While planning: which round of the coaches' table is running, 1 or 2. */
     val round: Int = 0,
+    /** While replying: the coach that is writing. */
+    val replying: Sport? = null,
     val error: CoachException.Reason? = null,
 )
 
 /**
- * The training coach's screen. The week is written by the three sport
- * coaches at one table ([sportCoaches]); the chat is still held by the one
- * Coach ([agent]). NutriAI is never called from here: only its brief on the
- * shared board is read.
+ * The training coaches' screen. The week is written by the three sport
+ * coaches at one table, and each of them has its own chat with the athlete.
+ * NutriAI is never called from here: only its brief on the shared board is
+ * read.
  */
 class CoachViewModel(
     private val uid: String,
-    private val agent: CoachAgent<WeekPlan>,
     private val sportCoaches: Map<Sport, CoachAgent<SportProposal>>,
     private val repository: CoachRepository,
     private val athlete: AthleteSource,
@@ -76,6 +78,7 @@ class CoachViewModel(
     private val task = MutableStateFlow<CoachTask?>(null)
     private val error = MutableStateFlow<CoachException.Reason?>(null)
     private val tableRound = MutableStateFlow(0)
+    private val replying = MutableStateFlow<Sport?>(null)
     private var autoPlanTried = false
 
     private fun thisWeek(): LocalDate = TrainingStats.weekStart(LocalDate.now(zone))
@@ -83,17 +86,20 @@ class CoachViewModel(
     val state: StateFlow<CoachUiState> = combine(
         repository.coachDesk(uid).onStart { emit(CoachDesk()) },
         repository.nutriDesk(uid).onStart { emit(NutriDesk()) },
-        repository.chat(uid, CoachRole.COACH).onStart { emit(emptyList()) },
-        task.combine(tableRound) { task, round -> task to round },
+        combine(TriRegia.SPORTS.map { sport -> repository.chat(uid, sport).onStart { emit(emptyList()) } }) { chats ->
+            TriRegia.SPORTS.zip(chats.toList()).toMap()
+        },
+        combine(task, tableRound, replying) { task, round, sport -> Triple(task, round, sport) },
         error,
-    ) { desk, nutri, chat, (task, round), error ->
+    ) { desk, nutri, chats, (task, round, sport), error ->
         CoachUiState(
             loaded = true,
             plan = desk.plan?.takeIf { it.weekStart == thisWeek() },
-            chat = chat,
+            chats = chats,
             nutriNote = nutri.brief?.noteForPartner.orEmpty(),
             task = task,
             round = if (task == CoachTask.PLANNING) round else 0,
+            replying = sport.takeIf { task == CoachTask.REPLYING },
             error = error,
         )
     }
@@ -120,10 +126,10 @@ class CoachViewModel(
     fun planWeek() = run(CoachTask.PLANNING) {
         val weekStart = thisWeek()
         val nutri = repository.nutriDesk(uid).first()
-        val recent = state.value.chat.takeLast(RECENT_MESSAGES).map { it.message }
+        val chats = state.value.chats
         val data = athlete.current()
         val today = data.today
-        val budget = TriRegia.budget(data.profile, data.availability, RecentTraining.of(data.activities, weekStart, data.zone), weekStart)
+        val budget = weekBudget(data, weekStart)
         val regia = TriRegia.describe(budget, data.availability)
         val described = AthleteContext.describe(data)
         val past = CoachTable.pastDays(data.activities, weekStart, today, data.zone)
@@ -144,7 +150,7 @@ class CoachViewModel(
                         others = first.filter { it.sport != sport },
                         own = first.firstOrNull { it.sport == sport },
                         conflicts = conflicts,
-                        recentChat = recent,
+                        recentChat = chats[sport].orEmpty().takeLast(RECENT_MESSAGES).map { it.message },
                     )
                     sportCoaches.getValue(sport).plan(request)
                 }
@@ -182,75 +188,75 @@ class CoachViewModel(
         repository.saveWeekPlan(uid, agreed, CoachBriefs.of(agreed, today))
     }
 
-    /** The regia's budget for the week starting on [weekStart]. */
-    private suspend fun weekBudget(weekStart: LocalDate): WeekBudget {
-        val data = athlete.current()
-        val recent = RecentTraining.of(data.activities, weekStart, data.zone)
-        return TriRegia.budget(data.profile, data.availability, recent, weekStart)
-    }
-
-    fun send(text: String) {
+    /** A message to one sport coach, in its own chat. */
+    fun send(sport: Sport, text: String) {
         val message = text.trim()
         if (message.isEmpty() || task.value != null) return
+        replying.value = sport
         run(CoachTask.REPLYING) {
-            val history = state.value.chat.map { it.message }
-            repository.addMessage(uid, CoachRole.COACH, fromAthlete = true, text = message)
+            val history = state.value.chats[sport].orEmpty().map { it.message }
+            repository.addMessage(uid, sport, fromAthlete = true, text = message)
             if (NutriSafety.flags(message)) {
-                repository.addMessage(uid, CoachRole.COACH, fromAthlete = false, text = NutriSafety.REPLY)
+                repository.addMessage(uid, sport, fromAthlete = false, text = NutriSafety.REPLY)
                 return@run
             }
+            val weekStart = thisWeek()
+            val data = athlete.current()
+            val today = data.today
+            val budget = weekBudget(data, weekStart)
             val nutri = repository.nutriDesk(uid).first()
-            val plan = repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == thisWeek() }
-            val regia = TriRegia.describe(weekBudget(thisWeek()), athlete.current().availability)
-            val turn = CoachPrompts.chatTurn(
-                role = CoachRole.COACH,
-                athlete = athlete.describe(),
-                partner = nutri.brief,
-                ownPlan = plan?.let(CoachPrompts::describe),
-                extra = buildString {
-                    appendLine("La settimana va da lunedì ${thisWeek()} a domenica ${thisWeek().plusDays(6)}.")
-                    appendLine("Se proponi una settimana nuova, rispetta la regia:")
-                    append(regia)
-                },
+            val plan = repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == weekStart }
+            val turn = SportCoachPrompts.chatTurn(
+                sport = sport,
+                athlete = AthleteContext.describe(data),
+                weekStart = weekStart,
+                today = today,
+                week = plan?.let(CoachPrompts::describe),
+                regia = TriRegia.describe(budget, data.availability),
+                budget = budget,
+                nutri = nutri.brief,
                 message = message,
             )
-            val reply = agent.reply(history, turn)
-            val proposal = reply.proposal?.copy(weekStart = thisWeek())
-            repository.addMessage(uid, CoachRole.COACH, fromAthlete = false, text = reply.text, proposal = proposal?.let(CoachMapper::weekPlanToFields))
-            if (reply.noteForPartner.isNotBlank()) repository.leaveNote(uid, CoachRole.COACH, reply.noteForPartner)
+            val reply = sportCoaches.getValue(sport).reply(history, turn)
+            // Kept as the athlete will see it: only this coach's sessions from today on, with targets and totals.
+            val card = reply.proposal
+                ?.takeIf { plan != null && it.days.isNotEmpty() }
+                ?.let { it.copy(note = reply.noteForPartner.ifBlank { it.note }) }
+                ?.let { CoachTable.preview(it, weekStart, today, budget, data.profile, data.availability) }
+                ?.takeIf { week -> week.days.any { it.sessions.isNotEmpty() } }
+            repository.addMessage(
+                uid,
+                sport,
+                fromAthlete = false,
+                text = reply.text,
+                proposal = card?.let(CoachMapper::weekPlanToFields),
+                handoff = reply.handoff.takeIf { it.isNotBlank() },
+            )
         }
     }
 
-    /** Applies a plan the coach proposed in the chat: it becomes the week, and NutriAI sees it. */
-    fun apply(entry: ChatEntry) = run(null) {
-        val proposal = entry.proposal?.let { CoachMapper.weekPlanFromFields(it, thisWeek()) } ?: return@run
-        val plan = keepWorkouts(proposal, repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == thisWeek() })
-        repository.saveWeekPlan(uid, plan, CoachBriefs.of(plan, LocalDate.now(zone)))
-        repository.setProposalStatus(uid, CoachRole.COACH, entry.id, ProposalStatus.APPLIED)
-    }
-
     /**
-     * A week proposed in the chat is written as text. Sessions it leaves as
-     * they were (same day, sport and title) keep the structured workout the
-     * sport coaches wrote, and the week keeps the regia's numbers.
+     * Applies a change one coach proposed in its chat: its sessions are
+     * replaced, the regia checks the whole week again, and NutriAI sees the
+     * new week on the board.
      */
-    private fun keepWorkouts(proposal: WeekPlan, current: WeekPlan?): WeekPlan {
-        current ?: return proposal
-        return proposal.copy(
-            days = proposal.days.map { day ->
-                val before = current.day(day.date)?.sessions.orEmpty()
-                day.copy(sessions = day.sessions.map { session ->
-                    before.firstOrNull { it.steps.isNotEmpty() && it.sport == session.sport && it.title.equals(session.title, ignoreCase = true) } ?: session
-                })
-            },
-            availableMin = current.availableMin,
-            maxHard = current.maxHard,
-        )
+    fun apply(sport: Sport, entry: ChatEntry) = run(null) {
+        val weekStart = thisWeek()
+        val proposal = entry.proposal?.let { CoachMapper.sportProposalFromFields(it, sport, weekStart) } ?: return@run
+        val current = repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == weekStart } ?: return@run
+        val data = athlete.current()
+        val revised = CoachTable.revise(current, proposal, data.today, weekBudget(data, weekStart), data.profile, data.availability)
+        repository.saveWeekPlan(uid, revised, CoachBriefs.of(revised, data.today))
+        repository.setProposalStatus(uid, sport, entry.id, ProposalStatus.APPLIED)
     }
 
-    fun dismiss(entry: ChatEntry) = run(null) {
-        repository.setProposalStatus(uid, CoachRole.COACH, entry.id, ProposalStatus.DISMISSED)
+    fun dismiss(sport: Sport, entry: ChatEntry) = run(null) {
+        repository.setProposalStatus(uid, sport, entry.id, ProposalStatus.DISMISSED)
     }
+
+    /** The regia's budget for the week starting on [weekStart]. */
+    private fun weekBudget(data: AthleteData, weekStart: LocalDate): WeekBudget =
+        TriRegia.budget(data.profile, data.availability, RecentTraining.of(data.activities, weekStart, data.zone), weekStart)
 
     fun clearError() {
         error.value = null
@@ -270,6 +276,7 @@ class CoachViewModel(
                 error.value = CoachException.Reason.NETWORK
             } finally {
                 tableRound.value = 0
+                replying.value = null
                 task.value = null
             }
         }

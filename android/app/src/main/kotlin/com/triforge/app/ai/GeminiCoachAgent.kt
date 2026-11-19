@@ -36,6 +36,8 @@ class GeminiCoachAgent<P : Any>(
     planSchema: Schema,
     /** The agent's standing instructions; the sport coaches bring their own. */
     private val system: String = CoachPrompts.system(role),
+    /** Where this coach may send a question that is not its own; empty when it never does. */
+    private val handoffs: List<String> = emptyList(),
     private val parse: (Map<String, Any?>) -> P?,
 ) : CoachAgent<P> {
 
@@ -55,12 +57,15 @@ class GeminiCoachAgent<P : Any>(
 
     private val chatModel = model(
         Schema.obj(
-            properties = mapOf(
-                "reply" to Schema.string(description = "La risposta all'atleta, in italiano"),
-                "proposal" to planSchema,
-                "noteForPartner" to Schema.string(description = "Nota per l'altro coach, o vuoto"),
-            ),
-            optionalProperties = listOf("proposal", "noteForPartner"),
+            properties = buildMap {
+                put("reply", Schema.string(description = "La risposta all'atleta, in italiano"))
+                put("proposal", planSchema)
+                put("noteForPartner", Schema.string(description = "Nota per gli altri coach, o vuoto"))
+                if (handoffs.isNotEmpty()) {
+                    put("handoff", Schema.enumeration(handoffs + NO_HANDOFF))
+                }
+            },
+            optionalProperties = listOf("proposal", "noteForPartner", "handoff"),
         ),
         CHAT_TEMPERATURE,
     )
@@ -79,7 +84,8 @@ class GeminiCoachAgent<P : Any>(
         if (text.isEmpty()) throw CoachException(CoachException.Reason.BAD_ANSWER)
         @Suppress("UNCHECKED_CAST")
         val proposal = (fields["proposal"] as? Map<String, Any?>)?.let(parse)
-        return CoachReply(text, proposal, (fields["noteForPartner"] as? String)?.trim().orEmpty())
+        val handoff = (fields["handoff"] as? String)?.trim()?.takeIf { it in handoffs }.orEmpty()
+        return CoachReply(text, proposal, (fields["noteForPartner"] as? String)?.trim().orEmpty(), handoff)
     }
 
     private suspend fun call(block: suspend () -> String?): Map<String, Any?> {
@@ -113,6 +119,7 @@ class GeminiCoachAgent<P : Any>(
     private companion object {
         const val PLAN_TEMPERATURE = 0.4f
         const val CHAT_TEMPERATURE = 0.6f
+        const val NO_HANDOFF = "none"
 
         /** Earlier messages sent with each chat turn: enough to follow the thread, not the whole history. */
         const val MAX_HISTORY = 20

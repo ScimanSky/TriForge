@@ -24,7 +24,6 @@ import com.triforge.domain.coach.NutritionDay
 import com.triforge.domain.coach.SportCoachPrompts
 import com.triforge.domain.coach.SportProposal
 import com.triforge.domain.coach.TriRegia
-import com.triforge.domain.coach.WeekPlan
 import com.triforge.domain.coach.Zones
 import com.triforge.domain.Sport
 import com.triforge.domain.TrainingStats
@@ -88,17 +87,6 @@ class AppContainer(context: Context) {
     val coaching by lazy { CoachRepository(firestore) }
 
     /**
-     * The two AI coaches: two agents with their own instructions and their
-     * own model, which meet only on the shared board in Firestore.
-     */
-    val coachAgent: CoachAgent<WeekPlan> by lazy {
-        GeminiCoachAgent(CoachRole.COACH, BuildConfig.AI_MODEL, BuildConfig.AI_LOCATION, CoachSchemas.weekPlan) {
-            // Always this week: the model's own dates are only trusted inside it.
-            CoachMapper.weekPlanFromFields(it, TrainingStats.weekStart(LocalDate.now()))
-        }
-    }
-
-    /**
      * The three sport coaches that write the week together: one agent per
      * sport, each with its own instructions. They never call each other: the
      * app carries their proposals from one to the others.
@@ -111,12 +99,14 @@ class AppContainer(context: Context) {
                 BuildConfig.AI_LOCATION,
                 CoachSchemas.sportWeek(Zones.keys(sport)),
                 system = SportCoachPrompts.system(sport),
+                handoffs = SportCoachPrompts.handoffs(sport),
             ) { fields ->
                 CoachMapper.sportProposalFromFields(fields, sport, TrainingStats.weekStart(LocalDate.now()))
             }
         }
     }
 
+    /** NutriAI, a separate agent: it meets the coaches only on the shared board in Firestore. */
     val nutriAgent: CoachAgent<NutritionDay> by lazy {
         GeminiCoachAgent(CoachRole.NUTRI_AI, BuildConfig.AI_MODEL, BuildConfig.AI_LOCATION, CoachSchemas.nutritionDay) {
             CoachMapper.nutritionDayFromFields(it, LocalDate.now())

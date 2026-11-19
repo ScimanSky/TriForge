@@ -8,34 +8,6 @@ import com.google.firebase.ai.type.Schema
  */
 object CoachSchemas {
 
-    private val session = Schema.obj(
-        properties = mapOf(
-            "sport" to Schema.enumeration(listOf("swim", "bike", "run", "other", "rest")),
-            "title" to Schema.string(description = "Titolo breve, es. \"Soglia 4 × 8′\""),
-            "durationMin" to Schema.integer(description = "Durata in minuti"),
-            "intensity" to Schema.enumeration(listOf("rest", "easy", "endurance", "tempo", "threshold", "vo2max", "race")),
-            "details" to Schema.string(description = "Come farla: serie, bersagli in watt, passo o zone"),
-        ),
-        optionalProperties = listOf("details"),
-    )
-
-    val weekPlan: Schema = Schema.obj(
-        properties = mapOf(
-            "weekStart" to Schema.string(description = "Lunedì della settimana, AAAA-MM-GG"),
-            "phase" to Schema.string(description = "Fase di allenamento, es. \"Costruzione · sett. 2 di 3\""),
-            "days" to Schema.array(
-                Schema.obj(
-                    properties = mapOf(
-                        "date" to Schema.string(description = "AAAA-MM-GG"),
-                        "sessions" to Schema.array(session),
-                    ),
-                ),
-            ),
-            "rationale" to Schema.string(description = "Perché la settimana è così, 2-4 frasi"),
-            "noteForNutriAi" to Schema.string(description = "Cosa deve sapere NutriAI"),
-        ),
-    )
-
     /**
      * What one sport coach writes: its own sessions as structured workouts.
      * No sport, duration or targets: the app knows the first and computes the

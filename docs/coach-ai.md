@@ -134,10 +134,25 @@ in SwimForge, il modello sceglie e spiega, l'app fa i conti (`Workouts`,
   intensità della seduta li calcola l'app: al modello non vengono chiesti;
 - la regia controlla anche il tempo in zona alta (soglia e oltre) per sport.
 
-Il piano resta nel documento `coaching/coach`: non servono regole Firestore
-nuove. La chat è ancora quella del Coach unico; le chat per singolo coach
-(tavola 6d) arrivano con il passo successivo e richiedono una modifica alle
-regole.
+Il piano resta nel documento `coaching/coach`.
+
+### Una chat per coach
+
+Ogni coach di sport ha la sua chat con l'atleta
+(`coaching/{swim|bike|run}/messages`). In chat il coach vede tutta la
+settimana, ma può proporre di cambiare solo le sue sedute: la proposta sono
+tutte le sue sedute da oggi a domenica. Quando l'atleta tocca "Applica",
+`CoachTable.revise` sostituisce le sedute di quel coach, lascia quelle degli
+altri due, ripassa tutto alla regia e scrive nel verbale la modifica e gli
+eventuali interventi dell'app. Il riepilogo per NutriAI viene riscritto, così
+NutriAI rifà i giorni toccati.
+
+Una domanda che non è del suo sport il coach la passa con un tasto
+(`handoff`): alla chat di un altro coach o a NutriAI.
+
+Le regole Firestore ammettono i ruoli `swim`, `bike` e `run` sotto `coaching`
+e il campo `handoff` nei messaggi: vanno pubblicate prima di distribuire una
+build con le chat per coach (`firebase deploy --only firestore:rules`).
 
 ## App Check
 

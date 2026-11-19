@@ -9,17 +9,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,23 +35,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.triforge.app.R
-import com.triforge.app.data.ChatEntry
-import com.triforge.app.data.ProposalStatus
 import com.triforge.app.ui.common.LoadingBox
 import com.triforge.app.ui.common.PrimaryButton
 import com.triforge.app.ui.common.SecondaryButton
 import com.triforge.app.ui.common.TriCard
-import com.triforge.app.ui.theme.SportColors
 import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.TriIcons
 import com.triforge.domain.AthleteProfile
-import com.triforge.domain.Formatters
-import com.triforge.domain.coach.CoachMapper
+import com.triforge.domain.Sport
 import com.triforge.domain.coach.TableVoice
+import com.triforge.domain.coach.TriRegia
 import java.time.LocalDate
-import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
-import java.util.Locale
 
 private val palette = CoachPalette.Coach
 
@@ -69,6 +58,7 @@ fun CoachScreen(
     onEnableAi: () -> Unit,
     weekSetupDone: Boolean,
     onOpenWeekSetup: () -> Unit,
+    onOpenNutri: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -76,6 +66,8 @@ fun CoachScreen(
 
     // The open session of the week (board 6e), by day and position.
     var openSession by rememberSaveable { mutableStateOf<String?>(null) }
+    // The coach the athlete is talking to in the Chat tab (board 6d).
+    var chatSport by rememberSaveable { mutableStateOf(Sport.SWIM) }
 
     LaunchedEffect(aiAllowed) { if (aiAllowed) viewModel.ensurePlan() }
 
@@ -88,6 +80,7 @@ fun CoachScreen(
             profile = profile,
             onBack = { openSession = null },
             onAsk = {
+                opened.second.sport?.takeIf { it in TriRegia.SPORTS }?.let { chatSport = it }
                 openSession = null
                 chat = true
             },
@@ -126,7 +119,7 @@ fun CoachScreen(
         if (!state.loaded) {
             LoadingBox()
         } else if (chat) {
-            ChatTab(state, viewModel)
+            CoachChat(state, viewModel, sport = chatSport, onSelect = { chatSport = it }, onOpenNutri = onOpenNutri)
         } else {
             WeekTab(state, viewModel, profile, onOpenSession = { openSession = it }, onAskChange = { chat = true })
         }
@@ -261,85 +254,4 @@ private fun WeekTab(
             }
         }
     }
-}
-
-// ---- Chat ------------------------------------------------------------------
-
-@Composable
-private fun ChatTab(state: CoachUiState, viewModel: CoachViewModel) {
-    val listState = rememberLazyListState()
-    LaunchedEffect(state.chat.size, state.task) {
-        val last = listState.layoutInfo.totalItemsCount - 1
-        if (last >= 0) listState.animateScrollToItem(last)
-    }
-    Column(Modifier.fillMaxSize().imePadding()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (state.chat.isEmpty()) {
-                item {
-                    Text(
-                        stringResource(R.string.coach_chat_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            items(state.chat, key = { it.id }) { entry -> CoachMessage(entry, state, viewModel) }
-            if (state.task == CoachTask.REPLYING) item { ThinkingRow(stringResource(R.string.coach_thinking), palette) }
-            state.error?.let { reason -> item { ErrorCard(reason, onRetry = null, onDismiss = viewModel::clearError) } }
-        }
-        Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SuggestionChips(
-                listOf(
-                    stringResource(R.string.coach_suggest_tired),
-                    stringResource(R.string.coach_suggest_short),
-                    stringResource(R.string.coach_suggest_review),
-                ),
-                enabled = state.task == null,
-                onPick = viewModel::send,
-            )
-            Composer(stringResource(R.string.coach_composer), palette, enabled = state.task == null, onSend = viewModel::send)
-        }
-    }
-}
-
-@Composable
-private fun CoachMessage(entry: ChatEntry, state: CoachUiState, viewModel: CoachViewModel) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ChatBubble(entry.message, palette)
-        val proposal = entry.proposal?.let { CoachMapper.weekPlanFromFields(it) } ?: return@Column
-        TriCard(Modifier.fillMaxWidth(0.88f), padding = 14.dp) {
-            val today = LocalDate.now()
-            proposal.days.filter { !it.date.isBefore(today) }.forEach { day ->
-                day.sessions.forEach { session ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 3.dp)) {
-                        Box(Modifier.size(10.dp).clip(CircleShape).background(session.sport?.let(SportColors::of) ?: Color(0xFF5E6672)))
-                        Text(
-                            "${day.date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALIAN).replaceFirstChar { it.uppercase() }} · ${session.title}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (session.durationMin > 0) {
-                            Text(Formatters.duration(session.durationMin * 60L), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-            when (entry.status) {
-                ProposalStatus.PENDING -> ProposalActions(palette, { viewModel.apply(entry) }, { viewModel.dismiss(entry) }, enabled = state.task == null)
-                ProposalStatus.APPLIED -> StatusLine(stringResource(R.string.coach_applied))
-                ProposalStatus.DISMISSED -> StatusLine(stringResource(R.string.coach_dismissed))
-                ProposalStatus.NONE -> Spacer(Modifier)
-            }
-        }
-    }
-}
-
-@Composable
-fun StatusLine(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
 }

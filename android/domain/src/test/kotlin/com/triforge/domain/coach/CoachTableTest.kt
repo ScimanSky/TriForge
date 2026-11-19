@@ -242,4 +242,44 @@ class CoachTableTest {
         assertTrue(text.contains("Precedenza nei conflitti: bici, corsa, nuoto"))
         assertTrue(text.contains("Z1, Z2, Z3, Z4, Z5"))
     }
+
+    // ---- Chat ----------------------------------------------------------------
+
+    @Test
+    fun `a change accepted in one coach's chat replaces only its sessions and is checked again`() {
+        val tuesday = monday.plusDays(1)
+        val week = CoachTable.merge(monday, monday, emptyList(), proposals(4), budget, profile, TrainingAvailability())
+            .copy(rounds = 1, table = listOf(TableNote(TableVoice.BIKE, "Lungo sabato.")))
+        // The run coach moves its repeats to Thursday, right after the bike threshold.
+        val change = proposals(3).first { it.sport == Sport.RUN }.copy(note = "Ripetute a giovedì.")
+        val revised = CoachTable.revise(week, change, tuesday, budget, profile, TrainingAvailability())
+
+        assertEquals(week.days[0], revised.days[0], "Monday is gone: it stays as it was")
+        assertEquals(week.days[2], revised.days[2], "the bike keeps its threshold")
+        assertEquals(week.days[5], revised.days[5])
+        assertTrue(revised.days[4].sessions.isEmpty(), "the repeats left Friday")
+        assertEquals(Sport.RUN, revised.days[3].sessions.single().sport)
+        assertFalse(TriRegia.isHard(revised.days[3].sessions.single()), "the regia made them easy: two hard days in a row")
+        assertEquals(emptyList(), TriRegia.check(revised, budget, TrainingAvailability(), tuesday, profile))
+        assertEquals(listOf(TableVoice.BIKE, TableVoice.RUN, TableVoice.REGIA), revised.table.map { it.voice })
+        assertTrue(revised.table[1].text.contains("Ripetute a giovedì."))
+
+        val card = CoachTable.preview(change, monday, tuesday, budget, profile, TrainingAvailability())
+        assertTrue(card.days.flatMap { it.sessions }.all { it.sport == Sport.RUN && it.durationMin > 0 })
+        val read = CoachMapper.sportProposalFromFields(CoachMapper.weekPlanToFields(card), Sport.RUN, monday)
+        assertEquals(3, read?.days?.size)
+    }
+
+    @Test
+    fun `a coach in its chat knows the whole week and where to send other questions`() {
+        assertEquals(listOf("swim", "bike", "nutriai"), SportCoachPrompts.handoffs(Sport.RUN))
+        val text = SportCoachPrompts.chatTurn(
+            Sport.RUN, "Atleta di prova", monday, monday.plusDays(1), "mercoledì: bici soglia", "Fase del ciclo: generale.", budget, null,
+            "  Posso spostare le ripetute?  ",
+        )
+        assertTrue(text.contains("da martedì ${monday.plusDays(1)}"))
+        assertTrue(text.contains("mercoledì: bici soglia"))
+        assertTrue(text.contains("swim, bike, nutriai"))
+        assertTrue(text.endsWith("Posso spostare le ripetute?"))
+    }
 }

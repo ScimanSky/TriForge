@@ -145,7 +145,12 @@ fun SessionDetail(
                 }
             }
             item {
-                SecondaryButton(stringResource(R.string.coach_ask_change), onAsk, compact = true, modifier = Modifier.fillMaxWidth())
+                SecondaryButton(
+                    if (sport != null) stringResource(R.string.coach_ask_coach, SportCoachPrompts.coachName(sport)) else stringResource(R.string.coach_ask_change),
+                    onAsk,
+                    compact = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

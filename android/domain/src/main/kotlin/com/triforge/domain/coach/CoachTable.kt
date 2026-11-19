@@ -33,6 +33,9 @@ object CoachTable {
 
     private const val MAX_FIXES = 24
 
+    /** Lines kept in the minutes: the latest are the ones that explain the week as it is. */
+    private const val MAX_TABLE = 12
+
     /** The focus of a session of a day already gone: what the athlete did, not a plan. */
     const val DONE = "Fatta"
 
@@ -89,6 +92,48 @@ object CoachTable {
             noteForNutriAi = proposals.filter { it.noteForNutriAi.isNotBlank() }.joinToString(" ") { "${TriRegia.sportName(it.sport)}: ${it.noteForNutriAi}" },
             availableMin = budget.availableMinutes,
             maxHard = budget.maxHardSessions,
+        )
+    }
+
+    /**
+     * What one coach proposes in its chat, as a week with only its sessions
+     * from [today] on, finished by the app: what the athlete sees on the
+     * card and what is kept until they accept it.
+     */
+    fun preview(proposal: SportProposal, weekStart: LocalDate, today: LocalDate, budget: WeekBudget, profile: AthleteProfile, availability: TrainingAvailability): WeekPlan =
+        merge(weekStart, today, emptyList(), listOf(proposal), budget, profile, availability)
+            .copy(rationale = proposal.note.ifBlank { proposal.rationale })
+
+    /**
+     * The week after the athlete accepted a change from one coach's chat:
+     * that coach's sessions from [today] on are replaced, the other two keep
+     * theirs, and the regia checks the whole again. What it has to settle
+     * goes in the minutes, after the coach's own line.
+     */
+    fun revise(
+        current: WeekPlan,
+        proposal: SportProposal,
+        today: LocalDate,
+        budget: WeekBudget,
+        profile: AthleteProfile,
+        availability: TrainingAvailability,
+    ): WeekPlan {
+        val upcoming = current.days.filter { !it.date.isBefore(today) }
+        val others = TriRegia.SPORTS.filter { it != proposal.sport }.map { sport ->
+            SportProposal(sport, upcoming.map { day -> day.copy(sessions = day.sessions.filter { it.sport == sport }) }.filter { it.sessions.isNotEmpty() })
+        }
+        val mine = proposal.copy(days = proposal.days.filter { !it.date.isBefore(today) })
+        val joined = merge(current.weekStart, today, current.days.filter { it.date.isBefore(today) }, others + mine, budget, profile, availability)
+        val (settled, fixes) = settle(joined, budget, availability, profile, today)
+        val line = TableVoice.of(proposal.sport)?.let { voice ->
+            TableNote(voice, "Modifica chiesta in chat" + (proposal.note.ifBlank { proposal.rationale }.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "."))
+        }
+        return settled.copy(
+            phase = current.phase,
+            rationale = current.rationale,
+            noteForNutriAi = proposal.noteForNutriAi.ifBlank { current.noteForNutriAi },
+            table = (current.table + listOfNotNull(line) + fixes).takeLast(MAX_TABLE),
+            rounds = current.rounds.coerceAtLeast(1),
         )
     }
 

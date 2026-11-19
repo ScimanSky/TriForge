@@ -202,7 +202,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
     }
     val coachViewModel: CoachViewModel = viewModel(
         key = "coach-$uid",
-        factory = viewModelFactory { initializer { CoachViewModel(uid, container.coachAgent, container.sportCoaches, container.coaching, athleteSource) } },
+        factory = viewModelFactory { initializer { CoachViewModel(uid, container.sportCoaches, container.coaching, athleteSource) } },
     )
     val nutriViewModel: NutriViewModel = viewModel(
         key = "nutri-$uid",
@@ -291,6 +291,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
                     onEnableAi = { accountViewModel.setAiCoach(true) },
                     weekSetupDone = !weekSetup.loaded || weekSetup.availability.isSet,
                     onOpenWeekSetup = { navController.navigate(WEEK_SETUP_ROUTE) },
+                    onOpenNutri = { navController.openTab(Tab.NUTRI) },
                 )
             }
             composable(Tab.NUTRI.route) {
