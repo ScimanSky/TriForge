@@ -124,4 +124,47 @@
     <string name="nutri_no_caffeine">Evito la caffeina</string>
 
     <string name="nutri_profile_footer">Le calorie e i macro li calcola l\'app, NutriAI li spiega e li trasforma in pasti. Non sostituisce un medico o un dietista.</string>
+
+    <string name="week_setup_title">Giorni, orari e gara</string>
+    <string name="week_setup_intro">La regia del Coach parte da qui: le ore che hai, i giorni in cui puoi fare ogni sport e la gara che prepari.</string>
+    <string name="week_setup_race">Gara obiettivo</string>
+    <string name="week_setup_race_name">Nome della gara</string>
+    <string name="week_setup_race_name_hint">Es. 70.3 Pescara</string>
+    <string name="week_setup_race_date">Data</string>
+    <string name="week_setup_race_date_hint">Es. 7/6/2027</string>
+    <string name="week_setup_distance">Distanza</string>
+    <string name="week_setup_weak">Il tuo punto debole</string>
+    <string name="week_setup_weak_data">Decidi dai dati</string>
+    <string name="week_setup_shares">Quota della settimana proposta dalla regia</string>
+    <string name="week_setup_weak_from_data">Dai tuoi ultimi allenamenti il punto debole è: %1$s.</string>
+    <string name="week_setup_weak_no_data">Non ci sono ancora abbastanza allenamenti per capire il punto debole.</string>
+    <string name="week_setup_hours">Ore a settimana</string>
+    <string name="week_setup_hours_value">%1$s h</string>
+    <string name="week_setup_hours_less">Meno ore</string>
+    <string name="week_setup_hours_more">Più ore</string>
+    <string name="week_setup_rest_day">Giorno di riposo preferito</string>
+    <string name="week_setup_days">Giorni in cui puoi</string>
+    <string name="week_setup_any_day">Nessun giorno scelto: il Coach può usare tutti i giorni.</string>
+    <string name="week_setup_day_letters">LMMGVSD</string>
+    <string name="week_setup_time">Ora abituale</string>
+    <string name="week_setup_time_hint">Es. 07:00</string>
+    <string name="week_setup_pool">Vasca</string>
+    <string name="week_setup_pool_value">%1$d m</string>
+    <string name="week_setup_longest_ride">Uscita più lunga possibile</string>
+    <string name="week_setup_longest_ride_free">Libera</string>
+    <string name="week_setup_ride_less">Uscita più corta</string>
+    <string name="week_setup_ride_more">Uscita più lunga</string>
+    <string name="week_setup_trainer">Rulli in settimana</string>
+    <string name="week_setup_swim">Nuoto</string>
+    <string name="week_setup_bike">Bici</string>
+    <string name="week_setup_run">Corsa</string>
+    <string name="week_setup_css">passo soglia nuoto %1$s /100 m</string>
+    <string name="week_setup_ftp">FTP %1$d W</string>
+    <string name="week_setup_run_pace">soglia corsa %1$s /km</string>
+    <string name="week_setup_thresholds">Soglie per le zone: %1$s. Si modificano in Modifica profilo.</string>
+    <string name="week_setup_thresholds_none">Le soglie per le zone non ci sono ancora: si aggiungono in Modifica profilo.</string>
+    <string name="week_setup_error">Controlla la data (giorno/mese/anno) e gli orari (ore:minuti).</string>
+    <string name="week_setup_card_body">Ore, giorni per sport e gara: la regia del Coach parte da qui.</string>
+    <string name="week_setup_coach_prompt">Dimmi i giorni e gli orari in cui puoi allenarti: la settimana verrà costruita su quelli.</string>
+    <string name="week_setup_open">Imposta giorni e orari</string>
 </resources>

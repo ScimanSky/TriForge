@@ -36,6 +36,8 @@ data class AthleteData(
     val recovery: RecoveryReport? = null,
     val checkIn: CheckIn? = null,
     val birthYear: Int? = null,
+    /** Days and hours for each sport, for the regia. */
+    val availability: TrainingAvailability = TrainingAvailability(),
 ) {
     /** Age in years this year, from the year of birth of the account. */
     val age: Int? get() = birthYear?.let { today.year - it }?.takeIf { it in 10..110 }

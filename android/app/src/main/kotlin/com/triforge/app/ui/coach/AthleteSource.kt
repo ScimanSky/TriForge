@@ -5,6 +5,7 @@ import com.triforge.app.ui.TrainingState
 import com.triforge.domain.AthleteProfile
 import com.triforge.domain.coach.AthleteData
 import com.triforge.domain.coach.AthleteContext
+import com.triforge.domain.coach.TrainingAvailability
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
@@ -20,15 +21,16 @@ class AthleteSource(
     private val recovery: Flow<RecoveryState>,
     private val profile: Flow<AthleteProfile>,
     private val birthYear: Flow<Int?>,
+    private val availability: Flow<TrainingAvailability>,
 ) {
     /** Waits until activities and recovery are loaded, then describes them as text. */
     suspend fun describe(): String = AthleteContext.describe(current())
 
     suspend fun current(): AthleteData {
         val zone = ZoneId.systemDefault()
-        return combine(training, recovery, profile, birthYear) { t, r, p, y -> Loaded(t, r, p, y) }
+        return combine(training, recovery, profile, birthYear, availability) { t, r, p, y, a -> Loaded(t, r, p, y, a) }
             .first { (t, r) -> t !is TrainingState.Loading && r !is RecoveryState.Loading }
-            .let { (t, r, p, y) ->
+            .let { (t, r, p, y, a) ->
                 val loaded = r as? RecoveryState.Loaded
                 AthleteData(
                     today = LocalDate.now(zone),
@@ -39,9 +41,10 @@ class AthleteSource(
                     recovery = loaded?.report,
                     checkIn = loaded?.todayCheckIn,
                     birthYear = y,
+                    availability = a,
                 )
             }
     }
 }
 
-private data class Loaded(val training: TrainingState, val recovery: RecoveryState, val profile: AthleteProfile, val birthYear: Int?)
+private data class Loaded(val training: TrainingState, val recovery: RecoveryState, val profile: AthleteProfile, val birthYear: Int?, val availability: TrainingAvailability)
