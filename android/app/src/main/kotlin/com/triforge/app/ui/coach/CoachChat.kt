@@ -72,8 +72,9 @@ fun CoachChat(
     val writing = state.task == CoachTask.REPLYING && state.replying == sport
     val listState = rememberLazyListState()
     LaunchedEffect(sport, chat.size, writing) {
+        // An empty chat stays at the top, on its introduction.
         val last = listState.layoutInfo.totalItemsCount - 1
-        if (last >= 0) listState.animateScrollToItem(last)
+        if (chat.isNotEmpty() && last >= 0) listState.animateScrollToItem(last)
     }
     Column(Modifier.fillMaxSize().imePadding()) {
         CoachSelector(sport, onSelect)
@@ -111,17 +112,21 @@ fun CoachChat(
             }
             if (writing) item { ThinkingRow(stringResource(R.string.coach_thinking, coach), palette) }
             state.error?.let { reason -> item { ErrorCard(reason, onRetry = null, onDismiss = viewModel::clearError) } }
+            // The ready-made questions scroll with the chat: with the keyboard open
+            // they would otherwise cover the messages, or the first lines of an empty chat.
+            item {
+                SuggestionChips(
+                    listOf(
+                        stringResource(R.string.coach_suggest_tired),
+                        stringResource(R.string.coach_suggest_short),
+                        stringResource(R.string.coach_suggest_review),
+                    ),
+                    enabled = state.task == null,
+                    onPick = { viewModel.send(sport, it) },
+                )
+            }
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SuggestionChips(
-                listOf(
-                    stringResource(R.string.coach_suggest_tired),
-                    stringResource(R.string.coach_suggest_short),
-                    stringResource(R.string.coach_suggest_review),
-                ),
-                enabled = state.task == null,
-                onPick = { viewModel.send(sport, it) },
-            )
             Composer(stringResource(R.string.coach_composer, coach), palette, enabled = state.task == null, onSend = { viewModel.send(sport, it) })
         }
     }
