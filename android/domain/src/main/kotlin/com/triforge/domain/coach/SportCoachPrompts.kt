@@ -120,4 +120,52 @@ ${CoachPrompts.SAFETY}
             recentChat.forEach { appendLine((if (it.fromAthlete) "Atleta: " else "Coach: ") + it.text) }
         }
     }.trimEnd()
+
+    /** Where a coach sends a question that is not its own: another coach's chat or NutriAI. */
+    const val HANDOFF_NUTRI = "nutriai"
+
+    fun handoffs(sport: Sport): List<String> = TriRegia.SPORTS.filter { it != sport }.map(CoachMapper::sportKey) + HANDOFF_NUTRI
+
+    /**
+     * The athlete's message in one coach's chat. The coach answers for its
+     * sport only; a change is proposed as all its sessions from today on,
+     * which the app checks with the regia when the athlete accepts.
+     */
+    fun chatTurn(
+        sport: Sport,
+        athlete: String,
+        weekStart: LocalDate,
+        today: LocalDate,
+        week: String?,
+        regia: String,
+        budget: WeekBudget,
+        nutri: CoachBrief?,
+        message: String,
+    ): String = buildString {
+        val mine = budget.sports.getValue(sport)
+        val name = TriRegia.sportName(sport).lowercase()
+        appendLine("Rispondi al messaggio dell'atleta in \"reply\", in italiano, in poche frasi.")
+        appendLine("Se chiede di cambiare le tue sedute di $name, o se i dati lo rendono necessario, metti in \"proposal\" tutte le tue sedute da ${AthleteContext.dayLabel(today)} $today a domenica ${weekStart.plusDays(6)}, anche quelle che non cambiano, nello stesso formato della settimana (\"days\" con \"date\" e \"sessions\"; ogni seduta con \"title\", \"focus\", \"why\" e \"steps\" a zone: ${Zones.keys(sport).joinToString(", ")}). Altrimenti ometti \"proposal\".")
+        appendLine("Una tua modifica non deve rompere la settimana degli altri due coach: guarda le loro sedute qui sotto e la regia. Non puoi cambiare le loro sedute: se servirebbe, dillo all'atleta e scrivilo in \"noteForPartner\", che leggono gli altri coach.")
+        appendLine("Se la domanda riguarda un altro sport o l'alimentazione, rispondi in una frase e indica in \"handoff\" a chi passarla: ${handoffs(sport).joinToString(", ")}. Altrimenti \"handoff\" è \"none\".")
+        appendLine()
+        appendLine("## I tuoi limiti (regia)")
+        appendLine("Minuti di $name nella settimana: ${mine.minutes}. Sedute di qualità tue: al massimo ${mine.maxQuality}. Minuti in zona alta: al massimo ${TriRegia.highZoneBudget(sport, mine.minutes)}.")
+        mine.longestMin?.let { appendLine("Seduta più lunga: al massimo $it minuti.") }
+        appendLine()
+        appendLine("## Regia della settimana")
+        appendLine(regia)
+        appendLine()
+        appendLine("## La settimana attuale, di tutti e tre i coach")
+        appendLine(week ?: "Non c'è ancora una settimana scritta.")
+        appendLine()
+        appendLine("# Dati dell'atleta")
+        appendLine(athlete)
+        appendLine()
+        appendLine("## Ultimo riepilogo di NutriAI")
+        appendLine(nutri?.summary ?: "NutriAI non ha ancora pubblicato nulla.")
+        appendLine()
+        appendLine("## Messaggio dell'atleta")
+        append(message.trim())
+    }
 }

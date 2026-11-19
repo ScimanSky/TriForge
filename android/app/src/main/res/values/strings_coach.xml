@@ -29,7 +29,7 @@
     <string name="coach_tab_chat">Chat</string>
     <string name="coach_planning">I coach di nuoto, bici e corsa stanno scrivendo le loro sedute…</string>
     <string name="coach_planning_round2">Secondo giro: i tre coach si accordano sui giorni…</string>
-    <string name="coach_thinking">Il Coach sta scrivendo…</string>
+    <string name="coach_thinking">%1$s sta scrivendo…</string>
     <string name="coach_no_plan">I coach non hanno ancora preparato questa settimana.</string>
     <string name="coach_plan_week">Prepara la settimana</string>
     <string name="coach_replan">Rifai la settimana</string>
@@ -69,11 +69,17 @@
     <string name="coach_from_nutriai">Nota di NutriAI</string>
     <string name="coach_rest">Riposo</string>
     <string name="coach_today">Oggi</string>
-    <string name="coach_chat_empty">Chiedi al Coach di spostare una seduta, di spiegarti un allenamento o di come sta andando la settimana.</string>
+    <string name="coach_chat_empty">Chiedi al %1$s di spostare una sua seduta, di spiegarti un allenamento o di come sta andando la settimana.</string>
+    <string name="coach_chat_who">Con quale coach parli</string>
+    <string name="coach_chat_hint">Ogni coach ha la sua chat e conosce il piano degli altri due.</string>
+    <string name="coach_ask_coach">Chiedi al %1$s</string>
+    <string name="coach_ask_nutri">Chiedi a NutriAI</string>
+    <string name="coach_proposal_title">Proposta per le sedute di %1$s</string>
+    <string name="coach_proposal_note">Se la applichi, la regia ricontrolla tutta la settimana e NutriAI vede i giorni cambiati.</string>
     <string name="coach_suggest_tired">Sono stanco oggi</string>
     <string name="coach_suggest_short">Ho solo 45 minuti</string>
     <string name="coach_suggest_review">Com\'è andata la settimana?</string>
-    <string name="coach_composer">Scrivi al coach…</string>
+    <string name="coach_composer">Scrivi al %1$s</string>
 
     <!-- NutriAI -->
     <string name="nutri_title">NutriAI</string>

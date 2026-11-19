@@ -4,6 +4,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
+import com.triforge.domain.Sport
 import com.triforge.domain.coach.ChatMessage
 import com.triforge.domain.coach.CoachBrief
 import com.triforge.domain.coach.CoachMapper
@@ -36,6 +37,8 @@ data class ChatEntry(
     val message: ChatMessage,
     val proposal: Map<String, Any?>? = null,
     val status: ProposalStatus = ProposalStatus.NONE,
+    /** Who the coach sends the athlete to for this question: a sport key or "nutriai"; null when nobody. */
+    val handoff: String? = null,
 )
 
 enum class ProposalStatus(val key: String) {
@@ -51,17 +54,21 @@ enum class ProposalStatus(val key: String) {
  *
  * - `users/{uid}/coaching/coach`: the Coach's week plan and its brief.
  * - `users/{uid}/coaching/nutriai`: NutriAI's profile, day plan and brief.
- * - `users/{uid}/coaching/{role}/messages/{id}`: each coach's own chat.
+ * - `users/{uid}/coaching/{role}/messages/{id}`: NutriAI's chat.
+ * - `users/{uid}/coaching/{swim|bike|run}/messages/{id}`: the chat of each
+ *   sport coach. Their week is one, in `coaching/coach`.
  *
  * Each coach writes only its own document; the brief field is the shared
  * board the other one reads.
  */
 class CoachRepository(private val firestore: FirebaseFirestore) {
 
-    private fun desk(uid: String, role: CoachRole) =
-        firestore.collection("users").document(uid).collection("coaching").document(role.key)
+    private fun desk(uid: String, key: String) =
+        firestore.collection("users").document(uid).collection("coaching").document(key)
 
-    private fun messages(uid: String, role: CoachRole) = desk(uid, role).collection("messages")
+    private fun desk(uid: String, role: CoachRole) = desk(uid, role.key)
+
+    private fun messages(uid: String, key: String) = desk(uid, key).collection("messages")
 
     fun coachDesk(uid: String): Flow<CoachDesk> = document(uid, CoachRole.COACH) { fields ->
         CoachDesk(
@@ -94,8 +101,13 @@ class CoachRepository(private val firestore: FirebaseFirestore) {
     }
 
     /** The last [limit] messages, oldest first. */
-    fun chat(uid: String, role: CoachRole, limit: Long = 60): Flow<List<ChatEntry>> = callbackFlow {
-        val registration = messages(uid, role)
+    fun chat(uid: String, role: CoachRole, limit: Long = 60): Flow<List<ChatEntry>> = chat(uid, role.key, limit)
+
+    /** The chat with one sport coach. */
+    fun chat(uid: String, sport: Sport, limit: Long = 60): Flow<List<ChatEntry>> = chat(uid, CoachMapper.sportKey(sport), limit)
+
+    private fun chat(uid: String, key: String, limit: Long): Flow<List<ChatEntry>> = callbackFlow {
+        val registration = messages(uid, key)
             .orderBy("at", Query.Direction.DESCENDING)
             .limit(limit)
             .addSnapshotListener { snapshot, error ->
@@ -108,7 +120,13 @@ class CoachRepository(private val firestore: FirebaseFirestore) {
                     val fields = document.data.orEmpty().withInstants().let { if (it["at"] == null) it + ("at" to Instant.now()) else it }
                     val message = CoachMapper.messageFromFields(fields) ?: return@mapNotNull null
                     @Suppress("UNCHECKED_CAST")
-                    ChatEntry(document.id, message, fields["proposal"] as? Map<String, Any?>, ProposalStatus.of(fields["status"]))
+                    ChatEntry(
+                        document.id,
+                        message,
+                        fields["proposal"] as? Map<String, Any?>,
+                        ProposalStatus.of(fields["status"]),
+                        (fields["handoff"] as? String)?.takeIf { it.isNotBlank() },
+                    )
                 }
                 trySend(entries.reversed())
             }
@@ -152,22 +170,39 @@ class CoachRepository(private val firestore: FirebaseFirestore) {
         ),
     )
 
-    suspend fun addMessage(uid: String, role: CoachRole, fromAthlete: Boolean, text: String, proposal: Map<String, Any?>? = null) = write(
-        messages(uid, role).document().set(
-            buildMap {
-                put("from", if (fromAthlete) "athlete" else "coach")
-                put("text", text)
-                put("at", FieldValue.serverTimestamp())
-                if (proposal != null) {
-                    put("proposal", proposal)
-                    put("status", ProposalStatus.PENDING.key)
-                }
-            },
-        ),
-    )
+    suspend fun addMessage(uid: String, role: CoachRole, fromAthlete: Boolean, text: String, proposal: Map<String, Any?>? = null) =
+        write(messages(uid, role.key).document().set(message(fromAthlete, text, proposal, null)))
+
+    /**
+     * A message in one sport coach's chat. The coach's document is written
+     * with it, so the chat is found by the data export and by the erasure,
+     * which list the documents of `coaching`.
+     */
+    suspend fun addMessage(uid: String, sport: Sport, fromAthlete: Boolean, text: String, proposal: Map<String, Any?>? = null, handoff: String? = null) {
+        val key = CoachMapper.sportKey(sport)
+        val batch = firestore.batch()
+        batch.set(desk(uid, key), mapOf("chatAt" to FieldValue.serverTimestamp()), SetOptions.merge())
+        batch.set(messages(uid, key).document(), message(fromAthlete, text, proposal, handoff))
+        write(batch.commit())
+    }
+
+    private fun message(fromAthlete: Boolean, text: String, proposal: Map<String, Any?>?, handoff: String?): Map<String, Any?> = buildMap {
+        put("from", if (fromAthlete) "athlete" else "coach")
+        put("text", text)
+        put("at", FieldValue.serverTimestamp())
+        if (proposal != null) {
+            put("proposal", proposal)
+            put("status", ProposalStatus.PENDING.key)
+        }
+        if (handoff != null) put("handoff", handoff)
+    }
 
     suspend fun setProposalStatus(uid: String, role: CoachRole, messageId: String, status: ProposalStatus) = write(
-        messages(uid, role).document(messageId).update("status", status.key),
+        messages(uid, role.key).document(messageId).update("status", status.key),
+    )
+
+    suspend fun setProposalStatus(uid: String, sport: Sport, messageId: String, status: ProposalStatus) = write(
+        messages(uid, CoachMapper.sportKey(sport)).document(messageId).update("status", status.key),
     )
 
     /** Offline, Firestore applies writes locally at once; do not freeze on the server. */

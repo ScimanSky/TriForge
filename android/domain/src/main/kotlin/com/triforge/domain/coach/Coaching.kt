@@ -180,4 +180,6 @@ data class CoachReply<P>(
     val proposal: P? = null,
     /** A note for the other coach, when the change concerns them too. */
     val noteForPartner: String = "",
+    /** Who should take the question instead, when it is not this coach's: a sport key or "nutriai". */
+    val handoff: String = "",
 )
