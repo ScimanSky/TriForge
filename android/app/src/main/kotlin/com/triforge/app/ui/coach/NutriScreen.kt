@@ -94,7 +94,13 @@ fun NutriScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 profile.chips().forEach { ProfileChip(it) }
-                OutlineChip(stringResource(R.string.nutri_profile), onClick = { editing = !editing })
+                OutlineChip(
+                    stringResource(R.string.nutri_profile),
+                    onClick = {
+                        if (editing) viewModel.doneEditing()
+                        editing = !editing
+                    },
+                )
             }
         }
         val listState = rememberLazyListState()
@@ -113,6 +119,8 @@ fun NutriScreen(
                         initial = profile ?: NutritionProfile(),
                         first = profile == null,
                         saving = state.task != null,
+                        // Not on the first profile: saving it would close this form half filled.
+                        onKeep = if (profile != null) viewModel::keepProfile else null,
                         onSave = {
                             viewModel.saveProfile(it)
                             editing = false

@@ -59,6 +59,7 @@ import com.triforge.domain.coach.NutritionProfile
 import com.triforge.domain.coach.Sex
 import com.triforge.domain.coach.Supplement
 import com.triforge.domain.coach.SupplementTiming
+import kotlinx.coroutines.delay
 
 /**
  * The whole food profile (board 7c), in collapsible sections: body, goal and
@@ -67,15 +68,43 @@ import com.triforge.domain.coach.SupplementTiming
  * intolerances are checked by the app on every meal NutriAI proposes.
  */
 @Composable
-fun NutriProfileEditor(initial: NutritionProfile, first: Boolean, saving: Boolean, onSave: (NutritionProfile) -> Unit) {
-    var draft by remember(initial) { mutableStateOf(initial) }
+fun NutriProfileEditor(
+    initial: NutritionProfile,
+    first: Boolean,
+    saving: Boolean,
+    onSave: (NutritionProfile) -> Unit,
+    onKeep: ((NutritionProfile) -> Unit)? = null,
+) {
+    // Not keyed on [initial]: every change is kept through [onKeep] and comes back
+    // as a new [initial], which must not reset what is being typed.
+    var draft by remember { mutableStateOf(initial) }
     // What is typed in a list field but not added yet: saving adds it too, so nothing typed is lost.
-    var likeInput by rememberSaveable(initial) { mutableStateOf("") }
-    var allergyInput by rememberSaveable(initial) { mutableStateOf("") }
-    var intoleranceInput by rememberSaveable(initial) { mutableStateOf("") }
-    var otherAllergies by rememberSaveable(initial) { mutableStateOf(initial.otherAllergies) }
-    var otherIntolerances by rememberSaveable(initial) { mutableStateOf(initial.otherIntolerances) }
-    var notes by rememberSaveable(initial) { mutableStateOf(initial.notes) }
+    var likeInput by rememberSaveable { mutableStateOf("") }
+    var allergyInput by rememberSaveable { mutableStateOf("") }
+    var intoleranceInput by rememberSaveable { mutableStateOf("") }
+    var otherAllergies by rememberSaveable { mutableStateOf(initial.otherAllergies) }
+    var otherIntolerances by rememberSaveable { mutableStateOf(initial.otherIntolerances) }
+    var notes by rememberSaveable { mutableStateOf(initial.notes) }
+
+    // Every choice, added or removed item is kept at once; the notes a moment after the last key.
+    if (onKeep != null) {
+        var kept by remember { mutableStateOf(initial) }
+        val current = draft.copy(otherAllergies = otherAllergies, otherIntolerances = otherIntolerances, notes = kept.notes)
+        LaunchedEffect(current) {
+            if (current != kept) {
+                kept = current
+                onKeep(current)
+            }
+        }
+        LaunchedEffect(notes) {
+            delay(NOTES_KEEP_DELAY_MS)
+            val withNotes = kept.copy(notes = notes.trim())
+            if (withNotes != kept) {
+                kept = withNotes
+                onKeep(withNotes)
+            }
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         TriCard {
@@ -363,6 +392,8 @@ private fun joinCapped(items: List<String>): String {
 
 /** An «Altro» field is saved as one text: a new item is accepted only if the whole text still fits. */
 private fun fitsOther(items: List<String>): Boolean = items.joinToString(", ").length <= NutritionProfile.TEXT_MAX
+
+private const val NOTES_KEEP_DELAY_MS = 700L
 
 private val NextField = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next)
 private val LastField = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done)
