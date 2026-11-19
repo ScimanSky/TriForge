@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 # time, so longer windows are read in chunks of this many days.
 HEALTH_CHUNK_DAYS = 28
 
+# Laps and pool lengths of a swim need one extra request per swim. A first
+# sync of four months can hold fifty swims, so each sync reads at most this
+# many and the rest follow on the next syncs, to stay clear of Garmin's
+# request limits.
+MAX_SWIM_SPLITS_PER_SYNC = 25
+
 
 class GarminAuthError(Exception):
     """Credentials or tokens were rejected."""
@@ -69,6 +75,15 @@ class GarminData:
     activities: list[dict[str, Any]]
     health: HealthData
     session: Session
+    # Garmin's ``get_activity_splits`` answer (``lapDTOs`` with their
+    # ``lengthDTOs``) for the swims read this time, by activity id.
+    swim_splits: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+def is_swim(raw: dict[str, Any]) -> bool:
+    activity_type = raw.get("activityType")
+    key = activity_type.get("typeKey") if isinstance(activity_type, dict) else None
+    return "swimming" in (key or "").lower()
 
 
 class GarminGateway(Protocol):
@@ -76,7 +91,13 @@ class GarminGateway(Protocol):
 
     def complete_mfa(self, state: Any, code: str) -> Session: ...
 
-    def fetch(self, tokens: str, start: date, end: date) -> GarminData: ...
+    def fetch(
+        self,
+        tokens: str,
+        start: date,
+        end: date,
+        swims_with_laps: frozenset[str] = frozenset(),
+    ) -> GarminData: ...
 
 
 class GarminConnectGateway:
@@ -98,12 +119,20 @@ class GarminConnectGateway:
         self._call(client.resume_login, state, code)
         return self._session(client)
 
-    def fetch(self, tokens: str, start: date, end: date) -> GarminData:
+    def fetch(
+        self,
+        tokens: str,
+        start: date,
+        end: date,
+        swims_with_laps: frozenset[str] = frozenset(),
+    ) -> GarminData:
         """Activities and daily recovery data between ``start`` and ``end``.
 
-        One login serves every call. Recovery data is best effort: an endpoint
-        that fails for any reason other than auth or rate limiting is skipped,
-        so a Garmin change there never blocks the activity sync.
+        One login serves every call. Recovery data and swim laps are best
+        effort: an endpoint that fails for any reason other than auth or rate
+        limiting is skipped, so a Garmin change there never blocks the
+        activity sync. ``swims_with_laps`` are the swims whose laps are
+        already stored, so they are not read again.
         """
         from garminconnect import Garmin
 
@@ -134,9 +163,28 @@ class GarminConnectGateway:
                 )
             ),
         )
+        activities = list(activities or [])
+        swim_splits: dict[str, dict[str, Any]] = {}
+        swims = [
+            raw
+            for raw in activities
+            if isinstance(raw, dict)
+            and raw.get("activityId") is not None
+            and is_swim(raw)
+            and str(raw.get("activityId")) not in swims_with_laps
+        ]
+        # Newest first: the swims the athlete is about to open.
+        swims.sort(key=lambda raw: str(raw.get("startTimeGMT") or ""), reverse=True)
+        pending = [str(raw["activityId"]) for raw in swims]
+        for activity_id in pending[:MAX_SWIM_SPLITS_PER_SYNC]:
+            splits = self._optional_dict(
+                lambda i=activity_id: self._call(client.get_activity_splits, i)
+            )
+            if splits is not None:
+                swim_splits[activity_id] = splits
         # The library refreshes tokens while it works, so hand the current
         # ones back to be stored.
-        return GarminData(list(activities or []), health, self._session(client))
+        return GarminData(activities, health, self._session(client), swim_splits)
 
     @classmethod
     def _chunked(
@@ -162,6 +210,17 @@ class GarminConnectGateway:
             logger.warning("health data skipped: %s", type(err).__name__)
             return []
         return [row for row in rows or [] if isinstance(row, dict)]
+
+    @staticmethod
+    def _optional_dict(read: Callable[[], Any]) -> dict[str, Any] | None:
+        try:
+            value = read()
+        except (GarminAuthError, GarminRateLimitError):
+            raise
+        except Exception as err:  # noqa: BLE001 - swim laps are best effort
+            logger.warning("swim laps skipped: %s", type(err).__name__)
+            return None
+        return value if isinstance(value, dict) else None
 
     @staticmethod
     def _session(client: Any) -> Session:

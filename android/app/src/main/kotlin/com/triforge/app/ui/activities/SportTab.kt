@@ -52,11 +52,37 @@ import com.triforge.domain.RecordKind
 import com.triforge.domain.Sport
 import com.triforge.domain.SportReport
 import com.triforge.domain.SportStats
+import com.triforge.domain.CssEstimate
+import com.triforge.domain.SwimAnalysis
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import com.triforge.domain.WeekVolume
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+/** What the Nuoto tab adds from the laps: the CSS estimate and the stroke length trend. */
+private data class SwimTabData(
+    val css: CssEstimate?,
+    val metersPerStroke: List<Pair<LocalDate, Double?>>,
+    val strokeRate: Int?,
+) {
+    companion object {
+        /** Best efforts of the last 90 days make the CSS, as Garmin's records would. */
+        private const val CSS_WINDOW_DAYS = 90L
+
+        fun of(activities: List<Activity>, today: LocalDate): SwimTabData {
+            val zone = ZoneId.systemDefault()
+            val now = Instant.now()
+            return SwimTabData(
+                css = SwimAnalysis.estimateCss(activities, now.minus(CSS_WINDOW_DAYS, ChronoUnit.DAYS)),
+                metersPerStroke = SwimAnalysis.weeklyMetersPerStroke(activities, today, zone),
+                strokeRate = SwimAnalysis.usualEfficiency(activities, now)?.strokeRate,
+            )
+        }
+    }
+}
 
 private val PERIODS = listOf(4, 8, 16)
 private const val DEFAULT_PERIOD = 8
@@ -64,7 +90,13 @@ private const val RECENT_COUNT = 5
 
 /** Statistics of one discipline: headline cards, charts, then detail on demand. */
 @Composable
-fun SportTab(activities: List<Activity>, sport: Sport, onOpenActivity: (String) -> Unit) {
+fun SportTab(
+    activities: List<Activity>,
+    sport: Sport,
+    onOpenActivity: (String) -> Unit,
+    cssSecPer100: Int? = null,
+    onUseCss: (Int) -> Unit = {},
+) {
     var weeks by rememberSaveable(sport.name) { mutableStateOf(DEFAULT_PERIOD) }
     val today = LocalDate.now()
     val report = remember(activities, sport, weeks, today) {
@@ -78,6 +110,7 @@ fun SportTab(activities: List<Activity>, sport: Sport, onOpenActivity: (String) 
         )
     }
     val recent = remember(activities, sport) { activities.filter { it.sport == sport }.take(RECENT_COUNT) }
+    val swim = remember(activities, sport, today) { if (sport == Sport.SWIM) SwimTabData.of(activities, today) else null }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -110,6 +143,10 @@ fun SportTab(activities: List<Activity>, sport: Sport, onOpenActivity: (String) 
 
         item(key = "kpi") { KpiGrid(report) }
         item(key = "volume") { VolumeCard(report) }
+        if (swim != null) {
+            swim.css?.let { estimate -> item(key = "css") { CssEstimateCard(estimate, cssSecPer100, onUseCss) } }
+            item(key = "dps") { StrokeLengthCard(swim.metersPerStroke, swim.strokeRate) }
+        }
         item(key = "trend") { PaceTrendCard(report) }
         item(key = "technical") { TechnicalCard(report) }
         item(key = "records") { RecordsCard(report.records, onOpenActivity) }

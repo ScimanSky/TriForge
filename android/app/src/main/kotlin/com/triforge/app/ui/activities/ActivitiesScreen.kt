@@ -65,6 +65,8 @@ fun ActivitiesScreen(
     garmin: GarminStatus,
     onOpenActivity: (String) -> Unit,
     modifier: Modifier = Modifier,
+    cssSecPer100: Int? = null,
+    onUseCss: (Int) -> Unit = {},
 ) {
     // The selected sport's name, or null for all. A String survives rotation.
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
@@ -93,7 +95,7 @@ fun ActivitiesScreen(
                 if (sport == null) {
                     AllActivities(state.activities, onOpenActivity)
                 } else {
-                    SportTab(state.activities, sport, onOpenActivity)
+                    SportTab(state.activities, sport, onOpenActivity, cssSecPer100, onUseCss)
                 }
         }
     }

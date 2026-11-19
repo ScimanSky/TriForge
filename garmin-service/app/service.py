@@ -144,7 +144,12 @@ class GarminService:
             start = now - timedelta(days=self._settings.initial_sync_days)
 
         try:
-            data = self._gateway.fetch(tokens, start.date(), now.date())
+            data = self._gateway.fetch(
+                tokens,
+                start.date(),
+                now.date(),
+                frozenset(self._store.swims_with_laps(uid)),
+            )
         except GarminAuthError:
             # Tokens were revoked or expired beyond refresh.
             self._mark_disconnected(uid, "reconnect_required")
@@ -160,7 +165,7 @@ class GarminService:
         docs = {}
         skipped = 0
         for item in data.activities:
-            doc = normalize_activity(item)
+            doc = normalize_activity(item, data.swim_splits.get(str(item.get("activityId"))))
             if doc is None:
                 skipped += 1
                 continue

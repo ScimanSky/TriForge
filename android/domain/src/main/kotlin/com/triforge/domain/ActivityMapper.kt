@@ -43,6 +43,33 @@ object ActivityMapper {
             swolf = number(fields["swolf"])?.toInt(),
             strokes = number(fields["strokes"])?.toInt(),
             lengths = number(fields["lengths"])?.toInt(),
+            strokeDistanceMeters = number(fields["strokeDistanceMeters"])?.toDouble()?.takeIf { it > 0 },
+            laps = laps(fields["laps"]),
+        )
+    }
+
+    /** The `laps` list of a swim document; malformed entries are skipped. */
+    fun laps(value: Any?): List<SwimLap> = (value as? List<*>).orEmpty().mapNotNull { item ->
+        val lap = item as? Map<*, *> ?: return@mapNotNull null
+        val duration = number(lap["durationSec"])?.toDouble()?.takeIf { it > 0 } ?: return@mapNotNull null
+        SwimLap(
+            distanceMeters = number(lap["distanceMeters"])?.toDouble()?.coerceAtLeast(0.0) ?: 0.0,
+            durationSec = duration,
+            strokes = number(lap["strokes"])?.toInt()?.takeIf { it > 0 },
+            swolf = number(lap["swolf"])?.toInt()?.takeIf { it > 0 },
+            avgHr = number(lap["avgHr"])?.toInt()?.takeIf { it > 0 },
+            stroke = lap["stroke"] as? String,
+            lengths = (lap["lengths"] as? List<*>).orEmpty().mapNotNull { entry ->
+                val length = entry as? Map<*, *> ?: return@mapNotNull null
+                val seconds = number(length["durationSec"])?.toDouble()?.takeIf { it > 0 } ?: return@mapNotNull null
+                SwimLength(
+                    distanceMeters = number(length["distanceMeters"])?.toDouble()?.coerceAtLeast(0.0) ?: 0.0,
+                    durationSec = seconds,
+                    strokes = number(length["strokes"])?.toInt()?.takeIf { it > 0 },
+                    swolf = number(length["swolf"])?.toInt()?.takeIf { it > 0 },
+                    stroke = length["stroke"] as? String,
+                )
+            },
         )
     }
 
