@@ -25,6 +25,19 @@ val garminServiceUrl: String =
         ?: providers.gradleProperty("triforge.garminServiceUrl").orNull
         ?: "").trim().trimEnd('/')
 
+// The version is the number of commits behind the build. Every merge on main
+// makes it higher, so each test build sent to a phone is newer than the one
+// installed: that is how the in-app update recognises it. Nothing to bump by
+// hand, and no two branches fighting over the same number. Without git or
+// its history the build still works, as version 1, and is not for distribution.
+val commitCount: Int = runCatching {
+    providers.exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+        workingDir = rootDir
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().toInt()
+}.getOrDefault(1).coerceAtLeast(1)
+
 android {
     namespace = "com.triforge.app"
     compileSdk = 36
@@ -33,8 +46,8 @@ android {
         applicationId = "com.triforge.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = commitCount
+        versionName = "0.1.$commitCount"
 
         buildConfigField("String", "GARMIN_SERVICE_URL", "\"$garminServiceUrl\"")
     }
