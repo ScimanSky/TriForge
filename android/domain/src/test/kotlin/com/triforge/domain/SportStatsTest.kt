@@ -84,7 +84,8 @@ class SportStatsTest {
     fun `technical averages ignore sessions without the value`() {
         val report = SportStats.report(runs, Sport.RUN, weeks = 1, today = today, zone = rome, loadedWeeks = 16)
 
-        assertEquals(145, report.avgHr)
+        // Weighted by time: 50 minutes at 150 and 30 at 140, not the plain 145.
+        assertEquals(146, report.avgHr)
         assertEquals(174, report.avgCadence)
         assertNull(report.avgPowerWatts)
     }
@@ -107,6 +108,60 @@ class SportStatsTest {
         val report = SportStats.report(runs + sprint, Sport.RUN, weeks = 1, today = today, zone = rome, loadedWeeks = 16)
 
         assertEquals("before", report.records.first { it.kind == RecordKind.FASTEST }.activity.id)
+    }
+
+    @Test
+    fun `swim pace and records leave out the rests at the wall`() {
+        val swims = listOf(
+            // 2000 m in 40 minutes of swimming, an hour in the water: 2:00/100 m.
+            activity("easy", Sport.SWIM, "2026-11-16T12:00:00Z", durationSec = 3600, distanceMeters = 2000.0, movingDurationSec = 2400),
+            // 1000 m in 15 minutes of swimming with long rests: 1:30/100 m.
+            activity("sets", Sport.SWIM, "2026-11-18T12:00:00Z", durationSec = 3600, distanceMeters = 1000.0, movingDurationSec = 900),
+        )
+
+        val report = SportStats.report(swims, Sport.SWIM, weeks = 1, today = today, zone = rome, loadedWeeks = 16)
+
+        assertEquals(7200, report.durationSec)
+        assertEquals(3300, report.paceSec)
+        assertEquals("1:50", Formatters.paceValue(Sport.SWIM, report.distanceMeters, report.paceSec))
+        assertEquals(3300.0 / 3000.0, report.weekly.single().secondsPerMeter!!, 1e-9)
+        // On total time both would read 3:00 and 6:00 and "easy" would win.
+        assertEquals("sets", report.records.first { it.kind == RecordKind.FASTEST }.activity.id)
+    }
+
+    @Test
+    fun `the previous period is cut at the same weekday`() {
+        val rides = listOf(
+            activity("mon", Sport.BIKE, "2026-11-16T07:00:00Z", durationSec = 3600),
+            // Last week: Tuesday counts, Saturday is after "today" a week ago.
+            activity("prevTue", Sport.BIKE, "2026-11-10T07:00:00Z", durationSec = 3600),
+            activity("prevSat", Sport.BIKE, "2026-11-14T07:00:00Z", durationSec = 4 * 3600),
+        )
+
+        val report = SportStats.report(rides, Sport.BIKE, weeks = 1, today = today, zone = rome, loadedWeeks = 16)
+
+        assertEquals(3600L, report.previousDurationSec)
+        assertEquals(0, report.volumeChangePercent)
+    }
+
+    @Test
+    fun `swolf is read in the pool length swum most and open water is not a pool record`() {
+        fun swim(id: String, start: String, pool: Double?, swolf: Int, meters: Double, open: Boolean = false, moving: Long = 2400) =
+            activity(id, Sport.SWIM, start, distanceMeters = meters, movingDurationSec = moving)
+                .copy(poolLengthMeters = pool, swolf = swolf, openWater = open)
+        val swims = listOf(
+            swim("a", "2026-11-16T12:00:00Z", 25.0, 40, 2000.0),
+            swim("b", "2026-11-17T12:00:00Z", 25.0, 34, 3000.0),
+            swim("c", "2026-11-18T06:00:00Z", 50.0, 70, 1500.0),
+            // Fastest on paper, but GPS distance in a lake.
+            swim("lake", "2026-11-18T12:00:00Z", null, 0, 3000.0, open = true, moving = 2400),
+        )
+
+        val report = SportStats.report(swims, Sport.SWIM, weeks = 1, today = today, zone = rome, loadedWeeks = 16)
+
+        assertEquals(25.0, report.swolfPoolMeters)
+        assertEquals(36, report.avgSwolf) // (40*2000 + 34*3000) / 5000 = 36.4
+        assertEquals("b", report.records.first { it.kind == RecordKind.FASTEST }.activity.id)
     }
 
     @Test

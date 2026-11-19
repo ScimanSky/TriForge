@@ -49,6 +49,19 @@ def _rounded(value: Any) -> int | None:
     return None if number is None else int(round(number))
 
 
+# Garmin gives the pool length in centimetres (2500.0 for a 25 m pool, 2286.0
+# for 25 yd), whatever unit the watch shows. Some payloads carry metres, so a
+# value no pool reaches is taken as centimetres.
+_LONGEST_POOL_METERS = 200.0
+
+
+def _pool_length_meters(value: Any) -> float | None:
+    length = _number(value)
+    if length is None or length <= 0:
+        return None
+    return length / 100.0 if length > _LONGEST_POOL_METERS else length
+
+
 def _parse_gmt(value: Any) -> datetime | None:
     """Parse Garmin's ``startTimeGMT`` ("2026-03-14 06:30:00") as UTC."""
     if not isinstance(value, str) or not value:
@@ -115,7 +128,7 @@ def normalize_activity(raw: dict[str, Any]) -> dict[str, Any] | None:
 
     if sport == "swim":
         doc["openWater"] = type_key == "open_water_swimming"
-        doc["poolLengthMeters"] = _number(raw.get("poolLength"))
+        doc["poolLengthMeters"] = _pool_length_meters(raw.get("poolLength"))
         doc["swolf"] = _rounded(raw.get("averageSwolf"))
         doc["strokes"] = _rounded(raw.get("strokes"))
         doc["lengths"] = _rounded(raw.get("activeLengths"))

@@ -65,5 +65,8 @@ class AppContainer(context: Context) {
 
     val wellness by lazy { WellnessRepository(firestore) }
 
+    /** In-app updates of test builds. Use only when [firebaseConfigured]. */
+    val updater by lazy { AppUpdater() }
+
     val healthConnect by lazy { HealthConnectRepository(appContext, activities, wellness) }
 }

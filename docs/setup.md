@@ -101,3 +101,28 @@ gcloud scheduler jobs create http triforge-garmin-sync \
 Apri la cartella `android` con Android Studio e avvia l'app su un telefono con
 Android 8 o successivo. Health Connect è integrato da Android 14; sulle versioni
 precedenti va installato dal Play Store.
+
+## 7. Versioni di prova sul telefono
+
+Le versioni di prova arrivano con Firebase App Distribution.
+
+```bash
+cd android
+./gradlew :app:assembleDebug
+firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
+  --app <id-app-android> --project <id-progetto> --testers <email-del-tester>
+```
+
+- Alza `versionCode` in `android/app/build.gradle.kts` a ogni versione inviata:
+  è da lì che l'app capisce che ne esiste una più recente.
+- Compila sempre sullo stesso computer. Un aggiornamento si installa sopra la
+  versione precedente solo se è firmato con la stessa chiave di debug
+  (`~/.android/debug.keystore`).
+- Attiva una volta l'API dei tester:
+  `gcloud services enable firebaseapptesters.googleapis.com`.
+
+All'apertura l'app controlla se c'è una versione più recente e propone di
+installarla. La prima volta chiede al tester di accedere con l'account Google
+che riceve le versioni; a ogni aggiornamento Android chiede una conferma prima
+di installare, e nessuna app può evitarla. Il controllo esiste solo nelle
+build di debug: una build di rilascio contiene la sola API, che non fa nulla.

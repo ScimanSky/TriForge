@@ -13,6 +13,7 @@ fun activity(
     trainingLoad: Double? = null,
     avgHr: Int? = null,
     avgCadence: Int? = null,
+    movingDurationSec: Long? = null,
 ) = Activity(
     id = id,
     source = source,
@@ -25,4 +26,5 @@ fun activity(
     trainingLoad = trainingLoad,
     avgHr = avgHr,
     avgCadence = avgCadence,
+    movingDurationSec = movingDurationSec,
 )

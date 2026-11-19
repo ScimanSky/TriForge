@@ -52,6 +52,55 @@ class ActivityMapperTest {
     }
 
     @Test
+    fun `pool swim keeps the swimming time and reads the pool in metres`() {
+        // As synced from Garmin on 18 Nov 2026: 121 lengths of 25 m, with the
+        // pool length still in centimetres.
+        val fields = mapOf(
+            "source" to "garmin",
+            "sport" to "swim",
+            "durationSec" to 5236L,
+            "movingDurationSec" to 3429L,
+            "distanceMeters" to 3025L,
+            "poolLengthMeters" to 2500L,
+            "lengths" to 121L,
+        )
+
+        val activity = ActivityMapper.fromFields("garmin_3", fields, start)!!
+
+        assertEquals(3429, activity.movingDurationSec)
+        assertEquals(25.0, activity.poolLengthMeters)
+        assertEquals("1:53", Formatters.paceValue(Sport.SWIM, activity.distanceMeters, activity.paceSec))
+        assertEquals(1807, activity.restSec)
+    }
+
+    @Test
+    fun `pool length already in metres is left alone`() {
+        assertEquals(25.0, ActivityMapper.poolLength(25.0))
+        assertEquals(50.0, ActivityMapper.poolLength(50.0))
+        assertEquals(22.86, ActivityMapper.poolLength(2286.0)) // 25 yd
+        assertNull(ActivityMapper.poolLength(0.0))
+        assertNull(ActivityMapper.poolLength(null))
+    }
+
+    @Test
+    fun `pace time falls back to the duration`() {
+        val swim = activity("s", Sport.SWIM, "2026-11-18T06:30:00Z", durationSec = 3600)
+        val run = activity("r", Sport.RUN, "2026-11-18T06:30:00Z", durationSec = 3600, movingDurationSec = 3300)
+        val odd = activity("o", Sport.SWIM, "2026-11-18T06:30:00Z", durationSec = 3600, movingDurationSec = 3700)
+
+        // Health Connect gives no time in motion.
+        assertEquals(3600, swim.paceSec)
+        assertNull(swim.restSec)
+        // A run keeps the timer, as the watch does.
+        assertEquals(3600, run.paceSec)
+        assertEquals(3300, run.movingSec)
+        assertEquals(300, run.restSec)
+        // Time in motion can never exceed the session.
+        assertEquals(3600, odd.paceSec)
+        assertEquals(0, odd.restSec)
+    }
+
+    @Test
     fun `unknown sport is kept as other`() {
         val activity = ActivityMapper.fromFields("garmin_2", mapOf("source" to "garmin", "sport" to "yoga"), start)
 

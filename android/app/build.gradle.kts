@@ -33,8 +33,8 @@ android {
         applicationId = "com.triforge.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 4
+        versionName = "0.1.3"
 
         buildConfigField("String", "GARMIN_SERVICE_URL", "\"$garminServiceUrl\"")
     }
@@ -84,6 +84,11 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    // In-app updates for test builds. Every build gets the API, which does
+    // nothing on its own; only debug builds, the ones sent to testers, carry
+    // the SDK that downloads and installs. It must never ship to a store.
+    implementation(libs.firebase.appdistribution.api)
+    debugImplementation(libs.firebase.appdistribution)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)

@@ -15,10 +15,12 @@ class SessionLoadTest {
         normPower: Int? = null,
         trainingLoad: Double? = null,
         id: String = "s",
+        movingDurationSec: Long? = null,
     ) = Activity(
         id = id, source = ActivitySource.GARMIN, sport = sport, name = "",
         startTime = Instant.parse("2026-11-17T07:00:00Z"), durationSec = durationSec,
         distanceMeters = distanceMeters, normPowerWatts = normPower, trainingLoad = trainingLoad,
+        movingDurationSec = movingDurationSec,
     )
 
     @Test
@@ -52,6 +54,21 @@ class SessionLoadTest {
 
         assertEquals(42.1875, load.tss, 1e-6)
         assertEquals(LoadMethod.SWIM_PACE, load.method)
+        // No measured swimming time: the pauses may be inside the hour.
+        assertEquals(LoadQuality.MEDIUM, load.quality)
+    }
+
+    @Test
+    fun `swim load is measured on the time spent swimming`() {
+        // CSS 1:30/100 m. 3000 m in 50 minutes of swimming is 1:40/100 m,
+        // IF 0.9, inside a session that lasted an hour and a half with rests.
+        val load = SessionLoadModel.estimate(
+            listOf(session(Sport.SWIM, durationSec = 5400, distanceMeters = 3000.0, movingDurationSec = 3000)),
+            AthleteProfile(cssSecPer100m = 90),
+        ).single()
+
+        assertEquals(3000 / 3600.0 * 0.9 * 0.9 * 0.9 * 100, load.tss, 1e-6)
+        assertEquals(LoadQuality.HIGH, load.quality)
     }
 
     @Test
