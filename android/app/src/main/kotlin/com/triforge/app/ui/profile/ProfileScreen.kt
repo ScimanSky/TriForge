@@ -82,6 +82,7 @@ fun ProfileScreen(
     profile: ProfileViewModel,
     training: TrainingState,
     onEdit: () -> Unit,
+    onOpenWeekSetup: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSources: () -> Unit,
     modifier: Modifier = Modifier,
@@ -117,6 +118,7 @@ fun ProfileScreen(
                 onEdit = onEdit,
             )
             RaceCard(stored, today)
+            WeekSetupCard(onOpenWeekSetup)
             if (summary.sessions > 0) {
                 TrainingCard(summary)
             } else {
@@ -243,6 +245,24 @@ private fun RaceCard(profile: AthleteProfile, today: LocalDate) {
                     )
                 }
             }
+        }
+    }
+}
+
+/** The way into "Giorni, orari e gara", which the coach's regia starts from. */
+@Composable
+private fun WeekSetupCard(onOpen: () -> Unit) {
+    TriCard(onClick = onOpen) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(text = stringResource(R.string.week_setup_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = stringResource(R.string.week_setup_card_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(TriIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         }
     }
 }

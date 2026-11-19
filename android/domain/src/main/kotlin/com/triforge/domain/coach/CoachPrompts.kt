@@ -23,7 +23,8 @@ Il tuo compito: costruire e adattare la settimana di allenamento, spiegare le sc
 Principi:
 - Periodizzazione verso la gara obiettivo: base, costruzione, specifico, scarico, tapering.
 - Distribuzione polarizzata: la maggior parte del volume facile (Z1-Z2), poche sedute di qualità ben distribuite, mai due sedute dure di fila nello stesso sport.
-- Rispetta le ore disponibili dell'atleta. Aumenti di carico graduali (indicativamente non oltre il 10% a settimana) e una settimana di scarico ogni 3-4.
+- La forma della settimana la decide la regia di TriForge, regole dell'app che ricevi nella richiesta: fase del ciclo, ore e minuti per sport, quante sedute dure, giorni e orari dell'atleta, riposo, brick, durata massima delle sedute. Rispettale: tu scegli il contenuto delle sedute dentro quei limiti. L'app controlla la settimana e ti rimanda le regole violate. Ogni 3-4 settimane di carico proponi una settimana di scarico, sotto il budget.
+- Ragiona da triatleta: la distanza di gara pesa i tre sport, il punto debole ha la precedenza, metti la tecnica di nuoto nei giorni pesanti per le gambe e non mettere qualità di corsa il giorno dopo il lungo in bici.
 - Leggi il modello di carico (fitness, fatica, forma) e l'indice Carico e recupero: con semaforo arancione o rosso, o fatica non spiegata, riduci intensità e volume.
 - Indica i bersagli con le soglie dell'atleta (watt per la bici, passo per corsa e nuoto) quando ci sono, altrimenti con zone di frequenza cardiaca o sforzo percepito.
 
@@ -61,11 +62,25 @@ $SAFETY
         partner: CoachBrief?,
         previous: WeekPlan?,
         recentChat: List<ChatMessage>,
+        regia: String? = null,
+        conflicts: List<RegiaConflict> = emptyList(),
     ): String = buildString {
         appendLine("Prepara il piano di allenamento della settimana da lunedì $weekStart a domenica ${weekStart.plusDays(6)}.")
         appendLine("Se oggi è già passato qualche giorno della settimana, i giorni passati descrivono quello che l'atleta ha fatto davvero (vedi gli allenamenti registrati); pianifica da oggi in poi.")
         appendLine("Ogni giorno ha zero o più sedute; per il riposo metti una seduta con sport \"rest\". Durate in minuti.")
         appendLine("In \"rationale\" spiega in 2-4 frasi perché la settimana è così. In \"noteForNutriAi\" scrivi cosa deve sapere NutriAI (giorni duri, lunghi, doppie).")
+        appendLine("Il campo \"title\" di ogni seduta è breve; nei brick elenca la bici prima della corsa.")
+        regia?.let {
+            appendLine()
+            appendLine("## Regia della settimana (regole dell'app, da rispettare)")
+            appendLine(it)
+        }
+        if (conflicts.isNotEmpty()) {
+            appendLine()
+            appendLine("## Da correggere")
+            appendLine("La tua proposta precedente viola queste regole della regia. Riscrivi la settimana rispettandole:")
+            appendLine(TriRegia.describe(conflicts))
+        }
         appendLine()
         append(context(athlete, partner, CoachRole.COACH))
         previous?.let {

@@ -71,6 +71,30 @@ Come in SwimForge, i numeri e i divieti non li decide il modello:
   il modello non viene chiamato e la risposta è fissa: medico di base e Numero
   Verde SOS Disturbi Alimentari 800 180 969.
 
+## La regia da triathlon
+
+La forma della settimana la decidono regole dell'app (`TriRegia`), non il
+modello. Partono da "Giorni, orari e gara" (`TrainingAvailability`, nel campo
+`availability` di `users/{uid}`) e dagli allenamenti delle ultime settimane:
+
+- **Fase**: ripresa, generale, specifica (ultime 9 settimane), scarico (ultime
+  3) e settimana di gara, dalla data della gara e dal volume recente.
+- **Quote**: sprint e olimpico 20% nuoto, 45% bici, 35% corsa; 70.3 e Ironman
+  15/50/35; il punto debole (scelto dall'atleta o letto dai dati) prende 7
+  punti dagli altri due.
+- **Budget**: i minuti di ogni sport sono la quota delle ore disponibili, ma
+  mai oltre 1,25 volte la media delle ultime 4 settimane (1,10 per la corsa).
+  Seduta più lunga: 1,5 volte la mediana (nuoto) o l'uscita più lunga recente
+  (bici, corsa; il lungo di corsa anche entro il 30% della settimana).
+- **Regole comuni**: al massimo 3 sedute dure (meno in ripresa, scarico e
+  gara), 2 per sport, mai due giorni duri di fila, un giorno di riposo, al
+  massimo due sport al giorno, brick solo in fase specifica, giorni e riposo
+  scelti dall'atleta.
+
+Il Coach riceve la regia nella richiesta; `TriRegia.check` controlla la
+settimana, il Coach la riscrive una volta e quello che resta viene scritto
+sotto il piano. Con i tre coach di sport (fase 3) la regia resta la stessa.
+
 ## App Check
 
 Firebase AI Logic applica App Check: senza un token valido Gemini rifiuta la

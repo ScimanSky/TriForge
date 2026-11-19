@@ -15,6 +15,10 @@ import com.triforge.domain.coach.CoachMapper
 import com.triforge.domain.coach.CoachPrompts
 import com.triforge.domain.coach.CoachRole
 import com.triforge.domain.coach.NutriSafety
+import com.triforge.domain.coach.RecentTraining
+import com.triforge.domain.coach.RegiaConflict
+import com.triforge.domain.coach.TriRegia
+import com.triforge.domain.coach.WeekBudget
 import com.triforge.domain.coach.WeekPlan
 import java.time.LocalDate
 import java.time.ZoneId
@@ -94,9 +98,31 @@ class CoachViewModel(
         val nutri = repository.nutriDesk(uid).first()
         val previous = repository.coachDesk(uid).first().plan
         val recent = state.value.chat.takeLast(RECENT_MESSAGES).map { it.message }
-        val request = CoachPrompts.weekPlanRequest(athlete.describe(), weekStart, nutri.brief, previous, recent)
-        val plan = agent.plan(request).copy(weekStart = weekStart)
-        repository.saveWeekPlan(uid, plan, CoachBriefs.of(plan, LocalDate.now(zone)))
+        val data = athlete.current()
+        val budget = weekBudget(weekStart)
+        val regia = TriRegia.describe(budget, data.availability)
+        val described = athlete.describe()
+        fun request(conflicts: List<RegiaConflict>) =
+            CoachPrompts.weekPlanRequest(described, weekStart, nutri.brief, previous, recent, regia, conflicts)
+        val today = LocalDate.now(zone)
+        var plan = agent.plan(request(emptyList())).copy(weekStart = weekStart)
+        var conflicts = TriRegia.check(plan, budget, data.availability, from = today)
+        if (conflicts.isNotEmpty()) {
+            plan = agent.plan(request(conflicts)).copy(weekStart = weekStart)
+            conflicts = TriRegia.check(plan, budget, data.availability, from = today)
+        }
+        // What the second round could not fix stays visible under the plan.
+        if (conflicts.isNotEmpty()) {
+            plan = plan.copy(rationale = (plan.rationale + "\n\nDa rivedere secondo la regia:\n" + TriRegia.describe(conflicts)).trim())
+        }
+        repository.saveWeekPlan(uid, plan, CoachBriefs.of(plan, today))
+    }
+
+    /** The regia's budget for the week starting on [weekStart]. */
+    private suspend fun weekBudget(weekStart: LocalDate): WeekBudget {
+        val data = athlete.current()
+        val recent = RecentTraining.of(data.activities, weekStart, data.zone)
+        return TriRegia.budget(data.profile, data.availability, recent, weekStart)
     }
 
     fun send(text: String) {
@@ -111,12 +137,17 @@ class CoachViewModel(
             }
             val nutri = repository.nutriDesk(uid).first()
             val plan = repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == thisWeek() }
+            val regia = TriRegia.describe(weekBudget(thisWeek()), athlete.current().availability)
             val turn = CoachPrompts.chatTurn(
                 role = CoachRole.COACH,
                 athlete = athlete.describe(),
                 partner = nutri.brief,
                 ownPlan = plan?.let(CoachPrompts::describe),
-                extra = "La settimana va da lunedì ${thisWeek()} a domenica ${thisWeek().plusDays(6)}.",
+                extra = buildString {
+                    appendLine("La settimana va da lunedì ${thisWeek()} a domenica ${thisWeek().plusDays(6)}.")
+                    appendLine("Se proponi una settimana nuova, rispetta la regia:")
+                    append(regia)
+                },
                 message = message,
             )
             val reply = agent.reply(history, turn)

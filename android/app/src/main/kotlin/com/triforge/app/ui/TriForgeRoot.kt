@@ -47,6 +47,8 @@ import com.triforge.app.ui.coach.NutriScreen
 import com.triforge.app.ui.coach.NutriViewModel
 import com.triforge.app.ui.detail.ActivityDetailScreen
 import com.triforge.app.ui.profile.EditProfileScreen
+import com.triforge.app.ui.profile.WeekSetupScreen
+import com.triforge.app.ui.profile.WeekSetupViewModel
 import com.triforge.app.ui.profile.ProfileScreen
 import com.triforge.app.ui.profile.ProfileViewModel
 import com.triforge.app.ui.recovery.CheckInScreen
@@ -82,6 +84,7 @@ private const val ACTIVITY_ROUTE = "activity/{$ACTIVITY_ID}"
 private const val RECOVERY_ROUTE = "recovery"
 private const val CHECK_IN_ROUTE = "check-in"
 private const val EDIT_PROFILE_ROUTE = "profile/edit"
+private const val WEEK_SETUP_ROUTE = "profile/week"
 private const val SETTINGS_ROUTE = "settings"
 private const val SOURCES_ROUTE = "settings/sources"
 private const val PRIVACY_ROUTE = "settings/privacy"
@@ -176,6 +179,10 @@ private fun SignedIn(uid: String, container: AppContainer) {
             }
         },
     )
+    val weekSetupViewModel: WeekSetupViewModel = viewModel(
+        key = "week-setup-$uid",
+        factory = viewModelFactory { initializer { WeekSetupViewModel(uid, container.profiles) } },
+    )
     val recoveryViewModel: RecoveryViewModel = viewModel(
         key = "recovery-$uid",
         factory = viewModelFactory {
@@ -190,6 +197,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
             recoveryViewModel.state,
             container.profiles.profile(uid),
             container.account.account(uid).map { it.birthYear },
+            container.profiles.availability(uid),
         )
     }
     val coachViewModel: CoachViewModel = viewModel(
@@ -204,6 +212,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
     val recovery by recoveryViewModel.state.collectAsStateWithLifecycle()
     val profile by profileViewModel.state.collectAsStateWithLifecycle()
     val account by accountViewModel.state.collectAsStateWithLifecycle()
+    val weekSetup by weekSetupViewModel.state.collectAsStateWithLifecycle()
 
     // Nothing of the athlete's data is shown before the consents are in place.
     if (!account.loaded) {
@@ -280,6 +289,8 @@ private fun SignedIn(uid: String, container: AppContainer) {
                     aiAllowed = account.account.aiCoachAllowed,
                     profile = profile.stored,
                     onEnableAi = { accountViewModel.setAiCoach(true) },
+                    weekSetupDone = !weekSetup.loaded || weekSetup.availability.isSet,
+                    onOpenWeekSetup = { navController.navigate(WEEK_SETUP_ROUTE) },
                 )
             }
             composable(Tab.NUTRI.route) {
@@ -295,12 +306,20 @@ private fun SignedIn(uid: String, container: AppContainer) {
                     profile = profileViewModel,
                     training = training,
                     onEdit = { navController.navigate(EDIT_PROFILE_ROUTE) },
+                    onOpenWeekSetup = { navController.navigate(WEEK_SETUP_ROUTE) },
                     onOpenSettings = { navController.navigate(SETTINGS_ROUTE) },
                     onOpenSources = { navController.navigate(SOURCES_ROUTE) },
                 )
             }
             composable(EDIT_PROFILE_ROUTE) {
                 EditProfileScreen(account = accountViewModel, profile = profileViewModel, onBack = back)
+            }
+            composable(WEEK_SETUP_ROUTE) {
+                WeekSetupScreen(
+                    viewModel = weekSetupViewModel,
+                    activities = (training as? TrainingState.Loaded)?.activities.orEmpty(),
+                    onBack = back,
+                )
             }
             composable(SETTINGS_ROUTE) {
                 SettingsScreen(

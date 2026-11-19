@@ -76,6 +76,8 @@ fun CoachScreen(
     aiAllowed: Boolean,
     profile: AthleteProfile,
     onEnableAi: () -> Unit,
+    weekSetupDone: Boolean,
+    onOpenWeekSetup: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -93,6 +95,21 @@ fun CoachScreen(
         if (!aiAllowed) {
             Column(Modifier.padding(16.dp)) { AiConsentCard(palette, onEnableAi) }
             return@Column
+        }
+        if (!weekSetupDone) {
+            TriCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Text(
+                    stringResource(R.string.week_setup_coach_prompt),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SecondaryButton(
+                    stringResource(R.string.week_setup_open),
+                    onClick = onOpenWeekSetup,
+                    compact = true,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
         }
         Tabs(chat = chat, onSelect = { chat = it })
         if (!state.loaded) {
