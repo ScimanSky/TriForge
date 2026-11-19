@@ -152,6 +152,7 @@ fun errorText(reason: CoachException.Reason): Int = when (reason) {
     CoachException.Reason.BUSY -> R.string.coach_error_busy
     CoachException.Reason.NOT_ENABLED -> R.string.coach_error_not_enabled
     CoachException.Reason.BAD_ANSWER -> R.string.coach_error_bad_answer
+    CoachException.Reason.NEEDS_WEIGHT -> R.string.nutri_error_weight
     CoachException.Reason.BLOCKED -> R.string.coach_error_blocked
 }
 

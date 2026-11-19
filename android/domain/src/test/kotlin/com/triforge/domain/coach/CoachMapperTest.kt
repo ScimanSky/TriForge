@@ -102,11 +102,38 @@ class CoachMapperTest {
     fun `nutrition profile defaults and limits`() {
         val profile = CoachMapper.nutritionProfileFromFields(mapOf("diet" to "vegan", "avoid" to listOf(" lattosio ", ""), "mealsPerDay" to 12L))
         assertEquals(Diet.VEGAN, profile.diet)
-        assertEquals(listOf("lattosio"), profile.avoid)
+        assertEquals(listOf(DislikeEntry("lattosio")), profile.dislikes)
         assertEquals(NutritionProfile.MAX_MEALS, profile.mealsPerDay)
-        assertEquals(listOf("Vegano", "Senza lattosio", "6 pasti"), profile.chips())
+        assertEquals(listOf("Vegano", "6 pasti"), profile.chips())
         assertEquals(NutritionProfile(), CoachMapper.nutritionProfileFromFields(emptyMap()))
-        assertEquals(listOf("lattosio", "noci"), NutritionProfile.parseAvoid("Lattosio, noci;\nlattosio"))
+        assertEquals(listOf("Lattosio", "noci"), NutritionProfile.parseList("Lattosio, noci;\nlattosio"))
+    }
+
+    @Test
+    fun `full nutrition profile survives a round trip`() {
+        val profile = NutritionProfile(
+            sex = Sex.MALE,
+            diet = Diet.PESCATARIAN,
+            goal = BodyGoal.PERFORMANCE,
+            mealsPerDay = 5,
+            allergies = setOf(Allergen.NUTS, Allergen.SESAME),
+            otherAllergies = "kiwi",
+            intolerances = setOf(Intolerance.LACTOSE),
+            likes = listOf("riso", "salmone"),
+            dislikes = listOf(DislikeEntry("latte", listOf("kefir", "cappuccino")), DislikeEntry("funghi")),
+            redMeatPerWeek = 2,
+            supplements = listOf(Supplement("Creatina", "3 g", SupplementTiming.DAILY)),
+            drinks = listOf(Drink("Caffè", "2 al giorno")),
+            noCaffeine = false,
+            notes = "pranzo in ufficio",
+        )
+        assertEquals(profile, CoachMapper.nutritionProfileFromFields(CoachMapper.nutritionProfileToFields(profile)))
+        val bad = CoachMapper.nutritionProfileToFields(profile) + ("redMeatPerWeek" to 9L) + ("allergies" to listOf("nuts", "unknown"))
+        val read = CoachMapper.nutritionProfileFromFields(bad)
+        assertNull(read.redMeatPerWeek)
+        assertEquals(setOf(Allergen.NUTS), read.allergies)
+        assertEquals(DislikeEntry("latte", listOf("kefir")), NutritionProfile.dislike(" latte (", "kefir, KEFIR"))
+        assertEquals("latte (tranne kefir, cappuccino)", profile.dislikes.first().text())
     }
 
     @Test

@@ -34,15 +34,17 @@ $SAFETY
 
     val NUTRI_SYSTEM = """
 Sei NutriAI, il nutrizionista sportivo di TriForge, esperto di alimentazione per il triathlon e gli sport di endurance.
-Il tuo compito: indicare il fabbisogno del giorno (calorie, carboidrati, proteine, grassi), come alimentarsi prima, durante e dopo le sedute, e suggerire pasti adatti al profilo alimentare dell'atleta.
+Il tuo compito: spiegare il fabbisogno del giorno, dire come alimentarsi prima, durante e dopo le sedute e suggerire pasti adatti al profilo alimentare dell'atleta.
 
 Principi:
-- Periodizza i carboidrati sul carico del giorno: indicativamente 3-5 g/kg nei giorni leggeri, 5-7 g/kg nei giorni moderati, 7-10 g/kg nei giorni di carico alto o lunghi.
-- Proteine 1,6-2,0 g/kg distribuite nei pasti; grassi non sotto il 20% delle calorie.
-- Durante le sedute oltre 75-90 minuti: 30-60 g di carboidrati all'ora (fino a 90 nelle sedute lunghe e in gara) e idratazione.
-- Evita la bassa disponibilità energetica (RED-S): anche con l'obiettivo di perdere peso, deficit piccoli e mai nei giorni di carico alto.
-- Rispetta sempre dieta, intolleranze e allergie del profilo: non proporre mai cibi da evitare.
-- Se mancano peso o altri dati, stima con prudenza e dillo.
+- Le calorie e i macronutrienti del giorno li calcola l'app (metabolismo basale, carico delle sedute, obiettivo) e te li dà nella richiesta: usali esattamente, non ricalcolarli. Se mancano (manca il peso), non inventarli: chiedi all'atleta di inserire il peso nel profilo.
+- Componi i pasti in modo che la somma si avvicini agli obiettivi del giorno; carboidrati concentrati intorno alle sedute.
+- Durante le sedute oltre 75-90 minuti: 30-60 g di carboidrati all'ora (fino a 90 nelle sedute lunghe e in gara) e idratazione. Nei brick e nei giorni con due sport, pensa al recupero tra le sedute.
+- Evita la bassa disponibilità energetica (RED-S): niente digiuni, niente pasti saltati, niente diete drastiche.
+- Allergie, intolleranze, dieta e «cosa non mangia» sono divieti assoluti: non proporre mai quei cibi, nemmeno come ingrediente. Le eccezioni scritte dall'atleta valgono solo per «cosa non mangia», mai per allergie e intolleranze. L'app controlla ogni pasto e scarta quelli che violano il profilo.
+- Proponi più spesso i cibi preferiti dell'atleta. Rispetta il limite di carne rossa a settimana.
+- Integratori: indica solo quelli che l'atleta già prende, al loro momento; non proporne altri. Con «niente caffè né caffeina» niente caffè, tè, cola, gel o bevande con caffeina.
+- Niente farmaci, diagnosi o diete per malattie: per quelle rimanda al medico.
 
 Lavori in squadra con il Coach di TriForge, l'allenatore. Il Coach è un agente separato: non decidi tu l'allenamento e non cambiare il suo piano.
 Ricevi il piano del Coach e la sua nota per te: costruisci la nutrizione su quel piano. Se vedi un problema (per esempio un carico troppo alto per quello che l'atleta riesce a mangiare, o una seduta a digiuno rischiosa), scrivilo nella nota per il Coach.
@@ -82,9 +84,11 @@ $SAFETY
         athlete: String,
         date: LocalDate,
         profile: NutritionProfile,
+        targets: DayTargets?,
         partner: CoachBrief?,
         plan: WeekPlan?,
         recentChat: List<ChatMessage>,
+        violations: List<BanViolation> = emptyList(),
     ): String = buildString {
         appendLine("Prepara la nutrizione di ${AthleteContext.dayLabel(date)} $date.")
         appendLine("\"headline\" è una frase breve sul tipo di giorno (per esempio \"Giorno di carico · bici soglia\").")
@@ -92,8 +96,17 @@ $SAFETY
         appendLine("\"meals\" ha ${profile.mealsPerDay} pasti adatti al profilo alimentare, con calorie stimate.")
         appendLine("In \"rationale\" spiega in 2-3 frasi i numeri del giorno. In \"noteForCoach\" scrivi cosa deve sapere il Coach, oppure lascia vuoto.")
         appendLine()
+        appendLine("## Obiettivi del giorno")
+        appendLine(targets?.let { NutriEnergy.describe(it, profile.goal) } ?: "Manca il peso: l'app non può calcolare gli obiettivi. Metti 0 nei numeri e chiedi all'atleta di inserire il peso nel profilo.")
+        appendLine()
         appendLine("## Profilo alimentare")
         appendLine(describe(profile))
+        if (violations.isNotEmpty()) {
+            appendLine()
+            appendLine("## Da correggere")
+            appendLine("La tua proposta precedente violava il profilo alimentare. Rifalla senza questi cibi:")
+            violations.forEach { appendLine("- ${it.text()}") }
+        }
         appendLine()
         append(context(athlete, partner, CoachRole.NUTRI_AI))
         plan?.let {
@@ -185,10 +198,31 @@ $SAFETY
     }.trimEnd()
 
     fun describe(profile: NutritionProfile): String = buildString {
+        profile.sex?.let { appendLine("Sesso: ${it.label}") }
         appendLine("Dieta: ${profile.diet.label}")
-        appendLine("Da evitare: ${profile.avoid.ifEmpty { listOf("nulla") }.joinToString(", ")}")
-        appendLine("Pasti al giorno: ${profile.mealsPerDay}")
         appendLine("Obiettivo: ${profile.goal.label}")
+        appendLine("Pasti al giorno: ${profile.mealsPerDay}")
+        val allergies = profile.allergies.map { it.label.lowercase() } + NutritionProfile.parseList(profile.otherAllergies)
+        appendLine("Allergie (divieto assoluto): ${allergies.ifEmpty { listOf("nessuna") }.joinToString(", ")}")
+        val intolerances = profile.intolerances.map { it.label.lowercase() } + NutritionProfile.parseList(profile.otherIntolerances)
+        appendLine("Intolleranze (divieto assoluto): ${intolerances.ifEmpty { listOf("nessuna") }.joinToString(", ")}")
+        appendLine("Cibi preferiti: ${profile.likes.ifEmpty { listOf("non indicati") }.joinToString(", ")}")
+        appendLine("Cosa non mangia: ${profile.dislikes.map { it.text() }.ifEmpty { listOf("niente da segnalare") }.joinToString("; ")}")
+        appendLine(
+            "Carne rossa: " + when (profile.redMeatPerWeek) {
+                null -> "senza limite"
+                0 -> "mai"
+                1 -> "al massimo una volta a settimana"
+                else -> "al massimo ${profile.redMeatPerWeek} volte a settimana"
+            },
+        )
+        appendLine(
+            "Integratori che prende: " + profile.supplements
+                .map { listOf(it.name, it.dose).filter(String::isNotBlank).joinToString(" ") + ", ${it.timing.label}" }
+                .ifEmpty { listOf("nessuno") }.joinToString("; "),
+        )
+        appendLine("Bevande abituali: " + profile.drinks.map { listOf(it.name, it.perDay).filter(String::isNotBlank).joinToString(" ") }.ifEmpty { listOf("non indicate") }.joinToString("; "))
+        if (profile.noCaffeine) appendLine("Niente caffè né caffeina.")
         if (profile.notes.isNotBlank()) append("Note dell'atleta: ${profile.notes}")
     }.trimEnd()
 }

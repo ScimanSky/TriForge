@@ -26,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -47,14 +46,10 @@ import com.triforge.app.ui.common.LoadingBox
 import com.triforge.app.ui.common.PrimaryButton
 import com.triforge.app.ui.common.ProgressBar
 import com.triforge.app.ui.common.TriCard
-import com.triforge.app.ui.common.TriChip
-import com.triforge.app.ui.common.TriTextField
 import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.TriIcons
 import com.triforge.app.ui.theme.numberStyle
-import com.triforge.domain.coach.BodyGoal
 import com.triforge.domain.coach.CoachMapper
-import com.triforge.domain.coach.Diet
 import com.triforge.domain.coach.NutritionDay
 import com.triforge.domain.coach.NutritionProfile
 import java.text.NumberFormat
@@ -113,7 +108,7 @@ fun NutriScreen(
         ) {
             if (profile == null || editing) {
                 item {
-                    ProfileEditor(
+                    NutriProfileEditor(
                         initial = profile ?: NutritionProfile(),
                         first = profile == null,
                         saving = state.task != null,
@@ -282,82 +277,4 @@ private fun NutriMessage(entry: ChatEntry, state: NutriUiState, viewModel: Nutri
             }
         }
     }
-}
-
-/** How the athlete eats: diet, foods to avoid, meals per day, body goal. */
-@Composable
-private fun ProfileEditor(initial: NutritionProfile, first: Boolean, saving: Boolean, onSave: (NutritionProfile) -> Unit) {
-    var diet by rememberSaveable { mutableStateOf(initial.diet.key) }
-    var avoid by rememberSaveable { mutableStateOf(initial.avoid.joinToString(", ")) }
-    var meals by rememberSaveable { mutableIntStateOf(initial.mealsPerDay) }
-    var goal by rememberSaveable { mutableStateOf(initial.goal.key) }
-    var notes by rememberSaveable { mutableStateOf(initial.notes) }
-    TriCard {
-        Text(
-            stringResource(if (first) R.string.nutri_profile_first_title else R.string.nutri_profile_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        if (first) {
-            Text(
-                stringResource(R.string.nutri_profile_first_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
-        Label(stringResource(R.string.nutri_profile_diet))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Diet.entries.forEach { TriChip(it.label, selected = diet == it.key, onClick = { diet = it.key }) }
-        }
-        Label(stringResource(R.string.nutri_profile_avoid))
-        TriTextField(
-            value = avoid,
-            onValueChange = { avoid = it },
-            label = stringResource(R.string.nutri_profile_avoid_hint),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Label(stringResource(R.string.nutri_profile_meals))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            (NutritionProfile.MIN_MEALS + 1..NutritionProfile.MAX_MEALS).forEach { n ->
-                TriChip(n.toString(), selected = meals == n, onClick = { meals = n }, modifier = Modifier.weight(1f))
-            }
-        }
-        Label(stringResource(R.string.nutri_profile_goal))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            BodyGoal.entries.forEach { TriChip(it.label, selected = goal == it.key, onClick = { goal = it.key }) }
-        }
-        Label(stringResource(R.string.nutri_profile_notes))
-        TriTextField(
-            value = notes,
-            onValueChange = { notes = it.take(500) },
-            label = stringResource(R.string.nutri_profile_notes_hint),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        PrimaryButton(
-            text = stringResource(R.string.nutri_profile_save),
-            enabled = !saving,
-            onClick = {
-                onSave(
-                    NutritionProfile(
-                        diet = Diet.of(diet) ?: Diet.OMNIVORE,
-                        avoid = NutritionProfile.parseAvoid(avoid),
-                        mealsPerDay = meals,
-                        goal = BodyGoal.of(goal) ?: BodyGoal.MAINTAIN,
-                        notes = notes.trim(),
-                    ),
-                )
-            },
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-        )
-    }
-}
-
-@Composable
-private fun Label(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 14.dp, bottom = 8.dp),
-    )
 }

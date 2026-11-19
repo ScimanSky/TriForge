@@ -67,6 +67,7 @@ import com.triforge.app.ui.settings.SourcesScreen
 import com.triforge.domain.AccountGate
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.flow.map
 
 private enum class Tab(val route: String, @StringRes val label: Int, val icon: ImageVector) {
     TODAY("today", R.string.nav_today, TriIcons.Home),
@@ -184,7 +185,12 @@ private fun SignedIn(uid: String, container: AppContainer) {
     // The two coaches: separate view models driving separate agents. Both
     // read the athlete's data from the view models above.
     val athleteSource = remember(uid) {
-        AthleteSource(trainingViewModel.state, recoveryViewModel.state, container.profiles.profile(uid))
+        AthleteSource(
+            trainingViewModel.state,
+            recoveryViewModel.state,
+            container.profiles.profile(uid),
+            container.account.account(uid).map { it.birthYear },
+        )
     }
     val coachViewModel: CoachViewModel = viewModel(
         key = "coach-$uid",

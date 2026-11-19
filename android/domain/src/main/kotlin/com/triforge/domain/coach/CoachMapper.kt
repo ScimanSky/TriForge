@@ -133,21 +133,57 @@ object CoachMapper {
     // ---- Nutrition profile -------------------------------------------------
 
     fun nutritionProfileToFields(profile: NutritionProfile): Map<String, Any?> = mapOf(
+        "sex" to profile.sex?.key,
         "diet" to profile.diet.key,
-        "avoid" to profile.avoid,
-        "mealsPerDay" to profile.mealsPerDay,
         "goal" to profile.goal.key,
+        "mealsPerDay" to profile.mealsPerDay,
+        "allergies" to Allergen.entries.filter { it in profile.allergies }.map { it.key },
+        "otherAllergies" to profile.otherAllergies,
+        "intolerances" to Intolerance.entries.filter { it in profile.intolerances }.map { it.key },
+        "otherIntolerances" to profile.otherIntolerances,
+        "likes" to profile.likes,
+        "dislikes" to profile.dislikes.map { mapOf("food" to it.food, "exceptions" to it.exceptions) },
+        "redMeatPerWeek" to profile.redMeatPerWeek,
+        "supplements" to profile.supplements.map { mapOf("name" to it.name, "dose" to it.dose, "timing" to it.timing.key) },
+        "drinks" to profile.drinks.map { mapOf("name" to it.name, "perDay" to it.perDay) },
+        "noCaffeine" to profile.noCaffeine,
         "notes" to profile.notes,
     )
 
-    fun nutritionProfileFromFields(fields: Map<String, Any?>): NutritionProfile = NutritionProfile(
-        diet = Diet.of(fields["diet"] as? String) ?: Diet.OMNIVORE,
-        avoid = list(fields["avoid"]).mapNotNull { (it as? String)?.trim()?.takeIf(String::isNotEmpty) },
-        mealsPerDay = number(fields["mealsPerDay"])?.toInt()
-            ?.coerceIn(NutritionProfile.MIN_MEALS, NutritionProfile.MAX_MEALS) ?: 4,
-        goal = BodyGoal.of(fields["goal"] as? String) ?: BodyGoal.MAINTAIN,
-        notes = text(fields["notes"], 500),
-    )
+    fun nutritionProfileFromFields(fields: Map<String, Any?>): NutritionProfile {
+        val name = { value: Any? -> text(value, NutritionProfile.NAME_MAX) }
+        val dislikes = list(fields["dislikes"]).mapNotNull { item ->
+            val entry = item as? Map<*, *> ?: return@mapNotNull null
+            NutritionProfile.dislike(name(entry["food"]), list(entry["exceptions"]).joinToString(", ") { name(it) })
+        }
+        // Profiles saved before 19 November 2026 kept one list of foods to avoid.
+        val legacy = list(fields["avoid"]).mapNotNull { NutritionProfile.dislike(name(it), "") }
+        return NutritionProfile(
+            sex = Sex.of(fields["sex"] as? String),
+            diet = Diet.of(fields["diet"] as? String) ?: Diet.OMNIVORE,
+            goal = BodyGoal.of(fields["goal"] as? String) ?: BodyGoal.MAINTAIN,
+            mealsPerDay = number(fields["mealsPerDay"])?.toInt()
+                ?.coerceIn(NutritionProfile.MIN_MEALS, NutritionProfile.MAX_MEALS) ?: 4,
+            allergies = list(fields["allergies"]).mapNotNull { Allergen.of(it as? String) }.toSet(),
+            otherAllergies = text(fields["otherAllergies"], NutritionProfile.TEXT_MAX),
+            intolerances = list(fields["intolerances"]).mapNotNull { Intolerance.of(it as? String) }.toSet(),
+            otherIntolerances = text(fields["otherIntolerances"], NutritionProfile.TEXT_MAX),
+            likes = list(fields["likes"]).map(name).filter(String::isNotEmpty).take(NutritionProfile.MAX_ITEMS),
+            dislikes = (dislikes + legacy).distinctBy { it.food.lowercase() }.take(NutritionProfile.MAX_ITEMS),
+            redMeatPerWeek = number(fields["redMeatPerWeek"])?.toInt()?.takeIf { it in 0..NutritionProfile.MAX_RED_MEAT },
+            supplements = list(fields["supplements"]).mapNotNull { item ->
+                val s = item as? Map<*, *> ?: return@mapNotNull null
+                val n = name(s["name"]).ifEmpty { return@mapNotNull null }
+                Supplement(n, name(s["dose"]), SupplementTiming.of(s["timing"] as? String) ?: SupplementTiming.DAILY)
+            }.take(NutritionProfile.MAX_SUPPLEMENTS),
+            drinks = list(fields["drinks"]).mapNotNull { item ->
+                val d = item as? Map<*, *> ?: return@mapNotNull null
+                Drink(name(d["name"]).ifEmpty { return@mapNotNull null }, name(d["perDay"]))
+            }.take(NutritionProfile.MAX_DRINKS),
+            noCaffeine = fields["noCaffeine"] == true,
+            notes = text(fields["notes"], 500),
+        )
+    }
 
     // ---- Brief and chat ----------------------------------------------------
 
