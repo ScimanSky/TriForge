@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -188,9 +189,17 @@ private fun OutlineChip(text: String, onClick: () -> Unit) {
 private fun TargetsCard(day: NutritionDay) {
     TriCard {
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(stringResource(R.string.nutri_today), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            // The title keeps its line; a long headline wraps beside it instead of squeezing it.
+            Text(stringResource(R.string.nutri_today), style = MaterialTheme.typography.titleMedium, maxLines = 1, softWrap = false)
             if (day.headline.isNotBlank()) {
-                Text(day.headline, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFFFD23F))
+                Text(
+                    day.headline,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFFFD23F),
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(start = 12.dp),
+                )
             }
         }
         Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 10.dp)) {
