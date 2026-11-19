@@ -40,6 +40,11 @@ class AppContainer(context: Context) {
      */
     val firebaseConfigured: Boolean = FirebaseApp.getApps(appContext).isNotEmpty()
 
+    init {
+        // Before any Firebase call: AI Logic refuses requests without App Check.
+        if (firebaseConfigured) AppCheckSetup.install(appContext, FirebaseApp.getInstance())
+    }
+
     private val firestore by lazy { FirebaseFirestore.getInstance() }
 
     /**

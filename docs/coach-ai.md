@@ -47,6 +47,16 @@ settimane, sedute degli ultimi 14 giorni, modello di carico (fitness, fatica,
 forma), indice Carico e recupero, HRV, FC a riposo, sonno e check-in. Mai nome,
 email o foto. Niente viene inviato senza il consenso "Coach AI".
 
+## App Check
+
+Firebase AI Logic applica App Check: senza un token valido Gemini rifiuta la
+richiesta. Le build di Play usano Play Integrity; le build di prova (App
+Distribution) usano il provider di debug con un segreto registrato sul
+progetto (console Firebase › App Check › app Android › Gestisci token di
+debug) e scritto in `android/local.properties` come
+`triforge.appCheckDebugToken=<uuid>`. Senza segreto il provider ne crea uno e
+lo scrive nel logcat, da registrare a mano.
+
 ## Spostarli su un server
 
 L'app parla con i coach solo tramite l'interfaccia `CoachAgent`. Per spostarli
@@ -56,7 +66,4 @@ server; prompt e validazione (`CoachPrompts`, `CoachMapper`) sono nel modulo
 
 ## Da fare
 
-- App Check (Play Integrity) per proteggere l'accesso a Gemini: richiede
-  l'app firmata e distribuita da Play o un token di debug per ogni telefono di
-  prova.
 - Registro dei pasti con foto, invio della settimana al Garmin.
