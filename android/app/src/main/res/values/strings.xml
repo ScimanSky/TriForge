@@ -252,16 +252,16 @@
 
     <string name="recovery_msg_no_data">Collega Garmin o Health Connect per iniziare a misurare carico e recupero.</string>
     <string name="recovery_msg_learning">Sto imparando i tuoi valori normali. Servono almeno due settimane di HRV, FC a riposo o check-in: intanto vedi solo il carico.</string>
-    <string name="recovery_msg_illness">Sembra che tu non stia bene. In questi giorni il riposo vale più dell'allenamento: l'indice è in pausa.</string>
+    <string name="recovery_msg_illness">Sembra che tu non stia bene. In questi giorni il riposo vale più dell\'allenamento: l\'indice è in pausa.</string>
     <string name="recovery_msg_baseline">Il tuo recupero è nella norma rispetto ai tuoi valori abituali.</string>
     <string name="recovery_msg_absorbing">Il carico è alto e il tuo corpo lo sta assorbendo bene.</string>
-    <string name="recovery_msg_load_fatigue_light">Negli ultimi giorni il recupero è un po' sotto il solito, in linea con il carico recente. Se la fatica continua, valuta una giornata facile.</string>
+    <string name="recovery_msg_load_fatigue_light">Negli ultimi giorni il recupero è un po\' sotto il solito, in linea con il carico recente. Se la fatica continua, valuta una giornata facile.</string>
     <string name="recovery_msg_load_fatigue">I segnali di fatica sono in linea con il carico delle ultime settimane. Proteggi il sonno e prevedi qualche giorno di scarico.</string>
     <string name="recovery_msg_unexplained">I tuoi indicatori di recupero sono sotto il normale anche se il carico non è aumentato. Spesso dipende da sonno, stress, alimentazione o un malanno in arrivo.</string>
     <string name="recovery_msg_atypical">La tua HRV è insolitamente alta mentre altri segnali indicano fatica. A volte succede quando il corpo è molto affaticato: meglio non leggerlo come un super recupero.</string>
     <string name="recovery_msg_persistent">Da giorni più segnali indicano un recupero insufficiente, e non accennano a rientrare. Parlane con il tuo allenatore e con un medico sportivo, per escludere altre cause come carenze, infezioni o un apporto energetico insufficiente.</string>
     <string name="recovery_run_jump">Il carico di corsa di questa settimana è cresciuto molto più del solito: attenzione a tendini e muscoli.</string>
-    <string name="recovery_disclaimer">TriForge non fornisce diagnosi mediche. L'indice confronta i tuoi dati con i tuoi valori abituali e segnala quando più segnali restano fuori norma per giorni.</string>
+    <string name="recovery_disclaimer">TriForge non fornisce diagnosi mediche. L\'indice confronta i tuoi dati con i tuoi valori abituali e segnala quando più segnali restano fuori norma per giorni.</string>
 
     <string name="recovery_confidence_high">Affidabilità alta</string>
     <string name="recovery_confidence_medium">Affidabilità media</string>
@@ -278,11 +278,11 @@
 
     <string name="recovery_missing_title">Per una lettura più precisa</string>
     <string name="recovery_missing_check_in">Fai il check-in del mattino: è il segnale più sensibile.</string>
-    <string name="recovery_missing_hrv">Indossa l'orologio di notte per avere l'HRV.</string>
-    <string name="recovery_missing_resting_hr">Indossa l'orologio di notte per avere la FC a riposo.</string>
+    <string name="recovery_missing_hrv">Indossa l\'orologio di notte per avere l\'HRV.</string>
+    <string name="recovery_missing_resting_hr">Indossa l\'orologio di notte per avere la FC a riposo.</string>
     <string name="recovery_missing_sleep">Mancano i dati del sonno delle ultime notti.</string>
     <string name="recovery_missing_load">Nessun allenamento nelle ultime sei settimane.</string>
-    <string name="recovery_missing_performance">Servono uscite costanti in bici o di corsa con FC e potenza o passo per valutare l'efficienza.</string>
+    <string name="recovery_missing_performance">Servono uscite costanti in bici o di corsa con FC e potenza o passo per valutare l\'efficienza.</string>
 
     <string name="recovery_why_title">Perché vedo questo valore</string>
     <string name="recovery_trend_title">Andamento</string>
@@ -303,7 +303,7 @@
     <string name="recovery_load_form">Forma</string>
     <string name="recovery_load_ramp">Crescita 7 g</string>
     <string name="recovery_load_monotony">Monotonia</string>
-    <string name="recovery_load_note">Carico in TSS equivalenti: 100 è un'ora alla soglia. Imposta FTP, passo soglia e CSS nel profilo per un calcolo più preciso.</string>
+    <string name="recovery_load_note">Carico in TSS equivalenti: 100 è un\'ora alla soglia. Imposta FTP, passo soglia e CSS nel profilo per un calcolo più preciso.</string>
     <string name="recovery_garmin_title">Valori del tuo orologio</string>
     <string name="recovery_garmin_hrv_status">Stato HRV Garmin</string>
     <string name="recovery_garmin_balanced">equilibrato</string>
@@ -314,7 +314,7 @@
     <string name="recovery_garmin_note">Solo a confronto: algoritmi diversi possono dare letture diverse.</string>
 
     <string name="checkin_title">Check-in del mattino</string>
-    <string name="checkin_intro">Trenta secondi: da 1 (ottimo) a 7 (pessimo). Rispondi d'istinto, pensando a stamattina.</string>
+    <string name="checkin_intro">Trenta secondi: da 1 (ottimo) a 7 (pessimo). Rispondi d\'istinto, pensando a stamattina.</string>
     <string name="checkin_sleep">Qualità del sonno</string>
     <string name="checkin_fatigue">Stanchezza generale</string>
     <string name="checkin_soreness">Dolori muscolari</string>
@@ -323,6 +323,6 @@
     <string name="checkin_scale_low">ottimo</string>
     <string name="checkin_scale_high">pessimo</string>
     <string name="checkin_sick">Mi sento malato o ho sintomi</string>
-    <string name="checkin_sick_hint">Mette in pausa l'indice: il riposo viene prima.</string>
+    <string name="checkin_sick_hint">Mette in pausa l\'indice: il riposo viene prima.</string>
     <string name="checkin_save">Salva</string>
 </resources>
