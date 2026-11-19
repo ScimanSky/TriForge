@@ -63,9 +63,10 @@ class HealthConnectRepository(
         client.permissionController.getGrantedPermissions().containsAll(permissions)
 
     /**
-     * Copies swim, bike and run sessions since [since] into the athlete's
-     * activities. Returns how many were written. Safe to repeat: each session
-     * keeps the same document id.
+     * Copies every exercise session since [since] into the athlete's
+     * activities: the three disciplines, the gym, and the rest (walks, hikes,
+     * yoga, cardio) as other activities. Returns how many were written. Safe
+     * to repeat: each session keeps the same document id.
      */
     suspend fun importWorkouts(uid: String, since: Instant): Int {
         val documents = mutableMapOf<String, Map<String, Any?>>()
@@ -79,8 +80,7 @@ class HealthConnectRepository(
                 ),
             )
             for (session in response.records) {
-                val sport = sportFor(session.exerciseType) ?: continue
-                documents["hc_${session.metadata.id}"] = document(session, sport)
+                documents["hc_${session.metadata.id}"] = document(session, sportFor(session.exerciseType))
             }
             pageToken = response.pageToken
         } while (pageToken != null)
@@ -162,7 +162,7 @@ class HealthConnectRepository(
             "source" to "health_connect",
             "externalId" to session.metadata.id,
             "sport" to ActivityMapper.sportKey(sport),
-            "type" to "health_connect_${session.exerciseType}",
+            "type" to typeKey(session.exerciseType),
             "name" to session.title.orEmpty(),
             "startTime" to Timestamp(Date.from(session.startTime)),
             "durationSec" to Duration.between(session.startTime, session.endTime).seconds,
@@ -181,8 +181,8 @@ class HealthConnectRepository(
             SleepSessionRecord.STAGE_TYPE_OUT_OF_BED,
         )
 
-        /** Null for anything that is not one of the three disciplines. */
-        fun sportFor(exerciseType: Int): Sport? = when (exerciseType) {
+        /** The three disciplines, the gym, and [Sport.OTHER] for everything else the watch or the phone recorded. */
+        fun sportFor(exerciseType: Int): Sport = when (exerciseType) {
             ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL,
             ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
             -> Sport.SWIM
@@ -195,7 +195,38 @@ class HealthConnectRepository(
             ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL,
             -> Sport.RUN
 
-            else -> null
+            ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
+            ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING,
+            ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS,
+            -> Sport.STRENGTH
+
+            else -> Sport.OTHER
+        }
+
+        /**
+         * The session's type in words the app reads the kind of activity
+         * from (see [com.triforge.domain.ActivityTypes]): a walk does not
+         * weigh like an hour of cardio. Types the app has no word for keep
+         * Health Connect's number.
+         */
+        fun typeKey(exerciseType: Int): String = when (exerciseType) {
+            ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "strength_training"
+            ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> "weightlifting"
+            ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS -> "calisthenics"
+            ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "walking"
+            ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> "hiking"
+            ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> "yoga"
+            ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> "pilates"
+            ExerciseSessionRecord.EXERCISE_TYPE_STRETCHING -> "stretching"
+            ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL -> "elliptical"
+            ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE -> "rowing_machine"
+            ExerciseSessionRecord.EXERCISE_TYPE_STAIR_CLIMBING,
+            ExerciseSessionRecord.EXERCISE_TYPE_STAIR_CLIMBING_MACHINE,
+            -> "stair_climbing"
+
+            ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> "hiit"
+            ExerciseSessionRecord.EXERCISE_TYPE_BOXING -> "boxing"
+            else -> "health_connect_$exerciseType"
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.triforge.app.ui.coach
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.triforge.app.R
 import com.triforge.app.ui.common.TriCard
+import com.triforge.app.ui.common.kindLabelRes
 import com.triforge.app.ui.theme.SportColors
 import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.TriIcons
@@ -54,14 +56,19 @@ import com.triforge.domain.Sport
 import com.triforge.domain.coach.CoachTable
 import com.triforge.domain.coach.PlannedDay
 import com.triforge.domain.coach.PlannedSession
+import com.triforge.domain.coach.ReviewState
+import com.triforge.domain.coach.ReviewedSession
 import com.triforge.domain.coach.SportCoachPrompts
 import com.triforge.domain.coach.TableNote
 import com.triforge.domain.coach.TableVoice
+import com.triforge.domain.coach.TrainingAvailability
 import com.triforge.domain.coach.TriRegia
 import com.triforge.domain.coach.WeekPlan
+import com.triforge.domain.coach.WeekReview
 import com.triforge.domain.coach.WorkoutBlock
 import com.triforge.domain.coach.Workouts
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -89,13 +96,26 @@ fun sessionHeading(session: PlannedSession): String {
 /** Whether the session has more to show than its row. */
 fun PlannedSession.hasDetail(): Boolean = steps.isNotEmpty() || details.isNotBlank() || why.isNotBlank()
 
-/** Board 6c, top card: the week by sport, against the hours and the hard sessions the regia allows. */
+/** Whose a session is when no coach wrote it: the athlete's gym, or a sport done with their trainer. */
 @Composable
-fun WeekSummary(plan: WeekPlan) {
+fun ownLabel(session: PlannedSession): String =
+    stringResource(if (session.sport == Sport.STRENGTH) R.string.coach_own_gym else R.string.coach_own_trainer)
+
+/**
+ * Boards 6c and 6f, top card: the week by sport, against the hours the regia
+ * allows. The gym and the sports done with a trainer are in the count; a
+ * sport in pause is left out. Once something is recorded, the card says how
+ * much of the week is done.
+ */
+@Composable
+fun WeekSummary(plan: WeekPlan, review: WeekReview? = null, availability: TrainingAvailability = TrainingAvailability()) {
     val totals = plan.totals()
-    val sports = TriRegia.SPORTS.sortedByDescending { totals[it]?.second ?: 0 }
+    val sports = (TriRegia.SPORTS + Sport.STRENGTH)
+        .filter { sport -> (totals[sport]?.second ?: 0) > 0 || (sport in TriRegia.SPORTS && availability.isCoached(sport)) }
+        .sortedByDescending { totals[it]?.second ?: 0 }
     val minutes = sports.sumOf { totals[it]?.second ?: 0 }
     val hard = plan.days.sumOf { day -> day.sessions.count(TriRegia::isHard) }
+    val doneMinutes = review?.doneMinutes ?: 0
     val end = plan.weekStart.plusDays(6)
     TriCard {
         Row(verticalAlignment = Alignment.Bottom) {
@@ -130,13 +150,25 @@ fun WeekSummary(plan: WeekPlan) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Dot(SportColors.of(sport))
-                        Text(TriRegia.sportName(sport), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            TriRegia.sportName(sport),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
-                    Text(Formatters.duration(sportMinutes * 60L), style = numberStyle(20.sp), modifier = Modifier.padding(top = 4.dp))
+                    Text(
+                        Formatters.duration(sportMinutes * 60L),
+                        style = numberStyle(if (sports.size > 3) 17.sp else 20.sp),
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                     Text(
                         if (count == 1) stringResource(R.string.coach_sessions_one) else stringResource(R.string.coach_sessions_many, count),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
                     )
                 }
             }
@@ -153,7 +185,11 @@ fun WeekSummary(plan: WeekPlan) {
             )
             val maxHard = plan.maxHard
             Text(
-                if (maxHard != null) stringResource(R.string.coach_week_hard_of, hard, maxHard) else stringResource(R.string.coach_week_hard, hard),
+                when {
+                    doneMinutes > 0 -> stringResource(R.string.coach_week_done_so_far, Formatters.duration(doneMinutes * 60L))
+                    maxHard != null -> stringResource(R.string.coach_week_hard_of, hard, maxHard)
+                    else -> stringResource(R.string.coach_week_hard, hard)
+                },
                 fontSize = 13.sp,
                 color = Color(0xFFC9CED6),
             )
@@ -161,9 +197,20 @@ fun WeekSummary(plan: WeekPlan) {
     }
 }
 
-/** Board 6c, the seven days in one card: every session in its coach's colour. */
+/**
+ * Boards 6c and 6f, the seven days in one card: every session in its coach's
+ * colour, the athlete's own ones with a border. On the days gone each line
+ * says whether it was done and for how long, and what the watch recorded
+ * outside the programme is listed with them.
+ */
 @Composable
-fun WeekDays(plan: WeekPlan, profile: AthleteProfile, onOpen: (String) -> Unit) {
+fun WeekDays(
+    plan: WeekPlan,
+    profile: AthleteProfile,
+    onOpen: (String) -> Unit,
+    review: WeekReview = WeekReview(emptyList()),
+    availability: TrainingAvailability = TrainingAvailability(),
+) {
     val today = LocalDate.now()
     TriCard(padding = 0.dp) {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)) {
@@ -189,12 +236,42 @@ fun WeekDays(plan: WeekPlan, profile: AthleteProfile, onOpen: (String) -> Unit) 
                         )
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val sessions = day.sessions.withIndex().filter { it.value.sport != null || it.value.durationMin > 0 }
-                        if (sessions.isEmpty()) {
-                            RestRow(stringResource(if (past && plan.fromTable) R.string.coach_nothing_done else R.string.coach_rest))
+                        // Without a review (the activities are still loading) the day shows its programme as written.
+                        val items = review.day(day.date)?.items
+                            ?: day.sessions.map { ReviewedSession(ReviewState.TODO, it) }
+                        val lines = items.filter { item ->
+                            item.activity != null || item.session?.let { it.sport != null || it.durationMin > 0 } == true
+                        }
+                        if (lines.isEmpty()) {
+                            val rest = availability.restDay
+                            RestRow(
+                                stringResource(
+                                    when {
+                                        past && plan.fromTable -> R.string.coach_nothing_done
+                                        rest != null && day.date.dayOfWeek != rest -> R.string.coach_free
+                                        else -> R.string.coach_rest
+                                    },
+                                ),
+                            )
                         } else {
-                            sessions.forEach { (index, session) ->
-                                SessionRow(session, profile, onOpen = { onOpen(sessionKey(day.date, index)) })
+                            lines.forEach { item ->
+                                val session = item.session
+                                val index = if (session != null) day.sessions.indexOf(session) else -1
+                                val time = when {
+                                    session == null || !session.own -> null
+                                    session.sport == Sport.STRENGTH -> availability.gym.time
+                                    else -> session.sport?.let(availability::slot)?.time
+                                }
+                                ReviewRow(
+                                    item = item,
+                                    profile = profile,
+                                    time = time,
+                                    onOpen = if (session != null && index >= 0 && session.hasDetail()) {
+                                        { onOpen(sessionKey(day.date, index)) }
+                                    } else {
+                                        null
+                                    },
+                                )
                             }
                         }
                     }
@@ -224,25 +301,57 @@ private fun RestRow(text: String) {
     }
 }
 
+private val clockTime = DateTimeFormatter.ofPattern("H:mm")
+
+/**
+ * One line of a day: a planned session, with what the watch recorded for it
+ * when the day is gone, or something recorded that was not in the programme.
+ */
 @Composable
-private fun SessionRow(session: PlannedSession, profile: AthleteProfile, onOpen: () -> Unit) {
-    val sport = session.sport
-    // On a day already gone the table shows what the athlete did.
-    val done = session.focus == CoachTable.DONE
+private fun ReviewRow(item: ReviewedSession, profile: AthleteProfile, time: LocalTime?, onOpen: (() -> Unit)?) {
+    val session = item.session
+    val activity = item.activity
+    val sport = item.sport
+    val own = session?.own == true
+    val recorded = activity != null
     val shape = RoundedCornerShape(14.dp)
-    val subtitle = when {
-        done -> stringResource(R.string.coach_done)
+
+    val title = when {
+        session != null -> sessionHeading(session)
+        activity != null -> activity.name.ifBlank { stringResource(activity.kindLabelRes()) }
+        else -> ""
+    }
+    // Whose the session is, or what the coach put in it.
+    val base = when {
+        session == null -> ""
+        own -> ownLabel(session)
         sport != null && sport in TriRegia.SPORTS && session.steps.isNotEmpty() ->
             listOf(SportCoachPrompts.coachName(sport), sessionGist(session, profile)).filter { it.isNotBlank() }.joinToString(" · ")
         else -> ""
     }
+    val planned = item.plannedMin
+    val done = item.doneMin
+    val subtitle = when (item.state) {
+        ReviewState.DONE ->
+            if (item.differs && planned != null && done != null) stringResource(R.string.coach_review_minutes, done, planned) else base
+        ReviewState.EXTRA -> stringResource(R.string.coach_review_extra)
+        ReviewState.RECORD -> ""
+        ReviewState.MISSED -> base
+        ReviewState.TODO ->
+            if (own && time != null) "$base · ${time.format(clockTime)}" else base
+    }
+    val minutes = done ?: planned
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 44.dp)
             .clip(shape)
-            .background(sessionBackground)
-            .clickable(enabled = session.hasDetail(), role = Role.Button, onClick = onOpen)
+            .then(
+                // The athlete's own sessions are outlined, not filled: no coach wrote them.
+                if (own && sport != null) Modifier.border(1.dp, SportColors.dim(sport), shape) else Modifier.background(sessionBackground),
+            )
+            .then(if (onOpen != null) Modifier.clickable(role = Role.Button, onClick = onOpen) else Modifier)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -250,7 +359,7 @@ private fun SessionRow(session: PlannedSession, profile: AthleteProfile, onOpen:
         Dot(sport?.let(SportColors::of) ?: Color(0xFF5E6672))
         Column(Modifier.weight(1f)) {
             Text(
-                if (done) session.title else sessionHeading(session),
+                title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
@@ -260,11 +369,28 @@ private fun SessionRow(session: PlannedSession, profile: AthleteProfile, onOpen:
                 Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        if (TriRegia.isHard(session)) HardPill()
-        if (session.durationMin > 0) {
-            Text(Formatters.duration(session.durationMin * 60L), style = numberStyle(13.sp), color = Color(0xFFC9CED6))
+        when {
+            recorded -> StatePill(stringResource(R.string.coach_done))
+            item.state == ReviewState.MISSED -> StatePill(stringResource(R.string.coach_review_missed))
+            session != null && TriRegia.isHard(session) -> HardPill()
+        }
+        if (minutes != null && minutes > 0) {
+            Text(Formatters.duration(minutes * 60L), style = numberStyle(13.sp), color = Color(0xFFC9CED6))
         }
     }
+}
+
+/** "Fatta" or "Non fatta": how a line of a day gone went. */
+@Composable
+private fun StatePill(text: String) {
+    Text(
+        text,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = Color(0xFFC9CED6),
+        maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFF23272E)).padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }
 
 /** The one thing to know about the workout at a glance: metres in the pool, the main set, or the zone. */
@@ -322,7 +448,8 @@ fun TableCard(plan: WeekPlan) {
         if (open) {
             Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 plan.table.forEach { note -> TableLine(note) }
-                val settledByApp = plan.table.any { it.voice == TableVoice.REGIA }
+                // The regia's opening line says what is the athlete's own; any other line of its is something it settled.
+                val settledByApp = plan.table.any { it.voice == TableVoice.REGIA && !CoachTable.isOpening(it) }
                 Text(
                     when {
                         settledByApp -> stringResource(R.string.coach_table_settled, plan.rounds)

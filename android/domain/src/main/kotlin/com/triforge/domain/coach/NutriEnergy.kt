@@ -1,5 +1,7 @@
 package com.triforge.domain.coach
 
+import com.triforge.domain.Activity
+import com.triforge.domain.OtherKind
 import com.triforge.domain.RaceGoal
 import com.triforge.domain.Sport
 import kotlin.math.max
@@ -74,7 +76,10 @@ object NutriEnergy {
             Sport.SWIM -> listOf(6.0, 7.0, 8.5, 9.5, 11.0, 10.0)
             Sport.BIKE -> listOf(5.5, 7.0, 8.5, 10.0, 11.5, 10.0)
             Sport.RUN -> listOf(8.0, 9.0, 10.5, 11.5, 12.5, 11.5)
-            Sport.OTHER -> listOf(4.0, 4.5, 5.0, 5.5, 6.0, 5.0)
+            // Resistance training: 3.5 for light work, 6 for heavy lifting.
+            Sport.STRENGTH -> listOf(3.5, 4.0, 5.0, 6.0, 6.0, 6.0)
+            // Walks and yoga at the low end, hikes and cardio machines in the middle.
+            Sport.OTHER -> listOf(3.0, 4.5, 5.5, 6.5, 7.5, 6.5)
         }
         return when (intensity) {
             Intensity.EASY -> row[0]
@@ -95,9 +100,44 @@ object NutriEnergy {
     private fun isHard(session: PlannedSession) =
         session.intensity == Intensity.THRESHOLD || session.intensity == Intensity.VO2MAX || session.intensity == Intensity.RACE
 
+    /**
+     * The day's sessions for the energy count: the coaches' plan, plus what
+     * the watch recorded today that the plan did not have (a walk, a hike, a
+     * gym session on a day without one, a sport the plan left out). A sport
+     * that was planned is counted as planned, so nothing is counted twice.
+     */
+    fun withDone(planned: List<PlannedSession>, done: List<Activity>): List<PlannedSession> {
+        val plannedSports = planned.filter { it.sport != null && it.durationMin > 0 }.mapNotNull { it.sport }.toSet()
+        val extra = done.filter { it.durationSec >= MIN_DONE_SEC && it.sport !in plannedSports }.sortedBy { it.startTime }.map { activity ->
+            PlannedSession(
+                sport = activity.sport,
+                title = activity.name.ifBlank { AthleteContext.activityName(activity) }.take(80),
+                durationMin = (activity.durationSec / 60).toInt(),
+                intensity = doneIntensity(activity),
+                focus = CoachTable.DONE,
+            )
+        }
+        return planned + extra
+    }
+
+    /** How hard a recorded session outside the plan counts for the energy. */
+    fun doneIntensity(activity: Activity): Intensity = when (activity.sport) {
+        Sport.STRENGTH -> Intensity.TEMPO
+        Sport.OTHER -> when (activity.kind) {
+            OtherKind.WALK, OtherKind.MOBILITY -> Intensity.EASY
+            OtherKind.HIKE, OtherKind.CARDIO -> Intensity.TEMPO
+            OtherKind.GENERIC -> Intensity.ENDURANCE
+        }
+        else -> Intensity.ENDURANCE
+    }
+
+    /** A walk or a yoga class costs energy but does not make the day a training day for the carbohydrates. */
+    private fun fuelsTheDay(session: PlannedSession) =
+        session.sport != null && session.durationMin > 0 && !(session.sport == Sport.OTHER && session.intensity == Intensity.EASY)
+
     /** The kind of day from its sessions. */
     fun dayType(sessions: List<PlannedSession>): DayType {
-        val real = sessions.filter { it.sport != null && it.durationMin > 0 }
+        val real = sessions.filter(::fuelsTheDay)
         if (real.isEmpty()) return DayType.REST
         if (real.any { it.intensity == Intensity.RACE }) return DayType.RACE
         val minutes = real.sumOf { it.durationMin }
@@ -123,7 +163,7 @@ object NutriEnergy {
     /** The day's targets; null without a weight, which NutriAI then asks for. */
     fun targets(profile: NutritionProfile, body: BodyData, sessions: List<PlannedSession>, context: DayContext = DayContext()): DayTargets? {
         val weight = body.weightKg?.takeIf { it in 30.0..250.0 } ?: return null
-        val type = if (context.daysToRace == 0 && sessions.any { it.sport != null && it.durationMin > 0 }) DayType.RACE else dayType(sessions)
+        val type = if (context.daysToRace == 0 && sessions.any { it.sport in TriRegia.SPORTS && it.durationMin > 0 }) DayType.RACE else dayType(sessions)
         val load = carbLoad(type, context)
         val bmr = bmr(body, weight)
         val training = trainingKcal(sessions, weight)
@@ -197,6 +237,9 @@ object NutriEnergy {
     }.trimEnd()
 
     private const val TYPICAL_AGE = 35.0
+
+    /** A recorded activity shorter than this is not worth a line in the day. */
+    private const val MIN_DONE_SEC = 10 * 60
 
     /** Carbohydrates the eve of a heavy day or of a race starts from, in g/kg. */
     const val EVE_CARBS = 6.0

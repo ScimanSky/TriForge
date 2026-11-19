@@ -1,17 +1,22 @@
 package com.triforge.app.ui.activities
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +72,8 @@ fun ActivitiesScreen(
     modifier: Modifier = Modifier,
     cssSecPer100: Int? = null,
     onUseCss: (Int) -> Unit = {},
+    /** Each activity's load in the app's scale, by activity id; empty while it is worked out. */
+    loads: Map<String, Int> = emptyMap(),
 ) {
     // The selected sport's name, or null for all. A String survives rotation.
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
@@ -92,10 +99,10 @@ fun ActivitiesScreen(
             TrainingState.Failed -> CenteredMessage(stringResource(R.string.load_error))
 
             is TrainingState.Loaded ->
-                if (sport == null) {
-                    AllActivities(state.activities, onOpenActivity)
-                } else {
-                    SportTab(state.activities, sport, onOpenActivity, cssSecPer100, onUseCss)
+                when {
+                    sport == null -> AllActivities(state.activities, loads, onOpenActivity)
+                    sport in TrainingStats.triathlonSports -> SportTab(state.activities, sport, onOpenActivity, cssSecPer100, onUseCss)
+                    else -> SupportTab(state.activities, sport, loads, onOpenActivity)
                 }
         }
     }
@@ -123,15 +130,20 @@ private fun syncLabel(garmin: GarminStatus): String {
     }
 }
 
-/** Tutte, Nuoto, Bici, Corsa: each sport's tab takes that sport's color. */
+/**
+ * Tutte, Nuoto, Bici, Corsa, Palestra, Altro: each sport's tab takes that
+ * sport's color. Six tabs do not fit a phone, so the row scrolls.
+ */
 @Composable
 private fun SportTabs(selected: Sport?, onSelect: (Sport?) -> Unit) {
-    val tabs: List<Sport?> = listOf(null) + TrainingStats.triathlonSports
+    val tabs: List<Sport?> = listOf(null) + TrainingStats.allSports
 
     Column {
         Row(
             Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 6.dp)
                 .selectableGroup(),
         ) {
             tabs.forEach { sport ->
@@ -139,16 +151,17 @@ private fun SportTabs(selected: Sport?, onSelect: (Sport?) -> Unit) {
                 val color = if (sport == null) MaterialTheme.colorScheme.primary else SportColors.of(sport)
                 Column(
                     modifier = Modifier
-                        .weight(1f)
+                        .width(IntrinsicSize.Max)
                         .height(48.dp)
                         .selectable(selected = isSelected, role = Role.Tab, onClick = { onSelect(sport) }),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Box(Modifier.weight(1f).padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
                         Text(
                             text = stringResource(sport?.labelRes() ?: R.string.activities_all),
                             style = MaterialTheme.typography.labelLarge,
                             color = if (isSelected) color else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
                         )
                     }
                     Box(
@@ -170,7 +183,7 @@ private fun SportTabs(selected: Sport?, onSelect: (Sport?) -> Unit) {
 }
 
 @Composable
-private fun AllActivities(activities: List<Activity>, onOpenActivity: (String) -> Unit) {
+private fun AllActivities(activities: List<Activity>, loads: Map<String, Int>, onOpenActivity: (String) -> Unit) {
     if (activities.isEmpty()) {
         CenteredMessage(
             title = stringResource(R.string.today_empty_title),
@@ -204,11 +217,16 @@ private fun AllActivities(activities: List<Activity>, onOpenActivity: (String) -
                     ),
                     modifier = Modifier.padding(top = 14.dp),
                 )
-                Row(
+                // Only what the weeks on the chart hold: a legend entry without a bar is noise.
+                val shown = TrainingStats.allSports.filter { sport ->
+                    sport in TrainingStats.triathlonSports || trend.any { it.of(sport).sessions > 0 }
+                }
+                FlowRow(
                     modifier = Modifier.padding(top = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    TrainingStats.triathlonSports.forEach { sport ->
+                    shown.forEach { sport ->
                         LegendDot(SportColors.of(sport), stringResource(sport.labelRes()))
                     }
                 }
@@ -231,7 +249,7 @@ private fun AllActivities(activities: List<Activity>, onOpenActivity: (String) -
                 )
             }
             items(inWeek, key = { it.id }) { activity ->
-                ActivityRow(activity, onClick = { onOpenActivity(activity.id) })
+                ActivityRow(activity, onClick = { onOpenActivity(activity.id) }, load = loads[activity.id])
             }
         }
     }

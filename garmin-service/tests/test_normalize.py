@@ -39,8 +39,12 @@ RUN = {
         ("running", "run"),
         ("trail_running", "run"),
         ("treadmill_running", "run"),
-        ("strength_training", "other"),
+        ("strength_training", "strength"),
+        ("Strength_Training", "strength"),
         ("walking", "other"),
+        ("hiking", "other"),
+        ("yoga", "other"),
+        ("indoor_cardio", "other"),
         ("multi_sport", "other"),
         (None, "other"),
     ],
@@ -227,3 +231,75 @@ def test_swim_with_empty_splits_is_marked_as_read():
 def test_splits_on_a_run_are_ignored():
     doc = normalize_activity(RUN, SPLITS)
     assert "laps" not in doc
+
+
+GYM = {
+    "activityId": 20000000001,
+    "activityName": "Forza",
+    "startTimeLocal": "2026-11-19 18:34:00",
+    "startTimeGMT": "2026-11-19 17:34:00",
+    "activityType": {"typeKey": "strength_training"},
+    "distance": 0.0,
+    "duration": 3720.0,
+    "averageHR": 112.0,
+    "maxHR": 151.0,
+    "calories": 430.0,
+    "activityTrainingLoad": 31.0,
+    "totalSets": 31,
+    "activeSets": 24,
+    "totalReps": 212,
+    "summarizedExerciseSets": [
+        {"category": "SQUAT", "reps": 32, "volume": 2560000.0, "duration": 300000.0, "sets": 4},
+        {"category": "BENCH_PRESS", "reps": 32, "volume": 1920000, "sets": 4},
+        {"category": "PULL_UP", "reps": 21, "volume": 0, "sets": 3},
+        {"category": "PLANK", "sets": 7},
+        {"category": "", "reps": 10, "sets": 1},
+        {"category": "LUNGE", "reps": 12, "sets": 0},
+        "not an exercise",
+    ],
+}
+
+
+def test_gym_session_carries_sets_and_exercises():
+    doc = normalize_activity(GYM)
+    assert doc["sport"] == "strength"
+    assert doc["type"] == "strength_training"
+    assert doc["durationSec"] == 3720
+    assert doc["trainingLoad"] == pytest.approx(31.0)
+    assert doc["sets"] == 24
+    assert doc["reps"] == 212
+    assert doc["exercises"] == [
+        {"category": "squat", "sets": 4, "reps": 32, "volumeKg": 2560.0},
+        {"category": "bench_press", "sets": 4, "reps": 32, "volumeKg": 1920.0},
+        {"category": "pull_up", "sets": 3, "reps": 21},
+        {"category": "plank", "sets": 7},
+    ]
+
+
+def test_gym_session_without_counted_sets():
+    raw = {k: v for k, v in GYM.items() if k not in {"totalSets", "activeSets", "totalReps", "summarizedExerciseSets"}}
+    doc = normalize_activity(raw)
+    assert doc["sport"] == "strength"
+    assert doc["sets"] is None and doc["reps"] is None
+    assert "exercises" not in doc
+    # Only all the sets, rests included, when the working ones are not told apart.
+    assert normalize_activity({**raw, "totalSets": 18})["sets"] == 18
+
+
+def test_gym_weight_is_read_from_grams():
+    def volume(value, reps=10):
+        raw = {**GYM, "summarizedExerciseSets": [{"category": "ROW", "reps": reps, "volume": value, "sets": 1}]}
+        return normalize_activity(raw)["exercises"][0].get("volumeKg")
+
+    assert volume(400000) == 400.0  # 40 kg a repetition
+    assert volume(5000) == 5.0  # half-kilo weights
+    assert volume(9_000_000_000) is None  # nobody lifts that
+    assert volume(None) is None
+    assert volume(400000, reps=None) is None
+
+
+def test_other_activities_keep_their_type_and_no_gym_fields():
+    walk = normalize_activity({**RUN, "activityType": {"typeKey": "walking"}, "totalSets": 3})
+    assert walk["sport"] == "other"
+    assert walk["type"] == "walking"
+    assert "sets" not in walk and "exercises" not in walk

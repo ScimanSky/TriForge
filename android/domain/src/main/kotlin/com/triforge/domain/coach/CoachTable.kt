@@ -2,6 +2,7 @@ package com.triforge.domain.coach
 
 import com.triforge.domain.Activity
 import com.triforge.domain.AthleteProfile
+import com.triforge.domain.Formatters
 import com.triforge.domain.Sport
 import java.time.LocalDate
 import java.time.ZoneId
@@ -39,13 +40,55 @@ object CoachTable {
     /** The focus of a session of a day already gone: what the athlete did, not a plan. */
     const val DONE = "Fatta"
 
+    /** How the regia's first line of the minutes begins, see [opening]. */
+    const val OPENING = "Punto di partenza: "
+
+    /**
+     * The regia's first line of the minutes when part of the week is not the
+     * coaches' to write: what is already on the calendar because it is the
+     * athlete's own, what is in pause, and what that leaves. Null in a week
+     * of three AI coaches and no gym, where there is nothing to say.
+     */
+    fun opening(budget: WeekBudget, availability: TrainingAvailability): TableNote? {
+        // With days of their own the sessions are on the calendar; without, the regia only keeps their usual time aside.
+        val own = TriRegia.SPORTS.filter { (budget.ownMinutes[it] ?: 0) > 0 }
+        fun trainer(sport: Sport) = "di ${TriRegia.sportName(sport).lowercase()} con il tuo allenatore"
+        val gym = budget.gymMinutes > 0
+        val placed = own.filter { availability.ownDays(it).isNotEmpty() }.map(::trainer) +
+            listOfNotNull("di palestra".takeIf { gym && availability.gymDays.isNotEmpty() })
+        val aside = own.filter { availability.ownDays(it).isEmpty() }.map(::trainer) +
+            listOfNotNull("di palestra".takeIf { gym && availability.gymDays.isEmpty() })
+        val paused = TriRegia.SPORTS.filter { it in budget.paused }.map { TriRegia.sportName(it).lowercase() }
+        if (placed.isEmpty() && aside.isEmpty() && paused.isEmpty()) return null
+        val coached = budget.coached
+        val left = Formatters.duration(budget.totalMinutes * 60L)
+        val sentences = listOfNotNull(
+            "sono già in calendario le tue sedute ${inWords(placed)}, nessun coach le scrive.".takeIf { placed.isNotEmpty() },
+            "per le tue sedute ${inWords(aside)}, che non hanno giorni fissi, è tenuto da parte il tempo che ci dedichi di solito.".takeIf { aside.isNotEmpty() },
+            "${inWords(paused)} in pausa.".takeIf { paused.isNotEmpty() },
+            when (coached.size) {
+                0 -> "questa settimana nessun coach scrive sedute."
+                1 -> "al ${SportCoachPrompts.coachName(coached.first())} restano $left."
+                else -> "ai coach di ${inWords(coached.map { TriRegia.sportName(it).lowercase() })} restano $left."
+            },
+        )
+        val text = sentences.mapIndexed { index, sentence -> if (index == 0) sentence else sentence.replaceFirstChar { it.uppercase() } }.joinToString(" ")
+        return TableNote(TableVoice.REGIA, OPENING + text)
+    }
+
+    /** Whether [note] is the regia's opening line and not something it had to settle. */
+    fun isOpening(note: TableNote): Boolean = note.voice == TableVoice.REGIA && note.text.startsWith(OPENING)
+
+    private fun inWords(items: List<String>): String =
+        if (items.size <= 1) items.joinToString() else items.dropLast(1).joinToString(", ") + " e " + items.last()
+
     /** Who wins a conflict: the weak sport, then the sports by their share of the week. */
     fun priority(budget: WeekBudget): List<Sport> =
         TriRegia.SPORTS.sortedWith(compareBy({ it != budget.weakSport }, { -budget.sports.getValue(it).share }))
 
-    /** The days of the week already gone, as what the athlete really did. */
+    /** The days of the week already gone, as what the athlete really did: the three sports and the gym. */
     fun pastDays(activities: List<Activity>, weekStart: LocalDate, today: LocalDate, zone: ZoneId): List<PlannedDay> {
-        val byDay = activities.filter { it.sport in TriRegia.SPORTS }.groupBy { it.startTime.atZone(zone).toLocalDate() }
+        val byDay = activities.filter { it.sport in TriRegia.SPORTS || it.sport == Sport.STRENGTH }.groupBy { it.startTime.atZone(zone).toLocalDate() }
         return generateSequence(weekStart) { it.plusDays(1) }.takeWhile { it.isBefore(today) && it.isBefore(weekStart.plusDays(7)) }.map { date ->
             PlannedDay(
                 date,
@@ -65,7 +108,10 @@ object CoachTable {
     /**
      * The week from the three proposals: past days as they went, then every
      * coach's sessions from [today] on, each finished by the app (zones,
-     * targets, totals). On a day with bike and run the bike comes first.
+     * targets, totals), and with [withGym] the athlete's own sessions (the
+     * gym, the sports done with their trainer). A coach whose sport is not
+     * its to write has its sessions left out. On a day with bike and run the
+     * bike comes first.
      */
     fun merge(
         weekStart: LocalDate,
@@ -75,14 +121,16 @@ object CoachTable {
         budget: WeekBudget,
         profile: AthleteProfile,
         availability: TrainingAvailability,
+        withGym: Boolean = true,
     ): WeekPlan {
         val days = (0L until 7L).map { offset ->
             val date = weekStart.plusDays(offset)
             if (date.isBefore(today)) return@map past.firstOrNull { it.date == date } ?: PlannedDay(date, emptyList())
-            val sessions = proposals.flatMap { proposal ->
-                proposal.days.filter { it.date == date }.flatMap { it.sessions }.map { it.copy(sport = proposal.sport) }
+            val sessions = proposals.filter { it.sport in budget.coached }.flatMap { proposal ->
+                proposal.days.filter { it.date == date }.flatMap { it.sessions }.map { it.copy(sport = proposal.sport, own = false) }
             }
-            PlannedDay(date, order(sessions.map { Workouts.finalize(it, profile, availability.poolLengthM) }, availability))
+            val fixed = if (withGym) TriRegia.fixedSessions(availability, budget, date) else emptyList()
+            PlannedDay(date, order(sessions.map { Workouts.finalize(it, profile, availability.poolLengthM) } + fixed, availability))
         }
         return WeekPlan(
             weekStart = weekStart,
@@ -92,6 +140,24 @@ object CoachTable {
             noteForNutriAi = proposals.filter { it.noteForNutriAi.isNotBlank() }.joinToString(" ") { "${TriRegia.sportName(it.sport)}: ${it.noteForNutriAi}" },
             availableMin = budget.availableMinutes,
             maxHard = budget.maxHardSessions,
+            plannedFrom = today.coerceAtLeast(weekStart),
+        )
+    }
+
+    /**
+     * [plan] with the days before [today] as [kept] has them. The regia
+     * checks a week against what the athlete did, so while the coaches work
+     * the days gone hold the activities; the plan that is saved keeps what
+     * was planned for them, so the week can show what was done of it.
+     */
+    fun keepPlanned(plan: WeekPlan, kept: WeekPlan?, today: LocalDate): WeekPlan {
+        if (kept == null || kept.weekStart != plan.weekStart) return plan
+        val from = kept.plannedFrom ?: return plan
+        return plan.copy(
+            days = plan.days.map { day ->
+                if (day.date.isBefore(today) && !day.date.isBefore(from)) kept.day(day.date) ?: day else day
+            },
+            plannedFrom = from,
         )
     }
 
@@ -101,14 +167,16 @@ object CoachTable {
      * card and what is kept until they accept it.
      */
     fun preview(proposal: SportProposal, weekStart: LocalDate, today: LocalDate, budget: WeekBudget, profile: AthleteProfile, availability: TrainingAvailability): WeekPlan =
-        merge(weekStart, today, emptyList(), listOf(proposal), budget, profile, availability)
+        merge(weekStart, today, emptyList(), listOf(proposal), budget, profile, availability, withGym = false)
             .copy(rationale = proposal.note.ifBlank { proposal.rationale })
 
     /**
      * The week after the athlete accepted a change from one coach's chat:
      * that coach's sessions from [today] on are replaced, the other two keep
-     * theirs, and the regia checks the whole again. What it has to settle
-     * goes in the minutes, after the coach's own line.
+     * theirs, the athlete's own are put back as they are, and the regia
+     * checks the whole again, against what was really done in the days gone
+     * ([done], or what the plan holds for them). What it has to settle goes
+     * in the minutes, after the coach's own line.
      */
     fun revise(
         current: WeekPlan,
@@ -117,18 +185,23 @@ object CoachTable {
         budget: WeekBudget,
         profile: AthleteProfile,
         availability: TrainingAvailability,
+        done: List<PlannedDay>? = null,
     ): WeekPlan {
+        if (proposal.sport !in budget.coached) return current
         val upcoming = current.days.filter { !it.date.isBefore(today) }
         val others = TriRegia.SPORTS.filter { it != proposal.sport }.map { sport ->
-            SportProposal(sport, upcoming.map { day -> day.copy(sessions = day.sessions.filter { it.sport == sport }) }.filter { it.sessions.isNotEmpty() })
+            SportProposal(sport, upcoming.map { day -> day.copy(sessions = day.sessions.filter { it.sport == sport && !it.own }) }.filter { it.sessions.isNotEmpty() })
         }
         val mine = proposal.copy(days = proposal.days.filter { !it.date.isBefore(today) })
-        val joined = merge(current.weekStart, today, current.days.filter { it.date.isBefore(today) }, others + mine, budget, profile, availability)
-        val (settled, fixes) = settle(joined, budget, availability, profile, today)
+        val past = done ?: current.days.filter { it.date.isBefore(today) }
+        val joined = merge(current.weekStart, today, past, others + mine, budget, profile, availability)
+        val (checked, fixes) = settle(joined, budget, availability, profile, today)
+        val settled = keepPlanned(checked, current.copy(plannedFrom = current.plannedFrom ?: current.weekStart), today)
         val line = TableVoice.of(proposal.sport)?.let { voice ->
             TableNote(voice, "Modifica chiesta in chat" + (proposal.note.ifBlank { proposal.rationale }.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "."))
         }
         return settled.copy(
+            plannedFrom = current.plannedFrom,
             phase = current.phase,
             rationale = current.rationale,
             noteForNutriAi = proposal.noteForNutriAi.ifBlank { current.noteForNutriAi },
@@ -137,11 +210,11 @@ object CoachTable {
         )
     }
 
-    /** By the athlete's usual time when every sport of the day has one, else swim, bike, run. */
+    /** By the athlete's usual time when every sport of the day has one, else swim, bike, run, and the gym last. */
     private fun order(sessions: List<PlannedSession>, availability: TrainingAvailability): List<PlannedSession> {
         val times = sessions.map { it.sport?.let(availability::slot)?.time }
         return if (times.all { it != null }) sessions.sortedBy { it.sport?.let(availability::slot)?.time }
-        else sessions.sortedBy { TriRegia.SPORTS.indexOf(it.sport) }
+        else sessions.sortedBy { (TriRegia.SPORTS + Sport.STRENGTH).indexOf(it.sport) }
     }
 
     /**
@@ -160,9 +233,10 @@ object CoachTable {
         val notes = mutableListOf<TableNote>()
         var current = plan
         repeat(MAX_FIXES) {
-            val conflict = TriRegia.check(current, budget, availability, today, profile).firstOrNull() ?: return current to notes
-            val (next, note) = fix(current, conflict, budget, availability, profile, today, losers) ?: return current to notes
-            if (next == current) return current to notes
+            // The first conflict the app can do something about: one it cannot settle must not stop the others.
+            val (next, note) = TriRegia.check(current, budget, availability, today, profile)
+                .firstNotNullOfOrNull { conflict -> fix(current, conflict, budget, availability, profile, today, losers)?.takeIf { it.first != current } }
+                ?: return current to notes
             current = next
             notes += TableNote(TableVoice.REGIA, note)
         }
@@ -173,7 +247,7 @@ object CoachTable {
 
     private fun spots(plan: WeekPlan, today: LocalDate): List<Spot> = plan.days.flatMapIndexed { d, day ->
         if (day.date.isBefore(today)) emptyList()
-        else day.sessions.mapIndexedNotNull { i, session -> session.takeIf { it.sport in TriRegia.SPORTS && it.durationMin > 0 }?.let { Spot(d, i, it, day.date) } }
+        else day.sessions.mapIndexedNotNull { i, session -> session.takeIf { it.sport in TriRegia.SPORTS && it.durationMin > 0 && !it.own }?.let { Spot(d, i, it, day.date) } }
     }
 
     private fun WeekPlan.replace(spot: Spot, session: PlannedSession?): WeekPlan = copy(
@@ -224,7 +298,9 @@ object CoachTable {
             }
 
             RegiaRule.NO_REST_DAY -> {
-                val days = all.groupBy { it.date }
+                // Only a day without the athlete's own sessions can become rest: those are theirs, not the coaches'.
+                val gymDates = plan.days.filter { day -> day.sessions.any(TriRegia::isFixed) }.map { it.date }.toSet()
+                val days = all.filter { it.date !in gymDates }.groupBy { it.date }
                 val date = availability.restDay?.let { rest -> days.keys.firstOrNull { it.dayOfWeek == rest } }
                     ?: days.minByOrNull { (_, list) -> list.sumOf { it.session.durationMin } }?.key
                     ?: return null
@@ -233,18 +309,27 @@ object CoachTable {
             }
 
             RegiaRule.REST_DAY -> conflict.date?.let { date ->
-                plan.copy(days = plan.days.map { if (it.date == date) it.copy(sessions = emptyList()) else it }) to
+                plan.copy(days = plan.days.map { if (it.date == date) it.copy(sessions = it.sessions.filter(TriRegia::isFixed)) else it }) to
                     "${AthleteContext.dayLabel(date).replaceFirstChar { it.uppercase() }} resta libero: è il giorno di riposo che hai scelto."
             }
 
             RegiaRule.TOO_MANY_SPORTS -> all.filter { it.date == conflict.date }.minByOrNull(::rank)
-                ?.let { drop(it, "erano tre sport nello stesso giorno") }
+                ?.let { drop(it, "erano troppe sedute diverse nello stesso giorno") }
 
             RegiaRule.BRICK -> all.firstOrNull { it.date == conflict.date && it.session.sport == Sport.RUN }
                 ?.let { drop(it, "la corsa subito dopo la bici è solo in fase specifica") }
 
             RegiaRule.UNAVAILABLE_DAY -> all.firstOrNull { it.date == conflict.date && it.session.sport == conflict.sport }
-                ?.let { drop(it, "in quel giorno non puoi fare questo sport") }
+                ?.let {
+                    drop(
+                        it,
+                        when (availability.mode(it.session.sport!!)) {
+                            SportMode.PAUSED -> "questo sport è in pausa"
+                            SportMode.OWN -> "questo sport lo segui con il tuo allenatore"
+                            SportMode.AI -> "in quel giorno non puoi fare questo sport"
+                        },
+                    )
+                }
 
             RegiaRule.LONGEST_SESSION -> {
                 val spot = all.firstOrNull { it.date == conflict.date && it.session.sport == conflict.sport } ?: return null
@@ -255,11 +340,11 @@ object CoachTable {
             RegiaRule.SPORT_TIME, RegiaRule.TOTAL_TIME -> {
                 val sport = conflict.sport ?: losers.firstOrNull { loser -> all.any { it.session.sport == loser } } ?: return null
                 val mine = all.filter { it.session.sport == sport }
-                val used = plan.days.flatMap { it.sessions }.filter { it.sport in TriRegia.SPORTS }
+                val used = plan.days.flatMap { it.sessions }.filter { it.sport in budget.coached && !it.own }
                 val excess = if (conflict.rule == RegiaRule.SPORT_TIME) {
                     used.filter { it.sport == sport }.sumOf { it.durationMin } - budget.sports.getValue(sport).minutes
                 } else {
-                    used.sumOf { it.durationMin } - minOf(budget.totalMinutes, budget.availableMinutes)
+                    used.sumOf { it.durationMin } - minOf(budget.totalMinutes, budget.sportMinutesAvailable)
                 }
                 val spot = mine.maxByOrNull { it.session.durationMin } ?: return null
                 val target = spot.session.durationMin - excess

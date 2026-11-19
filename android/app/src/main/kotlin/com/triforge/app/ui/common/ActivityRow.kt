@@ -17,6 +17,7 @@ import com.triforge.app.ui.theme.numberStyle
 import com.triforge.domain.Activity
 import com.triforge.domain.ActivitySource
 import com.triforge.domain.Formatters
+import com.triforge.domain.Sport
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -32,9 +33,13 @@ fun Activity.sourceLabel(): String = stringResource(
     if (source == ActivitySource.GARMIN) R.string.source_garmin else R.string.source_health_connect,
 )
 
-/** An activity in a list: sport, title and day on the left, the headline number on the right. */
+/**
+ * An activity in a list: sport, title and day on the left, the headline
+ * number on the right. With [load], the session's load in the app's scale,
+ * the line under the number says what it counted for instead of the pace.
+ */
 @Composable
-fun ActivityRow(activity: Activity, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ActivityRow(activity: Activity, onClick: () -> Unit, modifier: Modifier = Modifier, load: Int? = null) {
     val day = remember(activity.startTime) { activity.dayLabel() }
     val hasDistance = activity.distanceMeters > 0
     val headline = if (hasDistance) {
@@ -44,14 +49,15 @@ fun ActivityRow(activity: Activity, onClick: () -> Unit, modifier: Modifier = Mo
     }
     val detail = listOfNotNull(
         Formatters.duration(activity.durationSec).takeIf { hasDistance },
-        Formatters.pace(activity.sport, activity.distanceMeters, activity.paceSec),
+        activity.sets?.takeIf { activity.sport == Sport.STRENGTH }?.let { stringResource(R.string.activity_sets, it) },
+        if (load != null) stringResource(R.string.activity_load, load) else Formatters.pace(activity.sport, activity.distanceMeters, activity.paceSec),
     ).joinToString(" · ")
 
     ListRow(modifier = modifier, onClick = onClick) {
         SportIconBox(activity.sport)
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                text = activity.name.ifBlank { stringResource(R.string.activity_untitled) },
+                text = activity.name.ifBlank { stringResource(activity.kindLabelRes()) },
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

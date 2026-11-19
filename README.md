@@ -12,6 +12,7 @@ Passo 1 del piano, le fondamenta:
 - collegamento a Garmin Connect e sincronizzazione delle attività
 - lettura da Health Connect come seconda via
 - dashboard settimanale per nuoto, bici e corsa, con andamento delle ultime 8 settimane
+- palestra e ogni altra attività registrata dall'orologio, contate nel carico
 
 Prossimi passi: coach AI di allenamento, coach AI nutrizionista (Firebase AI
 Logic), poi social e Strava.

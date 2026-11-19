@@ -2,7 +2,12 @@ package com.triforge.domain
 
 import java.time.Instant
 
-enum class Sport { SWIM, BIKE, RUN, OTHER }
+/**
+ * What a session counts as. The three disciplines, the gym (strength work
+ * that supports them) and [OTHER] for everything else the watch records:
+ * walks, hikes, yoga, cardio machines. See [OtherKind] for what an OTHER was.
+ */
+enum class Sport { SWIM, BIKE, RUN, STRENGTH, OTHER }
 
 enum class ActivitySource { GARMIN, HEALTH_CONNECT }
 
@@ -42,7 +47,20 @@ data class Activity(
     val strokeDistanceMeters: Double? = null,
     /** A swim's laps, in order, when the source recorded them. Rests are laps with no distance. */
     val laps: List<SwimLap> = emptyList(),
+    /** The source's own name for the activity type: Garmin's typeKey ("strength_training", "hiking"). */
+    val type: String = "",
+    /** What an [Sport.OTHER] session was; [OtherKind.GENERIC] when the source did not say. */
+    val kind: OtherKind = OtherKind.GENERIC,
+    /** Sets and repetitions of a gym session, when the watch counted them. */
+    val sets: Int? = null,
+    val reps: Int? = null,
+    /** A gym session's exercises, most work first, when the watch recognised them. */
+    val exercises: List<ExerciseSummary> = emptyList(),
 ) {
+    /** Kilograms lifted over the gym session (weight x repetitions), or null when no weights were recorded. */
+    val liftedKg: Double? get() = exercises.mapNotNull { it.volumeKg }.takeIf { it.isNotEmpty() }?.sum()
+
+
     /** Time in motion when the source measured it, the whole duration otherwise. */
     val movingSec: Long
         get() {
@@ -88,4 +106,14 @@ data class SwimLength(
     val strokes: Int? = null,
     val swolf: Int? = null,
     val stroke: String? = null,
+)
+
+/** One exercise of a gym session, summed over its sets. */
+data class ExerciseSummary(
+    /** The source's category, lower case: "bench_press", "squat", "pull_up". */
+    val category: String,
+    val sets: Int,
+    val reps: Int? = null,
+    /** Weight x repetitions in kilograms; null for bodyweight work. */
+    val volumeKg: Double? = null,
 )

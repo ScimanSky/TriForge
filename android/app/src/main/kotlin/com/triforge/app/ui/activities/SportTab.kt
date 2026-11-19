@@ -84,8 +84,8 @@ private data class SwimTabData(
     }
 }
 
-private val PERIODS = listOf(4, 8, 16)
-private const val DEFAULT_PERIOD = 8
+internal val PERIODS = listOf(4, 8, 16)
+internal const val DEFAULT_PERIOD = 8
 private const val RECENT_COUNT = 5
 
 /** Statistics of one discipline: headline cards, charts, then detail on demand. */
@@ -221,7 +221,7 @@ private fun KpiGrid(report: SportReport) {
 }
 
 @Composable
-private fun KpiCard(
+internal fun KpiCard(
     label: String,
     value: String,
     note: String?,
@@ -254,7 +254,7 @@ private fun KpiCard(
 }
 
 @Composable
-private fun VolumeCard(report: SportReport) {
+internal fun VolumeCard(report: SportReport, title: String = stringResource(R.string.sport_volume_title)) {
     val sport = report.sport
     val byTime = SportStats.measuresVolumeByTime(sport)
     val weekly = report.weekly
@@ -269,7 +269,7 @@ private fun VolumeCard(report: SportReport) {
 
     TriCard {
         CardHeader(
-            title = stringResource(R.string.sport_volume_title),
+            title = title,
             trailing = stringResource(if (byTime) R.string.unit_hours else R.string.unit_km),
         )
         VolumeBars(

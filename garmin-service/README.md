@@ -36,7 +36,7 @@ Tutto sotto `users/{uid}`:
 
 - `private/garmin` e `private/garminMfa`: token e stato MFA cifrati. L'app non li legge.
 - `integrations/garmin`: stato del collegamento, in sola lettura per l'app.
-- `activities/garmin_{id}`: attività normalizzate (`sport` vale `swim`, `bike`, `run` o `other`).
+- `activities/garmin_{id}`: tutte le attività registrate dall'orologio, normalizzate. `sport` vale `swim`, `bike`, `run`, `strength` (palestra) o `other`; `type` conserva il typeKey di Garmin, da cui l'app capisce cos'era un'attività `other` (camminata, escursione, yoga, cardio). Una seduta in palestra porta anche `sets`, `reps` ed `exercises` quando l'orologio ha contato le serie.
 - `wellness/garmin_{AAAA-MM-GG}`: dati di recupero di una mattina (`hrvRmssd`,
   `hrvWeeklyAvg`, `hrvStatus`, `hrvBaselineLow`/`High`, `restingHr`, `sleepSec`,
   `sleepScore`), letti con `get_hrv_data_range`, `get_rhr_daily` e

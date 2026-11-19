@@ -29,7 +29,7 @@ import com.triforge.app.ui.common.LineSeries
 import com.triforge.app.ui.common.SportIconBox
 import com.triforge.app.ui.common.StatGrid
 import com.triforge.app.ui.common.TriCard
-import com.triforge.app.ui.common.labelRes
+import com.triforge.app.ui.common.kindLabelRes
 import com.triforge.app.ui.common.sourceLabel
 import com.triforge.app.ui.theme.SportColors
 import com.triforge.domain.Activity
@@ -57,6 +57,10 @@ fun ActivityDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     cssSecPer100: Int? = null,
+    /** The session's load in the app's scale, when it has been worked out. */
+    load: Int? = null,
+    /** The athlete's weight, for what the session adds to the day's energy. */
+    weightKg: Double? = null,
 ) {
     Column(
         modifier = modifier
@@ -72,6 +76,12 @@ fun ActivityDetailScreen(
         }
 
         Header(activity, onBack)
+        if (activity.sport == Sport.STRENGTH || activity.sport == Sport.OTHER) {
+            // No pace to read: the watch's numbers, the exercises, and what the session counts for.
+            SupportSections(activity, load, weightKg)
+            EffectCard(activity)
+            return@Column
+        }
         HeadlineCard(activity, cssSecPer100)
         if (activity.sport == Sport.SWIM) SwimSections(activity, history, cssSecPer100)
         TimingCard(activity)
@@ -94,13 +104,13 @@ private fun Header(activity: Activity, onBack: () -> Unit) {
         BackButton(onBack)
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = activity.name.ifBlank { stringResource(R.string.activity_untitled) },
+                text = activity.name.ifBlank { stringResource(activity.kindLabelRes()) },
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = "${stringResource(activity.sport.labelRes())} · $start · ${activity.sourceLabel()}",
+                text = "${stringResource(activity.kindLabelRes())} · $start · ${activity.sourceLabel()}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

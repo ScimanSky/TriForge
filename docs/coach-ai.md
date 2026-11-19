@@ -144,6 +144,46 @@ Il Coach riceve la regia nella richiesta; `TriRegia.check` controlla la
 settimana, il Coach la riscrive una volta e quello che resta viene scritto
 sotto il piano. Con i tre coach di sport (fase 3) la regia resta la stessa.
 
+### Palestra, allenatore, sport in pausa
+
+Non tutta la settimana è dei coach AI. In "Giorni, orari e gara" ogni sport
+ha un modo (`SportMode`) e la palestra un interruttore:
+
+- **Coach AI**: il coach di quello sport scrive le sedute, come sopra.
+- **Mio allenatore**: l'atleta dà solo giorni e ora. La regia mette in
+  calendario una seduta per giorno (durata: la mediana delle ultime
+  settimane), il coach AI di quello sport non scrive niente: legge le sedute
+  fatte e le commenta nel verbale (`SportCoachPrompts.reviewRequest`).
+- **In pausa**: nessuna seduta e nessun coach al tavolo. La sua quota va agli
+  altri sport.
+- **Palestra** (`Sport.STRENGTH`): giorni, ora e durata li decide l'atleta. È
+  un blocco fisso come le sedute con l'allenatore (`PlannedSession.own`).
+
+Le sedute dell'atleta escono per prime dalle ore disponibili; quello che
+resta si divide tra gli sport dei coach AI, con gli stessi tetti di crescita.
+Nessun coach e nessuna chiusura della regia le sposta o le accorcia: se c'è
+un conflitto cede la seduta di un coach. Il verbale si apre con una riga
+della regia che dice cosa è già in calendario, cosa è in pausa e quanto
+resta ai coach (`CoachTable.opening`).
+
+### Previsto e fatto
+
+Il piano ricorda da quale giorno è stato scritto (`WeekPlan.plannedFrom`) e,
+quando la settimana viene rifatta, tiene per i giorni passati quello che era
+previsto (`CoachTable.keepPlanned`); la regia invece controlla sempre contro
+le attività fatte davvero. `WeekReview` mette le due cose una accanto
+all'altra: seduta fatta (stesso sport, stesso giorno) con i minuti fatti e
+previsti, seduta non fatta, attività fuori programma. La schermata della
+settimana lo mostra, i coach lo ricevono in parole quando scrivono la
+settimana o rispondono in chat.
+
+Ogni attività registrata conta: palestra e altre attività (camminata,
+escursione, yoga, cardio) entrano nel carico (`SessionLoadModel`, con un
+minimo di 36 TSS l'ora per la palestra, perché i battiti sottostimano il
+lavoro di forza), nel contesto dei coach e nel fabbisogno del giorno di
+NutriAI (`NutriEnergy.withDone`: quello che è stato registrato fuori dal
+piano si aggiunge, senza contare due volte uno sport già previsto).
+
 ## Tre coach, un tavolo
 
 La settimana non la scrive più un coach solo. La scrivono tre agenti, uno

@@ -87,7 +87,9 @@ object WeekGlanceModel {
         fun meanOf(weeks: List<List<Activity>>, measure: (List<Activity>) -> Double): Double? =
             if (weeks.isEmpty()) null else weeks.sumOf(measure) / weeks.size
 
-        val sports = TrainingStats.triathlonSports.map { sport ->
+        // The three disciplines always have a row; the gym and the other
+        // activities only when the athlete does them.
+        val sports = TrainingStats.allSports.map { sport ->
             SportWeekGlance(
                 sport = sport,
                 sessions = thisWeek.count { it.sport == sport },
@@ -95,7 +97,7 @@ object WeekGlanceModel {
                 usualToDate = meanOf(refToDate) { volume(it, sport) },
                 usualWeek = meanOf(refWhole) { volume(it, sport) },
             )
-        }
+        }.filter { it.sport in TrainingStats.triathlonSports || it.sessions > 0 || (it.usualWeek ?: 0.0) > 0.0 }
 
         val days = (0 until 7).map { offset ->
             val date = weekStart.plusDays(offset.toLong())

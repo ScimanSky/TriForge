@@ -27,6 +27,7 @@ import com.triforge.domain.coach.TableVoice
 import com.triforge.domain.coach.TriRegia
 import com.triforge.domain.coach.WeekBudget
 import com.triforge.domain.coach.WeekPlan
+import com.triforge.domain.coach.WeekReview
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
@@ -117,11 +118,16 @@ class CoachViewModel(
     }
 
     /**
-     * The three sport coaches write the week at one table. First round: each
+     * The sport coaches write the week at one table. First round: each
      * proposes its own sessions, in parallel, inside the regia's limits. The
-     * app joins the three and checks them; if a rule is broken, a second
+     * app joins them with the athlete's own sessions (the gym, a sport done
+     * with a trainer) and checks the whole; if a rule is broken, a second
      * round shows each coach the others' proposals and what to fix. What is
      * still open after that the app settles itself, and says so.
+     *
+     * A sport in pause has nobody at the table. The coach of a sport done
+     * with a trainer writes nothing: it reads the sessions done and comments
+     * them in the minutes.
      */
     fun planWeek() = run(CoachTask.PLANNING) {
         val weekStart = thisWeek()
@@ -134,9 +140,14 @@ class CoachViewModel(
         val described = AthleteContext.describe(data)
         val past = CoachTable.pastDays(data.activities, weekStart, today, data.zone)
         val done = CoachTable.doneMinutes(past)
+        // The week as written so far: its days gone are kept, and the coaches are told what was done of it.
+        val previous = repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == weekStart }
+        val review = previous?.let { reviewOf(it, data) }.orEmpty()
+        val writers = budget.coached
+        val readers = TriRegia.SPORTS.filter { it in budget.own }
 
-        suspend fun ask(first: List<SportProposal>, conflicts: List<RegiaConflict>): List<SportProposal> = coroutineScope {
-            TriRegia.SPORTS.map { sport ->
+        suspend fun ask(first: List<SportProposal>, comments: List<SportProposal>, conflicts: List<RegiaConflict>): List<SportProposal> = coroutineScope {
+            writers.map { sport ->
                 async {
                     val request = SportCoachPrompts.weekRequest(
                         sport = sport,
@@ -147,27 +158,47 @@ class CoachViewModel(
                         budget = budget,
                         doneMinutes = done[sport] ?: 0,
                         nutri = nutri.brief,
-                        others = first.filter { it.sport != sport },
+                        others = (first + comments).filter { it.sport != sport },
                         own = first.firstOrNull { it.sport == sport },
                         conflicts = conflicts,
                         recentChat = chats[sport].orEmpty().takeLast(RECENT_MESSAGES).map { it.message },
+                        review = review,
                     )
                     sportCoaches.getValue(sport).plan(request)
                 }
             }.awaitAll()
         }
-        fun join(proposals: List<SportProposal>) =
-            CoachTable.merge(weekStart, today, past, proposals, budget, data.profile, data.availability)
+
+        /** What the coaches of the sports done with a trainer say of the sessions done. A week does not fail for a comment. */
+        suspend fun read(): List<SportProposal> = coroutineScope {
+            readers.map { sport ->
+                async {
+                    try {
+                        val request = SportCoachPrompts.reviewRequest(sport, described, today, regia, nutri.brief, review)
+                        sportCoaches.getValue(sport).plan(request).copy(sport = sport, days = emptyList())
+                    } catch (e: CoachException) {
+                        null
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
 
         tableRound.value = 1
-        var proposals = ask(emptyList(), emptyList())
+        val (first, comments) = coroutineScope {
+            val reading = async { read() }
+            ask(emptyList(), emptyList(), emptyList()) to reading.await()
+        }
+        fun join(proposals: List<SportProposal>) =
+            CoachTable.merge(weekStart, today, past, proposals + comments, budget, data.profile, data.availability)
+
+        var proposals = first
         var plan = join(proposals)
         var rounds = 1
         val conflicts = TriRegia.check(plan, budget, data.availability, today, data.profile)
-        if (conflicts.isNotEmpty()) {
+        if (conflicts.isNotEmpty() && writers.isNotEmpty()) {
             tableRound.value = 2
             try {
-                proposals = ask(proposals, conflicts)
+                proposals = ask(proposals, comments, conflicts)
                 plan = join(proposals)
                 rounds = 2
             } catch (e: CoachException) {
@@ -175,18 +206,24 @@ class CoachViewModel(
             }
         }
         val (settled, fixes) = CoachTable.settle(plan, budget, data.availability, data.profile, today)
-        // Three empty answers on a week with nothing done yet is not a plan.
-        if (past.all { it.sessions.isEmpty() } && settled.days.all { it.sessions.isEmpty() }) {
+        // Empty answers from every coach on a week with nothing done yet is not a plan.
+        if (writers.isNotEmpty() && budget.totalMinutes > 0 && past.all { it.sessions.isEmpty() } && settled.days.all { day -> day.sessions.none { !it.own } }) {
             throw CoachException(CoachException.Reason.BAD_ANSWER)
         }
-        val minutes = CoachTable.priority(budget).mapNotNull { sport ->
-            val proposal = proposals.firstOrNull { it.sport == sport } ?: return@mapNotNull null
+        val said = proposals + comments
+        val minutes = listOfNotNull(CoachTable.opening(budget, data.availability)) + CoachTable.priority(budget).mapNotNull { sport ->
+            val proposal = said.firstOrNull { it.sport == sport } ?: return@mapNotNull null
             val text = proposal.note.ifBlank { proposal.rationale }
             TableVoice.of(sport)?.takeIf { text.isNotBlank() }?.let { TableNote(it, text) }
         } + fixes + listOfNotNull(nutri.brief?.noteForPartner?.takeIf { it.isNotBlank() }?.let { TableNote(TableVoice.NUTRI, it) })
-        val agreed = settled.copy(table = minutes, rounds = rounds)
+        // The regia checked the week against what was done; what is saved keeps what was planned for the days gone.
+        val agreed = CoachTable.keepPlanned(settled, previous, today).copy(table = minutes, rounds = rounds)
         repository.saveWeekPlan(uid, agreed, CoachBriefs.of(agreed, today))
     }
+
+    /** The days gone of [plan] in words: what was planned and what the athlete did of it. */
+    private fun reviewOf(plan: WeekPlan, data: AthleteData): String =
+        WeekReview.of(plan, data.activities, data.today, data.zone).describe(data.today)
 
     /** A message to one sport coach, in its own chat. */
     fun send(sport: Sport, text: String) {
@@ -216,6 +253,7 @@ class CoachViewModel(
                 budget = budget,
                 nutri = nutri.brief,
                 message = message,
+                review = plan?.let { reviewOf(it, data) }.orEmpty(),
             )
             val reply = sportCoaches.getValue(sport).reply(history, turn)
             // Kept as the athlete will see it: only this coach's sessions from today on, with targets and totals.
@@ -245,7 +283,16 @@ class CoachViewModel(
         val proposal = entry.proposal?.let { CoachMapper.sportProposalFromFields(it, sport, weekStart) } ?: return@run
         val current = repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == weekStart } ?: return@run
         val data = athlete.current()
-        val revised = CoachTable.revise(current, proposal, data.today, weekBudget(data, weekStart), data.profile, data.availability)
+        val revised = CoachTable.revise(
+            current = current,
+            proposal = proposal,
+            today = data.today,
+            budget = weekBudget(data, weekStart),
+            profile = data.profile,
+            availability = data.availability,
+            // The regia checks the change against what was really done in the days gone.
+            done = CoachTable.pastDays(data.activities, weekStart, data.today, data.zone),
+        )
         repository.saveWeekPlan(uid, revised, CoachBriefs.of(revised, data.today))
         repository.setProposalStatus(uid, sport, entry.id, ProposalStatus.APPLIED)
     }
