@@ -513,7 +513,7 @@
     <string name="onboarding_feature_recovery_title">Carico e recupero</string>
     <string name="onboarding_feature_recovery_body">HRV, frequenza a riposo, sonno e check-in ti dicono quando spingere e quando mollare.</string>
     <string name="onboarding_feature_coach_title">Coach AI, presto</string>
-    <string name="onboarding_feature_coach_body">Un allenatore e un nutrizionista che costruiscono la settimana su di te.</string>
+    <string name="onboarding_feature_coach_body">Un allenatore e NutriAI, il nutrizionista, che costruiscono la settimana su di te.</string>
     <string name="onboarding_feature_privacy_title">Privacy prima di tutto</string>
     <string name="onboarding_feature_privacy_body">Decidi tu cosa condividere. Copia ed eliminazione dei dati in un tocco.</string>
     <string name="onboarding_start">Iniziamo</string>
