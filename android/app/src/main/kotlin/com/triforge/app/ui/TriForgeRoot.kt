@@ -266,7 +266,13 @@ private fun SignedIn(uid: String, container: AppContainer) {
                 )
             }
             composable(Tab.ACTIVITIES.route) {
-                ActivitiesScreen(state = training, garmin = profile.garmin, onOpenActivity = openActivity)
+                ActivitiesScreen(
+                    state = training,
+                    garmin = profile.garmin,
+                    onOpenActivity = openActivity,
+                    cssSecPer100 = profile.stored.cssSecPer100m,
+                    onUseCss = profileViewModel::useCss,
+                )
             }
             composable(Tab.COACH.route) {
                 CoachScreen(
@@ -347,6 +353,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
                         activity = activities.firstOrNull { it.id == id },
                         history = activities,
                         onBack = { navController.popBackStack() },
+                        cssSecPer100 = profile.stored.cssSecPer100m,
                     )
                 }
             }

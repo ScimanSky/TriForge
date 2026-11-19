@@ -140,3 +140,90 @@ def test_unplaceable_activities_are_dropped(raw):
 
 def test_document_id_is_stable():
     assert document_id(987) == "garmin_987"
+
+
+# -- swim laps --------------------------------------------------------------
+
+POOL_SWIM = {
+    "activityId": 555,
+    "activityName": "Soglia 5 x 200",
+    "startTimeGMT": "2026-11-12 06:10:00",
+    "activityType": {"typeKey": "lap_swimming"},
+    "distance": 400.0,
+    "duration": 500.0,
+    "movingDuration": 440.0,
+    "poolLength": 2500.0,
+    "averageSwolf": 37.0,
+    "strokes": 260.0,
+    "activeLengths": 16,
+    "avgStrokeDistance": 1.71,
+}
+
+
+def _length(seconds, strokes, stroke="FREESTYLE"):
+    return {
+        "distance": 25.0,
+        "duration": seconds,
+        "totalNumberOfStrokes": strokes,
+        "averageSWOLF": seconds + strokes,
+        "swimStroke": stroke,
+    }
+
+
+SPLITS = {
+    "lapDTOs": [
+        {
+            "distance": 200.0,
+            "duration": 214.3,
+            "totalNumberOfStrokes": 120,
+            "averageSWOLF": 42,
+            "averageHR": 140.0,
+            "maxHR": 151.0,
+            "lengthDTOs": [_length(26.8, 15) for _ in range(7)]
+            + [_length(26.7, 16, "BACKSTROKE")],
+        },
+        {"distance": 0.0, "duration": 30.2},
+        {"distance": 200.0, "duration": 225.7, "lengthDTOs": [{"duration": None}]},
+    ]
+}
+
+
+def test_swim_without_splits_has_no_laps_key():
+    doc = normalize_activity(POOL_SWIM)
+    assert doc["strokeDistanceMeters"] == pytest.approx(1.71)
+    assert "laps" not in doc
+    assert "hasLaps" not in doc
+
+
+def test_swim_laps_are_normalized():
+    doc = normalize_activity(POOL_SWIM, SPLITS)
+    assert doc["hasLaps"] is True
+    first, rest, third = doc["laps"]
+    assert first["distanceMeters"] == 200.0
+    assert first["durationSec"] == 214.3
+    assert first["strokes"] == 120
+    assert first["swolf"] == 42
+    assert first["avgHr"] == 140
+    assert first["stroke"] == "free"
+    assert len(first["lengths"]) == 8
+    assert first["lengths"][-1] == {
+        "distanceMeters": 25.0,
+        "durationSec": 26.7,
+        "strokes": 16,
+        "swolf": 43,
+        "stroke": "back",
+    }
+    assert rest == {"distanceMeters": 0.0, "durationSec": 30.2}
+    # Lengths without a duration are dropped, and with them the list.
+    assert "lengths" not in third
+
+
+def test_swim_with_empty_splits_is_marked_as_read():
+    doc = normalize_activity(POOL_SWIM, {"lapDTOs": []})
+    assert doc["laps"] == []
+    assert doc["hasLaps"] is False
+
+
+def test_splits_on_a_run_are_ignored():
+    doc = normalize_activity(RUN, SPLITS)
+    assert "laps" not in doc

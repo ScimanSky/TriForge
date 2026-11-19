@@ -64,7 +64,17 @@ Campi di un'attività: `source` (`garmin` o `health_connect`), `sport` (`swim`,
 più i campi opzionali `elevationGainMeters`, `avgHr`, `maxHr`, `calories`,
 `movingDurationSec`, `avgSpeedMps`, `avgPowerWatts`, `trainingLoad`, `aerobicTe`,
 `vo2max` e, per il nuoto, `poolLengthMeters`, `swolf`, `strokes`, `lengths`,
-`openWater`.
+`openWater`, `strokeDistanceMeters`, `laps` e `hasLaps`.
+
+`laps` sono le ripetute di una nuotata Garmin, nell'ordine: `distanceMeters`,
+`durationSec`, e se misurati `strokes`, `swolf`, `avgHr`, `maxHr`, `stroke`
+(`free`, `back`, `breast`, `fly`, `drill`, `mixed`) e `lengths`, le vasche con gli
+stessi campi. Un recupero a bordo vasca è un giro senza distanza. Il servizio le
+legge con una richiesta in più per nuotata (al massimo 25 per sincronizzazione,
+le più recenti prima) e non le rilegge quando `hasLaps` è vero. Dalle ripetute
+l'app ricava passo per ripetuta, zone di passo sulla CSS, tenuta del passo e
+della bracciata, carico vasca per vasca e la CSS stimata (`SwimAnalysis`, idee
+riprese da SwimForge). Health Connect non dà le ripetute.
 
 `durationSec` è il tempo del cronometro, pause comprese; `movingDurationSec` è
 il tempo in movimento. Il passo del nuoto si legge sul tempo in movimento,

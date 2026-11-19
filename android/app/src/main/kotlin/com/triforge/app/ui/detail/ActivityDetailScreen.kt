@@ -35,6 +35,7 @@ import com.triforge.app.ui.theme.SportColors
 import com.triforge.domain.Activity
 import com.triforge.domain.Formatters
 import com.triforge.domain.Sport
+import com.triforge.domain.SwimAnalysis
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -55,6 +56,7 @@ fun ActivityDetailScreen(
     history: List<Activity>,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    cssSecPer100: Int? = null,
 ) {
     Column(
         modifier = modifier
@@ -70,7 +72,8 @@ fun ActivityDetailScreen(
         }
 
         Header(activity, onBack)
-        HeadlineCard(activity)
+        HeadlineCard(activity, cssSecPer100)
+        if (activity.sport == Sport.SWIM) SwimSections(activity, history, cssSecPer100)
         TimingCard(activity)
         ComparisonCard(activity, history)
         HeartRateCard(activity)
@@ -112,7 +115,7 @@ private fun oneDecimal(value: Double): String = "%.1f".format(Locale.ITALY, valu
 
 /** The six numbers an athlete looks for first. Only those the source gave are shown. */
 @Composable
-private fun HeadlineCard(activity: Activity) {
+private fun HeadlineCard(activity: Activity, cssSecPer100: Int?) {
     val sport = activity.sport
     val stats = buildList {
         if (activity.distanceMeters > 0) {
@@ -131,12 +134,25 @@ private fun HeadlineCard(activity: Activity) {
             }
             add(value to label)
         }
-        activity.avgHr?.let { add(it.toString() to stringResource(R.string.metric_avg_hr)) }
+        if (sport == Sport.SWIM) {
+            // In the water the wrist sensor is unreliable: the stroke tells more.
+            activity.swolf?.takeIf { it > 0 }?.let { add(it.toString() to stringResource(R.string.metric_swolf)) }
+            SwimAnalysis.metersPerStroke(activity)?.let {
+                add("%.2f".format(Locale.ITALY, it) to stringResource(R.string.swim_headline_dps))
+            }
+        } else {
+            activity.avgHr?.let { add(it.toString() to stringResource(R.string.metric_avg_hr)) }
+        }
         activity.elevationGainMeters?.takeIf { it > 0 }?.let {
             add(whole(it) to stringResource(R.string.detail_elevation))
         }
-        activity.trainingLoad?.takeIf { it > 0 }?.let {
-            add(whole(it) to stringResource(R.string.detail_load))
+        val lapLoad = if (sport == Sport.SWIM) SwimAnalysis.lapTss(activity, cssSecPer100) else null
+        if (lapLoad != null) {
+            add(whole(lapLoad) to stringResource(R.string.swim_headline_tss))
+        } else {
+            activity.trainingLoad?.takeIf { it > 0 }?.let {
+                add(whole(it) to stringResource(R.string.detail_load))
+            }
         }
     }
     TriCard { StatGrid(stats) }

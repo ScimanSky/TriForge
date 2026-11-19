@@ -78,8 +78,14 @@ def document_id(garmin_activity_id: Any) -> str:
     return f"garmin_{garmin_activity_id}"
 
 
-def normalize_activity(raw: dict[str, Any]) -> dict[str, Any] | None:
+def normalize_activity(
+    raw: dict[str, Any], splits: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
     """Return the Firestore document for one Garmin activity.
+
+    ``splits`` is Garmin's lap breakdown of a swim, when it was read. Without
+    it the document carries no ``laps`` key, so laps stored by an earlier
+    sync are kept (documents are merged, not replaced).
 
     Returns None when the activity has no id or no start time, because it
     could not be placed on a timeline or deduplicated.
@@ -132,8 +138,111 @@ def normalize_activity(raw: dict[str, Any]) -> dict[str, Any] | None:
         doc["swolf"] = _rounded(raw.get("averageSwolf"))
         doc["strokes"] = _rounded(raw.get("strokes"))
         doc["lengths"] = _rounded(raw.get("activeLengths"))
+        doc["strokeDistanceMeters"] = _positive(raw.get("avgStrokeDistance"))
+        if splits is not None:
+            laps = normalize_swim_laps(splits)
+            doc["laps"] = laps
+            doc["hasLaps"] = bool(laps)
 
     return doc
+
+
+# -- swim laps --------------------------------------------------------------
+
+# Garmin's swimStroke values, shortened. Anything else is kept lower-cased.
+_STROKES = {
+    "FREESTYLE": "free",
+    "BACKSTROKE": "back",
+    "BREASTSTROKE": "breast",
+    "BUTTERFLY": "fly",
+    "DRILL": "drill",
+    "MIXED": "mixed",
+    "IM": "mixed",
+}
+
+
+def _stroke(value: Any) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    return _STROKES.get(value.upper(), value.lower())
+
+
+def _compact(fields: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in fields.items() if value is not None}
+
+
+def normalize_swim_laps(splits: dict[str, Any]) -> list[dict[str, Any]]:
+    """Garmin's ``lapDTOs`` as the ``laps`` list of a swim document.
+
+    In a pool swim each lap is one interval between presses of the lap button
+    and a rest at the wall is a lap with no distance; each lap holds its pool
+    lengths. In open water the laps are the watch's auto laps and carry no
+    lengths. Per lap:
+
+    - ``distanceMeters``, ``durationSec``: the rest of a rest lap is its time.
+    - ``strokes``, ``swolf``, ``avgHr``, ``maxHr``, ``stroke`` when measured;
+      ``stroke`` is the one swum over most lengths.
+    - ``lengths``: ``distanceMeters``, ``durationSec``, ``strokes``,
+      ``swolf``, ``stroke`` per length.
+    """
+    raw_laps = splits.get("lapDTOs") if isinstance(splits, dict) else None
+    if not isinstance(raw_laps, list):
+        return []
+    laps: list[dict[str, Any]] = []
+    for raw in raw_laps:
+        if not isinstance(raw, dict):
+            continue
+        duration = _positive(raw.get("duration"))
+        if duration is None:
+            continue
+        lengths = []
+        for length in raw.get("lengthDTOs") or []:
+            if not isinstance(length, dict):
+                continue
+            length_duration = _positive(length.get("duration"))
+            if length_duration is None:
+                continue
+            lengths.append(
+                _compact(
+                    {
+                        "distanceMeters": _number(length.get("distance")) or 0.0,
+                        "durationSec": round(length_duration, 1),
+                        "strokes": _rounded(_positive(length.get("totalNumberOfStrokes"))),
+                        "swolf": _rounded(
+                            _positive(length.get("averageSWOLF", length.get("averageSwolf")))
+                        ),
+                        "stroke": _stroke(length.get("swimStroke")),
+                    }
+                )
+            )
+        strokes_by_type: dict[str, float] = {}
+        for length in lengths:
+            if "stroke" in length:
+                strokes_by_type[length["stroke"]] = (
+                    strokes_by_type.get(length["stroke"], 0.0) + length["distanceMeters"]
+                )
+        stroke = (
+            max(strokes_by_type, key=strokes_by_type.get)
+            if strokes_by_type
+            else _stroke(raw.get("swimStroke"))
+        )
+        laps.append(
+            _compact(
+                {
+                    "distanceMeters": _number(raw.get("distance")) or 0.0,
+                    "durationSec": round(duration, 1),
+                    "strokes": _rounded(_positive(raw.get("totalNumberOfStrokes"))),
+                    "swolf": _rounded(
+                        _positive(raw.get("averageSWOLF", raw.get("averageSwolf")))
+                    ),
+                    "avgHr": _rounded(_positive(raw.get("averageHR"))),
+                    "maxHr": _rounded(_positive(raw.get("maxHR"))),
+                    "stroke": stroke,
+                    "lengths": lengths or None,
+                }
+            )
+        )
+    return laps
 
 
 # -- daily recovery data ----------------------------------------------------

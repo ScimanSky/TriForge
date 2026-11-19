@@ -44,6 +44,10 @@ class Store(Protocol):
 
     def upsert_wellness(self, uid: str, docs: dict[str, dict[str, Any]]) -> None: ...
 
+    def swims_with_laps(self, uid: str) -> Iterable[str]:
+        """Garmin ids of the swims whose laps are already stored."""
+        ...
+
     def disconnect(self, uid: str) -> None: ...
 
     def connected_uids(self) -> Iterable[str]: ...
@@ -91,6 +95,13 @@ class MemoryStore:
         bucket = self.activities.setdefault(uid, {})
         for doc_id, doc in docs.items():
             bucket.setdefault(doc_id, {}).update(doc)
+
+    def swims_with_laps(self, uid: str) -> Iterable[str]:
+        return [
+            doc["externalId"]
+            for doc in self.activities.get(uid, {}).values()
+            if doc.get("hasLaps") and doc.get("externalId")
+        ]
 
     def upsert_wellness(self, uid: str, docs: dict[str, dict[str, Any]]) -> None:
         bucket = self.wellness.setdefault(uid, {})
@@ -161,6 +172,20 @@ class FirestoreStore:
 
     def upsert_wellness(self, uid: str, docs: dict[str, dict[str, Any]]) -> None:
         self._upsert(uid, "wellness", docs)
+
+    def swims_with_laps(self, uid: str) -> Iterable[str]:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        query = (
+            self._user(uid)
+            .collection("activities")
+            .where(filter=FieldFilter("hasLaps", "==", True))
+            .select(["externalId"])
+        )
+        for snapshot in query.stream():
+            external_id = (snapshot.to_dict() or {}).get("externalId")
+            if external_id:
+                yield str(external_id)
 
     def _upsert(self, uid: str, name: str, docs: dict[str, dict[str, Any]]) -> None:
         collection = self._user(uid).collection(name)
