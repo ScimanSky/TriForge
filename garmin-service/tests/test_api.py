@@ -23,7 +23,10 @@ def client(settings, store, gateway) -> TestClient:
 
 
 def test_health(client):
-    assert client.get("/healthz").json() == {"status": "ok"}
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
 
 
 @pytest.mark.parametrize(
