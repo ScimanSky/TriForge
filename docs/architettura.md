@@ -52,6 +52,8 @@ users/{uid}                       profilo atleta
   activities/{garmin_ID | hc_ID}  attività normalizzate
   wellness/{garmin_DATA | hc_DATA} HRV, FC a riposo e sonno di una mattina
   checkIns/{DATA}                 check-in del mattino dell'atleta
+  consentLog/{id}                 storico dei consensi, solo aggiunte (prova ex art. 7 GDPR)
+  media/avatar                    foto profilo, JPEG 384×384 ritagliato sul telefono
   integrations/garmin             stato del collegamento (sola lettura per l'app)
   private/garmin                  token Garmin cifrati (solo server)
   private/garminMfa               stato MFA in attesa, cifrato (solo server)
@@ -108,3 +110,12 @@ Mancano ancora, perché servono dati che oggi non vengono salvati: mappa e
 grafici interni all'attività (tracce e parziali), tempo nelle zone, sonno e HRV,
 usura dell'attrezzatura. Coach, nutrizione e social arrivano con i passi
 successivi del piano.
+
+## Account, consensi e privacy
+
+Il documento `users/{uid}` contiene anche `displayName`, `bio`, `birthYear`,
+`onboardingCompletedAt` e la mappa `consents` (`terms`, `health`, `aiCoach`,
+ognuno con `granted`, `version`, `at`). Finché mancano i consensi obbligatori
+per la versione corrente dei testi (`LegalTexts.VERSION`) l'app mostra il
+primo accesso o la sola pagina dei consensi (`Onboarding.gate` nel modulo
+`domain`). Dettagli e scelte in [privacy.md](privacy.md).

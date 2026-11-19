@@ -386,13 +386,14 @@
     <string name="profile_photo">Foto profilo</string>
     <string name="profile_no_name">Atleta</string>
     <string name="profile_edit">Modifica profilo</string>
-    <string name="profile_badge_hours">%1$s h a settimana</string>
+    <string name="profile_badge_hours">%1$s h/sett.</string>
     <string name="profile_race_card">Gara obiettivo</string>
     <string name="profile_race_unnamed">Gara senza nome</string>
     <string name="profile_race_day">giorno</string>
     <string name="profile_race_days">giorni</string>
     <string name="profile_training_title">Il tuo allenamento</string>
     <string name="profile_training_empty">Collega Garmin o Health Connect: qui vedrai ore, sedute e come dividi il tempo tra nuoto, bici e corsa.</string>
+    <string name="profile_sessions">sedute</string>
     <string name="profile_split_title">Come dividi il tempo</string>
     <string name="profile_split_chart">Ripartizione del tempo tra nuoto, bici e corsa: %1$s.</string>
     <string name="profile_active_weeks">Settimane con almeno un allenamento</string>
@@ -456,7 +457,7 @@
     <string name="privacy_your_data">I tuoi dati</string>
     <string name="privacy_stored_title">Cosa c\'è nel tuo account</string>
     <string name="privacy_stored_activities">attività</string>
-    <string name="privacy_stored_wellness">giorni di recupero</string>
+    <string name="privacy_stored_wellness">notti</string>
     <string name="privacy_stored_checkins">check-in</string>
     <string name="privacy_stored_where">Su server Google Cloud nell\'Unione europea (Belgio). Le copie temporanee sul telefono si cancellano con l\'account.</string>
     <string name="privacy_export">Scarica i tuoi dati</string>

@@ -170,7 +170,7 @@ private fun Hero(
             profile.weeklyHours?.let {
                 add(TriIcons.Activity to stringResource(R.string.profile_badge_hours, ProfileText.formatDecimal(it)))
             }
-            if (garminConnected) add(TriIcons.Watch to stringResource(R.string.garmin_title))
+            if (garminConnected) add(TriIcons.Watch to stringResource(R.string.source_garmin))
         }
         if (badges.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -260,9 +260,9 @@ private fun TrainingCard(summary: ProfileSummary) {
         )
         StatGrid(
             stats = listOf(
-                Formatters.hours(summary.durationSec) to stringResource(R.string.unit_hours),
-                summary.sessions.toString() to stringResource(R.string.sport_kpi_sessions),
-                Formatters.kilometers(summary.distanceMeters) to stringResource(R.string.unit_km),
+                (summary.durationSec / 3600.0).roundToInt().toString() to stringResource(R.string.unit_hours),
+                summary.sessions.toString() to stringResource(R.string.profile_sessions),
+                (summary.distanceMeters / 1000.0).roundToInt().toString() to stringResource(R.string.unit_km),
             ),
             modifier = Modifier.padding(top = 14.dp),
         )
