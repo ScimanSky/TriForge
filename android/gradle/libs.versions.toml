@@ -10,6 +10,8 @@ healthConnect = "1.1.0"
 credentials = "1.5.0"
 googleId = "1.1.1"
 firebaseBom = "34.0.0"
+# Beta, so the BoM does not manage it.
+firebaseAppDistribution = "16.0.0-beta21"
 googleServices = "4.4.3"
 coroutines = "1.10.2"
 junit = "4.13.2"
@@ -34,6 +36,8 @@ compose-material3 = { module = "androidx.compose.material3:material3" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-auth = { module = "com.google.firebase:firebase-auth" }
 firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
+firebase-appdistribution-api = { module = "com.google.firebase:firebase-appdistribution-api", version.ref = "firebaseAppDistribution" }
+firebase-appdistribution = { module = "com.google.firebase:firebase-appdistribution", version.ref = "firebaseAppDistribution" }
 
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }

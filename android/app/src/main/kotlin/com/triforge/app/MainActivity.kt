@@ -24,4 +24,10 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        val container = (application as TriForgeApp).container
+        if (container.firebaseConfigured) container.updater.checkOnOpen()
+    }
 }
