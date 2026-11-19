@@ -311,7 +311,7 @@ object TriRegia {
     }
 
     /** Bike then run on the same day, in the order the plan lists them. */
-    private fun isBrick(sessions: List<PlannedSession>): Boolean {
+    fun isBrick(sessions: List<PlannedSession>): Boolean {
         val bike = sessions.indexOfFirst { it.sport == Sport.BIKE }
         return bike >= 0 && sessions.drop(bike + 1).any { it.sport == Sport.RUN }
     }
