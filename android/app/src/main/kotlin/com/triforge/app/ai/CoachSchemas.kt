@@ -8,6 +8,29 @@ import com.google.firebase.ai.type.Schema
  */
 object CoachSchemas {
 
+    /** What a coach answers when it sends the athlete to nobody. */
+    private const val NO_HANDOFF = "none"
+
+    /**
+     * What a coach answers in its chat: the reply, a change to its plan when
+     * it proposes one, and a note for the other coaches. Only a coach that may
+     * send the athlete to someone else ([handoffs] not empty) has the
+     * `handoff` field: an optional name without its property is refused by
+     * the library when the schema is built.
+     */
+    fun chatReply(planSchema: Schema, handoffs: List<String>): Schema {
+        val handoff: Map<String, Schema> =
+            if (handoffs.isEmpty()) emptyMap() else mapOf("handoff" to Schema.enumeration(handoffs + NO_HANDOFF))
+        return Schema.obj(
+            properties = mapOf(
+                "reply" to Schema.string(description = "La risposta all'atleta, in italiano"),
+                "proposal" to planSchema,
+                "noteForPartner" to Schema.string(description = "Nota per gli altri coach, o vuoto"),
+            ) + handoff,
+            optionalProperties = listOf("proposal", "noteForPartner") + handoff.keys,
+        )
+    }
+
     /**
      * What one sport coach writes: its own sessions as structured workouts.
      * No sport, duration or targets: the app knows the first and computes the

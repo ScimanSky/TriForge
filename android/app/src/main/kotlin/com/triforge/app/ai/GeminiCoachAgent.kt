@@ -55,20 +55,7 @@ class GeminiCoachAgent<P : Any>(
 
     private val planModel = model(planSchema, PLAN_TEMPERATURE)
 
-    private val chatModel = model(
-        Schema.obj(
-            properties = buildMap {
-                put("reply", Schema.string(description = "La risposta all'atleta, in italiano"))
-                put("proposal", planSchema)
-                put("noteForPartner", Schema.string(description = "Nota per gli altri coach, o vuoto"))
-                if (handoffs.isNotEmpty()) {
-                    put("handoff", Schema.enumeration(handoffs + NO_HANDOFF))
-                }
-            },
-            optionalProperties = listOf("proposal", "noteForPartner", "handoff"),
-        ),
-        CHAT_TEMPERATURE,
-    )
+    private val chatModel = model(CoachSchemas.chatReply(planSchema, handoffs), CHAT_TEMPERATURE)
 
     override suspend fun plan(request: String): P {
         val fields = call { planModel.generateContent(request).text }
@@ -119,7 +106,6 @@ class GeminiCoachAgent<P : Any>(
     private companion object {
         const val PLAN_TEMPERATURE = 0.4f
         const val CHAT_TEMPERATURE = 0.6f
-        const val NO_HANDOFF = "none"
 
         /** Earlier messages sent with each chat turn: enough to follow the thread, not the whole history. */
         const val MAX_HISTORY = 20
