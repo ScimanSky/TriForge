@@ -394,7 +394,7 @@ private fun Chips(content: @Composable () -> Unit) {
 @Composable
 private fun ShareBar(shares: Map<Sport, Double>) {
     val percent = TriRegia.SPORTS.associateWith { ((shares[it] ?: 0.0) * 100).roundToInt() }
-    val description = TriRegia.SPORTS.joinToString(", ") { "${sportName(it)} ${percent.getValue(it)}%" }
+    val description = TriRegia.SPORTS.map { "${sportName(it)} ${percent.getValue(it)}%" }.joinToString(", ")
     Row(
         modifier = Modifier
             .fillMaxWidth()
