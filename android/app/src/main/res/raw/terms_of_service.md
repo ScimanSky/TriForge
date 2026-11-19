@@ -1,11 +1,11 @@
 <!-- BOZZA da far verificare a un professionista prima della pubblicazione. I campi tra parentesi quadre vanno completati. -->
 # Termini di servizio
 
-Versione 2026-11-19. Questi termini regolano l'uso dell'app TriForge, fornita da **[NOME E COGNOME O RAGIONE SOCIALE]**, [INDIRIZZO] ("noi"). Creando un account li accetti.
+Versione 2026-11-19.2. Questi termini regolano l'uso dell'app TriForge, fornita da **[NOME E COGNOME O RAGIONE SOCIALE]**, [INDIRIZZO] ("noi"). Creando un account li accetti.
 
 ## 1. Il servizio
 
-TriForge raccoglie i tuoi dati di allenamento da Garmin Connect e da Health Connect e li mostra come statistiche di nuoto, bici e corsa, con indici di forma, carico e recupero. Funzioni come il coach AI, il nutrizionista e la sezione social arriveranno in seguito. L'app è in fase di prova ed è gratuita: può cambiare, avere errori o restare temporaneamente non disponibile.
+TriForge raccoglie i tuoi dati di allenamento da Garmin Connect e da Health Connect e li mostra come statistiche di nuoto, bici e corsa, con indici di forma, carico e recupero. Se lo attivi, il Coach AI propone la settimana di allenamento e NutriAI, il nutrizionista AI, gli obiettivi nutrizionali e i pasti. La sezione social arriverà in seguito. L'app è in fase di prova ed è gratuita: può cambiare, avere errori o restare temporaneamente non disponibile.
 
 ## 2. Account
 

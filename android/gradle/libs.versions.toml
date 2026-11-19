@@ -36,6 +36,7 @@ compose-material3 = { module = "androidx.compose.material3:material3" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-auth = { module = "com.google.firebase:firebase-auth" }
 firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
+firebase-ai = { module = "com.google.firebase:firebase-ai" }
 firebase-appdistribution-api = { module = "com.google.firebase:firebase-appdistribution-api", version.ref = "firebaseAppDistribution" }
 firebase-appdistribution = { module = "com.google.firebase:firebase-appdistribution", version.ref = "firebaseAppDistribution" }
 

@@ -59,6 +59,27 @@ service cloud.firestore {
           && request.resource.data.sick is bool;
       }
 
+      // The two AI coaches. Each has its own document (plan, brief for the
+      // other coach, and for NutriAI the eating profile) and its own chat.
+      // Only the athlete's app writes here, and only while signed in.
+      match /coaching/{role} {
+        allow read, write: if isOwner(uid) && role in ['coach', 'nutriai'];
+
+        match /messages/{messageId} {
+          function validMessage() {
+            return request.resource.data.keys().hasOnly(['from', 'text', 'at', 'proposal', 'status'])
+              && request.resource.data.from in ['athlete', 'coach']
+              && request.resource.data.text is string
+              && request.resource.data.text.size() <= 8000;
+          }
+          allow read, delete: if isOwner(uid);
+          allow create: if isOwner(uid) && role in ['coach', 'nutriai'] && validMessage()
+            && request.resource.data.at == request.time;
+          allow update: if isOwner(uid) && validMessage()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+        }
+      }
+
       // Consent history: one entry per answer, never changed or removed by
       // the app, so TriForge can show what the athlete agreed to and when
       // (art. 7(1) GDPR). The server erases it with the account.

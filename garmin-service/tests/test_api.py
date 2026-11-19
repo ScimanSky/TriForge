@@ -219,7 +219,7 @@ def _connect_and_sync(client, gateway, store, uid="user-1"):
     )
     client.post("/garmin/sync", headers=headers)
     store.app_data.setdefault(uid, {}).update(
-        {"profile": {"displayName": "Ada"}, "checkIns": {"2026-11-18": {}}}
+        {"profile": {"displayName": "Ada"}, "checkIns": {"2026-11-18": {}}, "coaching": {"coach": {}}}
     )
 
 
@@ -239,6 +239,7 @@ def test_withdrawing_health_consent_erases_health_data_and_disconnects(client, g
     assert store.status["user-1"] == {"connected": False}
     assert "user-1" not in store.activities
     assert "checkIns" not in store.app_data["user-1"]
+    assert "coaching" not in store.app_data["user-1"]
     # The account itself stays.
     assert store.app_data["user-1"]["profile"] == {"displayName": "Ada"}
     # Nobody else is touched.

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_coach">Coach</string>
+    <string name="nav_nutri">NutriAI</string>
+
+    <!-- Shared by both coaches -->
+    <string name="coach_consent_title">Attiva il coach AI</string>
+    <string name="coach_consent_hint">Puoi spegnerlo quando vuoi da Impostazioni › Privacy e dati. Il Coach e NutriAI non vedono mai il tuo nome, la tua email o la tua foto.</string>
+    <string name="coach_consent_action">Acconsento e attivo</string>
+    <string name="coach_error_network">Il coach non risponde. Controlla la connessione e riprova.</string>
+    <string name="coach_error_busy">Troppe richieste in poco tempo. Riprova tra un minuto.</string>
+    <string name="coach_error_not_enabled">Il servizio AI non è ancora attivo sul progetto. Riprova più tardi.</string>
+    <string name="coach_error_bad_answer">La risposta del coach non era utilizzabile. Riprova.</string>
+    <string name="coach_error_blocked">Il coach non può rispondere a questa richiesta. Prova a riformularla.</string>
+    <string name="coach_retry">Riprova</string>
+    <string name="coach_close">Chiudi</string>
+    <string name="coach_send">Invia</string>
+    <string name="coach_apply">Applica</string>
+    <string name="coach_ignore">Ignora</string>
+    <string name="coach_applied">Applicato</string>
+    <string name="coach_dismissed">Ignorato</string>
+
+    <!-- Coach -->
+    <string name="coach_title">Coach</string>
+    <string name="coach_subtitle">Allenamento</string>
+    <string name="coach_subtitle_race">Allenamento · %1$s tra %2$d settimane</string>
+    <string name="coach_race_default">gara obiettivo</string>
+    <string name="coach_tab_week">Settimana</string>
+    <string name="coach_tab_chat">Chat</string>
+    <string name="coach_planning">Il Coach sta preparando la settimana…</string>
+    <string name="coach_thinking">Il Coach sta scrivendo…</string>
+    <string name="coach_no_plan">Il Coach non ha ancora preparato questa settimana.</string>
+    <string name="coach_plan_week">Prepara la settimana</string>
+    <string name="coach_replan">Rifai la settimana</string>
+    <string name="coach_ask_change">Chiedi una modifica</string>
+    <string name="coach_why_week">Perché questa settimana</string>
+    <string name="coach_from_nutriai">Nota di NutriAI</string>
+    <string name="coach_rest">Riposo</string>
+    <string name="coach_today">Oggi</string>
+    <string name="coach_chat_empty">Chiedi al Coach di spostare una seduta, di spiegarti un allenamento o di come sta andando la settimana.</string>
+    <string name="coach_suggest_tired">Sono stanco oggi</string>
+    <string name="coach_suggest_short">Ho solo 45 minuti</string>
+    <string name="coach_suggest_review">Com\'è andata la settimana?</string>
+    <string name="coach_composer">Scrivi al coach…</string>
+
+    <!-- NutriAI -->
+    <string name="nutri_title">NutriAI</string>
+    <string name="nutri_subtitle">Il tuo nutrizionista, legge il piano di allenamento</string>
+    <string name="nutri_profile">Profilo alimentare</string>
+    <string name="nutri_planning">NutriAI sta preparando la giornata…</string>
+    <string name="nutri_replanning">Il Coach ha cambiato il piano: NutriAI aggiorna la giornata…</string>
+    <string name="nutri_thinking">NutriAI sta scrivendo…</string>
+    <string name="nutri_no_day">NutriAI non ha ancora preparato la giornata di oggi.</string>
+    <string name="nutri_plan_day">Prepara la giornata</string>
+    <string name="nutri_today">Oggi</string>
+    <string name="nutri_carbs">Carboidrati</string>
+    <string name="nutri_protein">Proteine</string>
+    <string name="nutri_fat">Grassi</string>
+    <string name="nutri_fuel">Carburante per gli allenamenti</string>
+    <string name="nutri_fuel_for">Carburante per %1$s</string>
+    <string name="nutri_meals">Pasti suggeriti</string>
+    <string name="nutri_why">Perché questi numeri</string>
+    <string name="nutri_from_coach">Nota del Coach</string>
+    <string name="nutri_composer">Chiedi a NutriAI…</string>
+    <string name="nutri_proposal">Nuovi obiettivi: %1$s kcal · carboidrati %2$d g · proteine %3$d g · grassi %4$d g</string>
+    <string name="nutri_profile_first_title">Raccontami come mangi</string>
+    <string name="nutri_profile_first_body">NutriAI costruisce i pasti sul piano del Coach e sul tuo modo di mangiare. Bastano pochi dati, li cambi quando vuoi.</string>
+    <string name="nutri_profile_title">Profilo alimentare</string>
+    <string name="nutri_profile_diet">Alimentazione</string>
+    <string name="nutri_profile_avoid">Intolleranze, allergie, cibi da evitare</string>
+    <string name="nutri_profile_avoid_hint">Es. lattosio, frutta a guscio</string>
+    <string name="nutri_profile_meals">Pasti al giorno</string>
+    <string name="nutri_profile_goal">Obiettivo</string>
+    <string name="nutri_profile_notes">Altro da sapere</string>
+    <string name="nutri_profile_notes_hint">Es. pranzo in ufficio, mi alleno a digiuno</string>
+    <string name="nutri_profile_save">Salva</string>
+</resources>

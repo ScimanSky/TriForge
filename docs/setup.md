@@ -42,6 +42,17 @@ comando `gcloud run deploy` del punto 3. Il controllo di vita è
 6. Passa al piano Blaze: serve per Cloud Run. Con l'uso di una persona o di
    pochi amici si resta quasi sempre nella fascia gratuita.
 
+7. Attiva **Firebase AI Logic** con il backend Vertex AI Gemini API, che
+   serve al Coach e a NutriAI (piano Blaze necessario):
+
+   ```bash
+   gcloud services enable firebasevertexai.googleapis.com aiplatform.googleapis.com --project <id-progetto>
+   ```
+
+   L'app usa `gemini-2.5-flash` nella regione `europe-west1`. Per cambiarli
+   senza toccare il codice, in `android/local.properties`:
+   `triforge.aiModel=<modello>` e `triforge.aiLocation=<regione>`.
+
 ## 2. Regole e indici di Firestore
 
 ```bash

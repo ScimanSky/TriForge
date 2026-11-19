@@ -20,7 +20,9 @@ from typing import Any, Iterable, Protocol
 BATCH_LIMIT = 400
 
 # What the athlete's health consent covers: deleted when it is withdrawn.
-HEALTH_COLLECTIONS = ("activities", "wellness", "checkIns")
+# "coaching" holds the AI coaches' plans, chats and the eating profile, all
+# built on health data.
+HEALTH_COLLECTIONS = ("activities", "wellness", "checkIns", "coaching")
 
 
 class Store(Protocol):
@@ -106,7 +108,8 @@ class MemoryStore:
     def delete_health_data(self, uid: str) -> None:
         self.activities.pop(uid, None)
         self.wellness.pop(uid, None)
-        self.app_data.get(uid, {}).pop("checkIns", None)
+        for name in ("checkIns", "coaching"):
+            self.app_data.get(uid, {}).pop(name, None)
 
     def delete_user(self, uid: str) -> None:
         for bucket in (self.tokens, self.mfa, self.status, self.activities, self.wellness, self.app_data):
