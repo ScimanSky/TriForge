@@ -37,7 +37,7 @@ vengono riscalati e l'affidabilità scende.
 
 Il carico di ogni seduta è in TSS equivalenti (100 = un'ora alla soglia):
 potenza e FTP per la bici, passo soglia per la corsa, CSS per il nuoto (al
-cubo), altrimenti il Training Load di Garmin riscalato sulle sedute
+cubo, sul tempo effettivamente nuotato e non su quello totale), altrimenti il Training Load di Garmin riscalato sulle sedute
 dell'atleta, altrimenti la sola durata. Per questo FTP, passo soglia e CSS nel
 profilo rendono il calcolo più preciso.
 

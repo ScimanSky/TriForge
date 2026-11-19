@@ -71,8 +71,9 @@ def test_pool_swim_keeps_swim_fields():
             "startTimeGMT": "2026-03-15 18:00:00",
             "activityType": {"typeKey": "lap_swimming"},
             "distance": 2000.0,
-            "duration": 2400.0,
-            "poolLength": 25.0,
+            "duration": 3900.0,
+            "movingDuration": 2400.4,
+            "poolLength": 2500.0,
             "averageSwolf": 38.6,
             "strokes": 1480.0,
             "activeLengths": 80,
@@ -81,8 +82,34 @@ def test_pool_swim_keeps_swim_fields():
     assert doc["sport"] == "swim"
     assert doc["openWater"] is False
     assert doc["poolLengthMeters"] == 25.0
+    assert doc["durationSec"] == 3900
+    # The time spent swimming: the app reads the pace on this one.
+    assert doc["movingDurationSec"] == 2400
     assert doc["swolf"] == 39
     assert doc["lengths"] == 80
+
+
+@pytest.mark.parametrize(
+    ("raw", "meters"),
+    [
+        (2500.0, 25.0),  # centimetres, as Garmin sends it
+        (5000.0, 50.0),
+        (2286.0, 22.86),  # 25 yd
+        (25.0, 25.0),  # already metres
+        (0.0, None),
+        (None, None),
+    ],
+)
+def test_pool_length_is_stored_in_metres(raw, meters):
+    doc = normalize_activity(
+        {
+            "activityId": 1,
+            "startTimeGMT": "2026-03-15 18:00:00",
+            "activityType": {"typeKey": "lap_swimming"},
+            "poolLength": raw,
+        }
+    )
+    assert doc["poolLengthMeters"] == meters
 
 
 def test_missing_optional_values_become_none_not_zero():

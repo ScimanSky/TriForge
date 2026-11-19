@@ -110,6 +110,25 @@ class SportStatsTest {
     }
 
     @Test
+    fun `swim pace and records leave out the rests at the wall`() {
+        val swims = listOf(
+            // 2000 m in 40 minutes of swimming, an hour in the water: 2:00/100 m.
+            activity("easy", Sport.SWIM, "2026-11-16T12:00:00Z", durationSec = 3600, distanceMeters = 2000.0, movingDurationSec = 2400),
+            // 1000 m in 15 minutes of swimming with long rests: 1:30/100 m.
+            activity("sets", Sport.SWIM, "2026-11-18T12:00:00Z", durationSec = 3600, distanceMeters = 1000.0, movingDurationSec = 900),
+        )
+
+        val report = SportStats.report(swims, Sport.SWIM, weeks = 1, today = today, zone = rome, loadedWeeks = 16)
+
+        assertEquals(7200, report.durationSec)
+        assertEquals(3300, report.paceSec)
+        assertEquals("1:50", Formatters.paceValue(Sport.SWIM, report.distanceMeters, report.paceSec))
+        assertEquals(3300.0 / 3000.0, report.weekly.single().secondsPerMeter!!, 1e-9)
+        // On total time both would read 3:00 and 6:00 and "easy" would win.
+        assertEquals("sets", report.records.first { it.kind == RecordKind.FASTEST }.activity.id)
+    }
+
+    @Test
     fun `no records without activities`() {
         val report = SportStats.report(emptyList(), Sport.RUN, weeks = 4, today = today, zone = rome, loadedWeeks = 16)
 

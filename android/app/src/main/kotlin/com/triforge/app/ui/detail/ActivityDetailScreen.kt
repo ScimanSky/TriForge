@@ -71,6 +71,7 @@ fun ActivityDetailScreen(
 
         Header(activity, onBack)
         HeadlineCard(activity)
+        TimingCard(activity)
         ComparisonCard(activity, history)
         HeartRateCard(activity)
         TechniqueCard(activity)
@@ -122,7 +123,7 @@ private fun HeadlineCard(activity: Activity) {
             }
         }
         add(Formatters.clock(activity.durationSec) to stringResource(R.string.detail_time))
-        Formatters.paceValue(sport, activity.distanceMeters, activity.durationSec)?.let { value ->
+        Formatters.paceValue(sport, activity.distanceMeters, activity.paceSec)?.let { value ->
             val label = if (sport == Sport.BIKE) {
                 Formatters.paceUnit(sport)
             } else {
@@ -141,17 +142,69 @@ private fun HeadlineCard(activity: Activity) {
     TriCard { StatGrid(stats) }
 }
 
+/**
+ * Total time against time in motion, and the pace on each. Shown when the
+ * source measured the time in motion and the two differ enough to matter:
+ * a pool session with rests, a ride with a café stop.
+ */
+@Composable
+private fun TimingCard(activity: Activity) {
+    val rest = activity.restSec ?: return
+    if (rest < MIN_REST_SEC || activity.durationSec <= 0) return
+    val sport = activity.sport
+    val isSpeed = sport == Sport.BIKE
+    val movingPace = Formatters.pace(sport, activity.distanceMeters, activity.movingSec)
+    val totalPace = Formatters.pace(sport, activity.distanceMeters, activity.durationSec)
+
+    CollapsibleCard(
+        title = stringResource(
+            when {
+                movingPace == null -> R.string.detail_timing_title
+                isSpeed -> R.string.detail_timing_title_speed
+                else -> R.string.detail_timing_title_pace
+            },
+        ),
+        summary = stringResource(R.string.detail_timing_summary, Formatters.clock(activity.movingSec)),
+        initiallyExpanded = true,
+    ) {
+        KeyValueRow(stringResource(R.string.detail_total_time), Formatters.clock(activity.durationSec))
+        KeyValueRow(stringResource(R.string.detail_moving_time), Formatters.clock(activity.movingSec))
+        KeyValueRow(stringResource(R.string.detail_rest_time), Formatters.clock(rest))
+        if (movingPace != null && totalPace != null) {
+            KeyValueRow(
+                stringResource(if (isSpeed) R.string.detail_moving_speed else R.string.detail_moving_pace),
+                movingPace,
+            )
+            KeyValueRow(
+                stringResource(if (isSpeed) R.string.detail_total_speed else R.string.detail_total_pace),
+                totalPace,
+            )
+        }
+        if (sport == Sport.SWIM) {
+            Text(
+                text = stringResource(R.string.detail_timing_swim_caption),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+/** Under a minute of stops is noise, not a second pace worth showing. */
+private const val MIN_REST_SEC = 60L
+
 /** This session's pace or speed next to the previous ones of the same sport. */
 @Composable
 private fun ComparisonCard(activity: Activity, history: List<Activity>) {
     val sport = activity.sport
-    if (sport == Sport.OTHER || activity.distanceMeters <= 0 || activity.durationSec <= 0) return
+    if (sport == Sport.OTHER || activity.distanceMeters <= 0 || activity.paceSec <= 0) return
     val isSpeed = sport == Sport.BIKE
 
     val sessions = remember(activity.id, history) {
         history
             .filter {
-                it.sport == sport && it.distanceMeters > 0 && it.durationSec > 0 &&
+                it.sport == sport && it.distanceMeters > 0 && it.paceSec > 0 &&
                     !it.startTime.isAfter(activity.startTime)
             }
             .take(HISTORY_COUNT)
@@ -160,12 +213,12 @@ private fun ComparisonCard(activity: Activity, history: List<Activity>) {
     if (sessions.size < 3) return
 
     val values = sessions.map {
-        val secondsPerMeter = it.durationSec / it.distanceMeters
+        val secondsPerMeter = it.paceSec / it.distanceMeters
         (if (isSpeed) 3.6 / secondsPerMeter else secondsPerMeter).toFloat()
     }
-    val best = sessions.minBy { it.durationSec / it.distanceMeters }
-    val thisPace = Formatters.pace(sport, activity.distanceMeters, activity.durationSec).orEmpty()
-    val bestPace = Formatters.pace(sport, best.distanceMeters, best.durationSec).orEmpty()
+    val best = sessions.minBy { it.paceSec / it.distanceMeters }
+    val thisPace = Formatters.pace(sport, activity.distanceMeters, activity.paceSec).orEmpty()
+    val bestPace = Formatters.pace(sport, best.distanceMeters, best.paceSec).orEmpty()
 
     TriCard {
         CardHeader(
@@ -238,7 +291,9 @@ private fun TechniqueCard(activity: Activity) {
             add(stringResource(R.string.metric_water) to stringResource(R.string.metric_open_water))
         } else {
             activity.poolLengthMeters?.takeIf { it > 0 }?.let {
-                add(stringResource(R.string.metric_pool) to stringResource(R.string.unit_m_value, whole(it)))
+                // A 25 yd pool is 22,86 m: whole metres only when it is whole.
+                val length = if (it % 1.0 == 0.0) whole(it) else oneDecimal(it)
+                add(stringResource(R.string.metric_pool) to stringResource(R.string.unit_m_value, length))
             }
         }
     }

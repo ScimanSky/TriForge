@@ -11,12 +11,14 @@ data class WeekVolume(
     val sessions: Int,
     val distanceMeters: Double,
     val durationSec: Long,
+    /** Seconds the week's pace is measured over, see [Activity.paceSec]. */
+    val paceSec: Long = durationSec,
 ) {
     /** ISO week number, the label athletes know from their watch. */
     val weekNumber: Int get() = weekStart.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
 
     /** Seconds per metre over the whole week, or null without distance. */
-    val secondsPerMeter: Double? get() = if (distanceMeters > 0 && durationSec > 0) durationSec / distanceMeters else null
+    val secondsPerMeter: Double? get() = if (distanceMeters > 0 && paceSec > 0) paceSec / distanceMeters else null
 }
 
 enum class RecordKind { LONGEST_DISTANCE, LONGEST_DURATION, FASTEST }
@@ -30,6 +32,8 @@ data class SportReport(
     val sessions: Int,
     val distanceMeters: Double,
     val durationSec: Long,
+    /** Seconds the period's pace is measured over, see [Activity.paceSec]. */
+    val paceSec: Long,
     val elevationGainMeters: Double,
     /** Volume of the period before this one; null when it was not loaded. */
     val previousDistanceMeters: Double?,
@@ -97,7 +101,13 @@ object SportStats {
             val start = periodStart.plusWeeks(index.toLong())
             val end = start.plusWeeks(1)
             val inWeek = current.filter { val d = dateOf(it); !d.isBefore(start) && d.isBefore(end) }
-            WeekVolume(start, inWeek.size, inWeek.sumOf { it.distanceMeters }, inWeek.sumOf { it.durationSec })
+            WeekVolume(
+                weekStart = start,
+                sessions = inWeek.size,
+                distanceMeters = inWeek.sumOf { it.distanceMeters },
+                durationSec = inWeek.sumOf { it.durationSec },
+                paceSec = paceSeconds(inWeek),
+            )
         }
 
         return SportReport(
@@ -106,6 +116,7 @@ object SportStats {
             sessions = current.size,
             distanceMeters = current.sumOf { it.distanceMeters },
             durationSec = current.sumOf { it.durationSec },
+            paceSec = paceSeconds(current),
             elevationGainMeters = current.sumOf { it.elevationGainMeters ?: 0.0 },
             previousDistanceMeters = previous?.sumOf { it.distanceMeters },
             previousDurationSec = previous?.sumOf { it.durationSec },
@@ -118,6 +129,13 @@ object SportStats {
         )
     }
 
+    /**
+     * Pace time of the sessions that have a distance. One without it (an
+     * indoor ride with no speed sensor) would slow the average for nothing.
+     */
+    private fun paceSeconds(activities: List<Activity>): Long =
+        activities.filter { it.distanceMeters > 0 }.sumOf { it.paceSec }
+
     /** Best efforts among all loaded activities of the sport. */
     private fun records(activities: List<Activity>, sport: Sport): List<PersonalRecord> {
         val withDistance = activities.filter { it.distanceMeters > 0 }
@@ -126,8 +144,8 @@ object SportStats {
             withDistance.maxByOrNull { it.distanceMeters }?.let { PersonalRecord(RecordKind.LONGEST_DISTANCE, it) },
             activities.filter { it.durationSec > 0 }.maxByOrNull { it.durationSec }
                 ?.let { PersonalRecord(RecordKind.LONGEST_DURATION, it) },
-            withDistance.filter { it.distanceMeters >= minimum && it.durationSec > 0 }
-                .minByOrNull { it.durationSec / it.distanceMeters }
+            withDistance.filter { it.distanceMeters >= minimum && it.paceSec > 0 }
+                .minByOrNull { it.paceSec / it.distanceMeters }
                 ?.let { PersonalRecord(RecordKind.FASTEST, it) },
         )
     }

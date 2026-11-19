@@ -60,8 +60,16 @@ users/{uid}                       profilo atleta
 Campi di un'attività: `source` (`garmin` o `health_connect`), `sport` (`swim`,
 `bike`, `run`, `other`), `name`, `startTime`, `durationSec`, `distanceMeters`,
 più i campi opzionali `elevationGainMeters`, `avgHr`, `maxHr`, `calories`,
-`avgSpeedMps`, `avgPowerWatts`, `trainingLoad`, `aerobicTe`, `vo2max` e, per il
-nuoto, `poolLengthMeters`, `swolf`, `strokes`, `lengths`, `openWater`.
+`movingDurationSec`, `avgSpeedMps`, `avgPowerWatts`, `trainingLoad`, `aerobicTe`,
+`vo2max` e, per il nuoto, `poolLengthMeters`, `swolf`, `strokes`, `lengths`,
+`openWater`.
+
+`durationSec` è il tempo del cronometro, pause comprese; `movingDurationSec` è
+il tempo in movimento. Il passo del nuoto si legge sul tempo in movimento,
+perché le pause a bordo vasca fanno parte della seduta e non del passo; bici e
+corsa restano sul cronometro, come l'orologio. Il dettaglio di un'attività
+mostra entrambi. Garmin dà la lunghezza della vasca in centimetri: il servizio
+la salva in metri.
 
 Le regole in `firebase/firestore.rules` permettono all'app di scrivere solo le
 attività di Health Connect: quelle di Garmin le scrive soltanto il server.
