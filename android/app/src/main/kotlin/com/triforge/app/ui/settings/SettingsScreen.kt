@@ -1,6 +1,12 @@
 package com.triforge.app.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
+import com.triforge.app.ui.common.Avatar
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -65,12 +71,18 @@ fun SettingsScreen(
                 .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            AccountHeader(
+                name = accountState.account.displayName,
+                email = accountState.email,
+                avatar = accountState.avatar,
+                onClick = onEditProfile,
+            )
+
             SectionLabel(stringResource(R.string.settings_account))
             SettingsGroup {
                 SettingsRow(
                     icon = TriIcons.Person,
                     title = stringResource(R.string.settings_profile),
-                    subtitle = accountState.email.ifBlank { null },
                     onClick = onEditProfile,
                 )
                 if (accountState.usesPassword) {
@@ -128,6 +140,7 @@ fun SettingsScreen(
                 SettingsRow(
                     icon = TriIcons.SignOut,
                     title = stringResource(R.string.profile_sign_out),
+                    danger = true,
                     onClick = profile::signOut,
                     trailing = null,
                 )
@@ -141,6 +154,38 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .padding(top = 8.dp),
             )
+        }
+    }
+}
+
+/** Who is signed in, as at the top of the design: photo, name and email; opens the profile editor. */
+@Composable
+private fun AccountHeader(name: String, email: String, avatar: ByteArray?, onClick: () -> Unit) {
+    SettingsGroup {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(16.dp),
+        ) {
+            Avatar(jpeg = avatar, name = name.ifBlank { email }, size = 52.dp)
+            Column(modifier = Modifier.weight(1f)) {
+                if (name.isNotBlank()) {
+                    Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (email.isNotBlank()) {
+                    Text(
+                        email,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Icon(TriIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
