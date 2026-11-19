@@ -102,6 +102,9 @@ dependencies {
     // the SDK that downloads and installs. It must never ship to a store.
     implementation(libs.firebase.appdistribution.api)
     debugImplementation(libs.firebase.appdistribution)
+    // The SDK's install screen is an AppCompat activity and needs an AppCompat
+    // theme, which the debug manifest gives it.
+    debugImplementation(libs.androidx.appcompat)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
