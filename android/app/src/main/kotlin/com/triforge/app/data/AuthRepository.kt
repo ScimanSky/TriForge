@@ -64,6 +64,28 @@ class AuthRepository(
             .await()
     }
 
+    /** True when the athlete signs in with email and password, so a reset email makes sense. */
+    val usesPassword: Boolean
+        get() = auth.currentUser?.providerData.orEmpty().any { it.providerId == "password" }
+
+    suspend fun sendPasswordReset(email: String) {
+        auth.sendPasswordResetEmail(email.trim()).await()
+    }
+
+    /** Keeps the name on the login in step with the one on the profile. */
+    suspend fun updateDisplayName(name: String) {
+        val user = auth.currentUser ?: return
+        user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name).build()).await()
+    }
+
+    /**
+     * Deletes the login from the phone. Only a fallback: the service deletes
+     * it with the data. Firebase refuses when the last sign-in is too old.
+     */
+    suspend fun deleteLogin() {
+        auth.currentUser?.delete()?.await()
+    }
+
     fun signOut() = auth.signOut()
 
     /** A fresh ID token for calls to the Garmin service. */

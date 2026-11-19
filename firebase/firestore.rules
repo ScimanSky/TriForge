@@ -8,7 +8,9 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      // Athlete profile.
+      // Athlete profile, account and current consents. Deleting the account
+      // goes through the server, which also removes what the app cannot
+      // reach (Garmin tokens) and the login.
       allow read, create, update: if isOwner(uid);
       allow delete: if false;
 
@@ -55,6 +57,30 @@ service cloud.firestore {
           && item('sleepQuality') && item('fatigue') && item('soreness')
           && item('stress') && item('motivation')
           && request.resource.data.sick is bool;
+      }
+
+      // Consent history: one entry per answer, never changed or removed by
+      // the app, so TriForge can show what the athlete agreed to and when
+      // (art. 7(1) GDPR). The server erases it with the account.
+      match /consentLog/{entryId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['type', 'granted', 'version', 'at'])
+          && request.resource.data.type in ['terms', 'health', 'aiCoach']
+          && request.resource.data.granted is bool
+          && request.resource.data.version is string
+          && request.resource.data.at == request.time;
+        allow update, delete: if false;
+      }
+
+      // Profile photo: one small JPEG, cropped and compressed on the phone.
+      match /media/{name} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && name == 'avatar'
+          && request.resource.data.keys().hasOnly(['jpeg', 'updatedAt'])
+          && request.resource.data.jpeg is bytes
+          && request.resource.data.jpeg.size() <= 262144;
       }
 
       // Connection status of external sources. Written only by the server.

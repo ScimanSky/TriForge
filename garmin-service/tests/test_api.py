@@ -15,10 +15,34 @@ def verify(token: str) -> str:
     return token.removeprefix("token-for-")
 
 
+class FakeUserDeleter:
+    """Stands in for Firebase Auth's admin API."""
+
+    def __init__(self) -> None:
+        self.deleted: list[str] = []
+        self.error: Exception | None = None
+
+    def __call__(self, uid: str) -> None:
+        if self.error:
+            raise self.error
+        self.deleted.append(uid)
+
+
 @pytest.fixture
-def client(settings, store, gateway) -> TestClient:
+def deleter() -> FakeUserDeleter:
+    return FakeUserDeleter()
+
+
+@pytest.fixture
+def client(settings, store, gateway, deleter) -> TestClient:
     return TestClient(
-        create_app(settings=settings, store=store, gateway=gateway, verify_token=verify)
+        create_app(
+            settings=settings,
+            store=store,
+            gateway=gateway,
+            verify_token=verify,
+            delete_user=deleter,
+        )
     )
 
 
@@ -177,8 +201,73 @@ def test_sync_all_is_disabled_without_a_configured_secret(store, gateway, settin
         store=store,
         gateway=gateway,
         verify_token=verify,
+        delete_user=FakeUserDeleter(),
     )
 
     response = TestClient(app).post("/internal/sync-all", headers={"X-Scheduler-Secret": ""})
 
     assert response.status_code == 403
+
+
+def _connect_and_sync(client, gateway, store, uid="user-1"):
+    gateway.activities = [activity(1)]
+    headers = {"Authorization": f"Bearer token-for-{uid}"}
+    client.post(
+        "/garmin/connect",
+        json={"email": "ada@example.com", "password": "pw"},
+        headers=headers,
+    )
+    client.post("/garmin/sync", headers=headers)
+    store.app_data.setdefault(uid, {}).update(
+        {"profile": {"displayName": "Ada"}, "checkIns": {"2026-11-18": {}}}
+    )
+
+
+@pytest.mark.parametrize("path", ["/account", "/account/health-data"])
+def test_privacy_endpoints_require_a_firebase_token(client, path):
+    assert client.delete(path).status_code == 401
+
+
+def test_withdrawing_health_consent_erases_health_data_and_disconnects(client, gateway, store):
+    _connect_and_sync(client, gateway, store)
+    _connect_and_sync(client, gateway, store, uid="user-2")
+
+    response = client.delete("/account/health-data", headers=AUTH)
+
+    assert response.json() == {"status": "deleted"}
+    assert "user-1" not in store.tokens
+    assert store.status["user-1"] == {"connected": False}
+    assert "user-1" not in store.activities
+    assert "checkIns" not in store.app_data["user-1"]
+    # The account itself stays.
+    assert store.app_data["user-1"]["profile"] == {"displayName": "Ada"}
+    # Nobody else is touched.
+    assert "garmin_1" in store.activities["user-2"]
+    assert "user-2" in store.tokens
+
+
+def test_deleting_the_account_erases_everything_and_the_login(client, gateway, store, deleter):
+    _connect_and_sync(client, gateway, store)
+    _connect_and_sync(client, gateway, store, uid="user-2")
+
+    response = client.delete("/account", headers=AUTH)
+
+    assert response.json() == {"dataDeleted": True, "authDeleted": True}
+    assert deleter.deleted == ["user-1"]
+    for bucket in (store.tokens, store.status, store.activities, store.app_data):
+        assert "user-1" not in bucket
+        assert "user-2" in bucket
+    # The scheduled sync no longer sees the deleted athlete.
+    assert list(store.connected_uids()) == ["user-2"]
+
+
+def test_account_data_is_erased_even_if_the_login_cannot_be_deleted(client, gateway, store, deleter):
+    _connect_and_sync(client, gateway, store)
+    deleter.error = PermissionError("no admin rights")
+
+    response = client.delete("/account", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.json() == {"dataDeleted": True, "authDeleted": False}
+    assert "user-1" not in store.activities
+    assert "user-1" not in store.tokens

@@ -258,7 +258,7 @@ private val GoogleMark: ImageVector by lazy {
 
 /** Three bars, one per discipline, and the name. */
 @Composable
-private fun Wordmark() {
+fun Wordmark() {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
