@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.triforge.app.R
+import com.triforge.app.ui.RecoveryState
 import com.triforge.app.ui.TrainingState
 import com.triforge.app.ui.common.ActivityRow
 import com.triforge.app.ui.common.CardHeader
@@ -43,6 +44,7 @@ import com.triforge.app.ui.common.SectionLabel
 import com.triforge.app.ui.common.StatCell
 import com.triforge.app.ui.common.TriCard
 import com.triforge.app.ui.common.labelRes
+import com.triforge.app.ui.recovery.RecoveryCard
 import com.triforge.app.ui.theme.SportColors
 import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.TriIcons
@@ -69,10 +71,13 @@ private val headerDate = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALY
 @Composable
 fun TodayScreen(
     state: TrainingState,
+    recovery: RecoveryState,
     name: String,
     onOpenProfile: () -> Unit,
     onOpenActivity: (String) -> Unit,
     onOpenStats: () -> Unit,
+    onOpenRecovery: () -> Unit,
+    onCheckIn: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (state) {
@@ -82,10 +87,13 @@ fun TodayScreen(
 
         is TrainingState.Loaded -> Dashboard(
             activities = state.activities,
+            recovery = recovery,
             name = name,
             onOpenProfile = onOpenProfile,
             onOpenActivity = onOpenActivity,
             onOpenStats = onOpenStats,
+            onOpenRecovery = onOpenRecovery,
+            onCheckIn = onCheckIn,
             modifier = modifier,
         )
     }
@@ -94,10 +102,13 @@ fun TodayScreen(
 @Composable
 private fun Dashboard(
     activities: List<Activity>,
+    recovery: RecoveryState,
     name: String,
     onOpenProfile: () -> Unit,
     onOpenActivity: (String) -> Unit,
     onOpenStats: () -> Unit,
+    onOpenRecovery: () -> Unit,
+    onCheckIn: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val today = LocalDate.now()
@@ -135,6 +146,7 @@ private fun Dashboard(
                 }
             }
         } else {
+            item { RecoveryCard(recovery, onOpen = onOpenRecovery, onCheckIn = onCheckIn) }
             if (form.isNotEmpty()) item { FormCard(form) }
             item { WeekCard(current = trend.last(), baseline = trend.dropLast(1), onOpenStats = onOpenStats) }
             item { SectionLabel(stringResource(R.string.today_last_activity)) }

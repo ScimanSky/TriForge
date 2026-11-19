@@ -179,7 +179,13 @@ fun StatGrid(stats: List<Pair<String, String>>, modifier: Modifier = Modifier, c
 
 /** A choice among a few: the selected one takes the accent color. */
 @Composable
-fun TriChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun TriChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    horizontalPadding: Dp = 14.dp,
+) {
     Box(
         modifier = modifier
             .heightIn(min = 40.dp)
@@ -191,7 +197,7 @@ fun TriChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Mod
                 ChipShape,
             )
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = horizontalPadding),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -492,5 +498,23 @@ fun CenteredMessage(title: String, body: String? = null, modifier: Modifier = Mo
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+/** Round back arrow at the top left of a detail page. */
+@Composable
+fun BackButton(onBack: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onBack),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = TriIcons.Back,
+            contentDescription = stringResource(R.string.action_back),
+            modifier = Modifier.size(24.dp),
+        )
     }
 }

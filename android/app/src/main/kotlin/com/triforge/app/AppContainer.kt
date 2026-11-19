@@ -9,6 +9,7 @@ import com.triforge.app.data.AuthRepository
 import com.triforge.app.data.GarminRepository
 import com.triforge.app.data.HealthConnectRepository
 import com.triforge.app.data.ProfileRepository
+import com.triforge.app.data.WellnessRepository
 
 /**
  * Builds the app's long-lived objects by hand. The graph is small enough that
@@ -34,5 +35,7 @@ class AppContainer(context: Context) {
 
     val garmin by lazy { GarminRepository(firestore, auth, BuildConfig.GARMIN_SERVICE_URL) }
 
-    val healthConnect by lazy { HealthConnectRepository(appContext, activities) }
+    val wellness by lazy { WellnessRepository(firestore) }
+
+    val healthConnect by lazy { HealthConnectRepository(appContext, activities, wellness) }
 }

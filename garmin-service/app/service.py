@@ -17,7 +17,7 @@ from .gateway import (
     MfaChallenge,
     Session,
 )
-from .normalize import document_id, normalize_activity
+from .normalize import document_id, normalize_activity, normalize_health
 from .store import Store
 
 logger = logging.getLogger(__name__)
@@ -109,7 +109,7 @@ class GarminService:
     # -- sync -------------------------------------------------------------
 
     def sync(self, uid: str, days_back: int | None = None) -> SyncResult:
-        """Copy recent Garmin activities into the athlete's activity collection."""
+        """Copy recent Garmin activities and daily recovery data into Firestore."""
         self._check_cooldown(uid)
         cipher = self._store.get_tokens(uid)
         tokens = self._cipher.decrypt(cipher) if cipher else None
@@ -129,9 +129,7 @@ class GarminService:
             start = now - timedelta(days=self._settings.initial_sync_days)
 
         try:
-            raw, session = self._gateway.fetch_activities(
-                tokens, start.date(), now.date()
-            )
+            data = self._gateway.fetch(tokens, start.date(), now.date())
         except GarminAuthError:
             # Tokens were revoked or expired beyond refresh.
             self._mark_disconnected(uid, "reconnect_required")
@@ -146,7 +144,7 @@ class GarminService:
 
         docs = {}
         skipped = 0
-        for item in raw:
+        for item in data.activities:
             doc = normalize_activity(item)
             if doc is None:
                 skipped += 1
@@ -154,8 +152,15 @@ class GarminService:
             doc["syncedAt"] = now
             docs[document_id(item["activityId"])] = doc
 
+        health = normalize_health(
+            data.health.hrv, data.health.resting_hr, data.health.sleep
+        )
+        for doc in health.values():
+            doc["syncedAt"] = now
+
         self._store.upsert_activities(uid, docs)
-        self._store.set_tokens(uid, self._cipher.encrypt(session.tokens))
+        self._store.upsert_wellness(uid, health)
+        self._store.set_tokens(uid, self._cipher.encrypt(data.session.tokens))
         self._store.update_status(
             uid,
             {
@@ -164,6 +169,7 @@ class GarminService:
                 "lastSyncAttemptAt": now,
                 "lastSyncStatus": "ok",
                 "lastSyncCount": len(docs),
+                "lastSyncHealthDays": len(health),
             },
         )
         return SyncResult(synced=len(docs), skipped=skipped)

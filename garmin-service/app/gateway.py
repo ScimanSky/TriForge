@@ -8,9 +8,16 @@ that has to change.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
-from typing import Any, Protocol
+import logging
+from dataclasses import dataclass, field
+from datetime import date, timedelta
+from typing import Any, Callable, Protocol
+
+logger = logging.getLogger(__name__)
+
+# Garmin's daily sleep and HRV range endpoints answer at most four weeks at a
+# time, so longer windows are read in chunks of this many days.
+HEALTH_CHUNK_DAYS = 28
 
 
 class GarminAuthError(Exception):
@@ -41,14 +48,35 @@ class MfaChallenge:
     state: Any
 
 
+@dataclass(frozen=True)
+class HealthData:
+    """Daily recovery data, exactly as Garmin returns it.
+
+    - ``hrv``: one ``hrvSummaries`` row per night (``lastNightAvg``,
+      ``weeklyAvg``, ``status``, ``baseline``).
+    - ``resting_hr``: ``{"calendarDate", "value"}`` per day.
+    - ``sleep``: one ``individualStats`` row per night from the sleep stats
+      endpoint (``calendarDate`` plus a ``values`` map).
+    """
+
+    hrv: list[dict[str, Any]] = field(default_factory=list)
+    resting_hr: list[dict[str, Any]] = field(default_factory=list)
+    sleep: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class GarminData:
+    activities: list[dict[str, Any]]
+    health: HealthData
+    session: Session
+
+
 class GarminGateway(Protocol):
     def login(self, email: str, password: str) -> Session | MfaChallenge: ...
 
     def complete_mfa(self, state: Any, code: str) -> Session: ...
 
-    def fetch_activities(
-        self, tokens: str, start: date, end: date
-    ) -> tuple[list[dict[str, Any]], Session]: ...
+    def fetch(self, tokens: str, start: date, end: date) -> GarminData: ...
 
 
 class GarminConnectGateway:
@@ -70,9 +98,13 @@ class GarminConnectGateway:
         self._call(client.resume_login, state, code)
         return self._session(client)
 
-    def fetch_activities(
-        self, tokens: str, start: date, end: date
-    ) -> tuple[list[dict[str, Any]], Session]:
+    def fetch(self, tokens: str, start: date, end: date) -> GarminData:
+        """Activities and daily recovery data between ``start`` and ``end``.
+
+        One login serves every call. Recovery data is best effort: an endpoint
+        that fails for any reason other than auth or rate limiting is skipped,
+        so a Garmin change there never blocks the activity sync.
+        """
         from garminconnect import Garmin
 
         client = Garmin()
@@ -81,9 +113,55 @@ class GarminConnectGateway:
         activities = self._call(
             client.get_activities_by_date, start.isoformat(), end.isoformat()
         )
+        health = HealthData(
+            hrv=self._chunked(
+                lambda a, b: (self._call(client.get_hrv_data_range, a, b) or {}).get(
+                    "hrvSummaries"
+                )
+                or [],
+                start,
+                end,
+            ),
+            resting_hr=self._optional(
+                lambda: self._call(
+                    client.get_rhr_daily, start.isoformat(), end.isoformat()
+                )
+            ),
+            # The library already splits this one into four-week requests.
+            sleep=self._optional(
+                lambda: self._call(
+                    client.get_sleep_daily, start.isoformat(), end.isoformat()
+                )
+            ),
+        )
         # The library refreshes tokens while it works, so hand the current
         # ones back to be stored.
-        return list(activities or []), self._session(client)
+        return GarminData(list(activities or []), health, self._session(client))
+
+    @classmethod
+    def _chunked(
+        cls, read: Callable[[str, str], list[dict[str, Any]]], start: date, end: date
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        chunk_start = start
+        while chunk_start <= end:
+            chunk_end = min(chunk_start + timedelta(days=HEALTH_CHUNK_DAYS - 1), end)
+            rows += cls._optional(
+                lambda a=chunk_start, b=chunk_end: read(a.isoformat(), b.isoformat())
+            )
+            chunk_start = chunk_end + timedelta(days=1)
+        return rows
+
+    @staticmethod
+    def _optional(read: Callable[[], Any]) -> list[dict[str, Any]]:
+        try:
+            rows = read()
+        except (GarminAuthError, GarminRateLimitError):
+            raise
+        except Exception as err:  # noqa: BLE001 - recovery data is best effort
+            logger.warning("health data skipped: %s", type(err).__name__)
+            return []
+        return [row for row in rows or [] if isinstance(row, dict)]
 
     @staticmethod
     def _session(client: Any) -> Session:

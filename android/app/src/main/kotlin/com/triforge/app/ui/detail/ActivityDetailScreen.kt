@@ -1,8 +1,6 @@
 package com.triforge.app.ui.detail
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,21 +8,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.triforge.app.R
+import com.triforge.app.ui.common.BackButton
 import com.triforge.app.ui.common.CardHeader
 import com.triforge.app.ui.common.CenteredMessage
 import com.triforge.app.ui.common.CollapsibleCard
@@ -37,7 +32,6 @@ import com.triforge.app.ui.common.TriCard
 import com.triforge.app.ui.common.labelRes
 import com.triforge.app.ui.common.sourceLabel
 import com.triforge.app.ui.theme.SportColors
-import com.triforge.app.ui.theme.TriIcons
 import com.triforge.domain.Activity
 import com.triforge.domain.Formatters
 import com.triforge.domain.Sport
@@ -81,23 +75,6 @@ fun ActivityDetailScreen(
         HeartRateCard(activity)
         TechniqueCard(activity)
         EffectCard(activity)
-    }
-}
-
-@Composable
-private fun BackButton(onBack: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .clickable(role = Role.Button, onClick = onBack),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = TriIcons.Back,
-            contentDescription = stringResource(R.string.action_back),
-            modifier = Modifier.size(24.dp),
-        )
     }
 }
 

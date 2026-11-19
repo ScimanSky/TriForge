@@ -26,6 +26,37 @@ service cloud.firestore {
           && resource.data.source == 'health_connect';
       }
 
+      // Daily recovery data (HRV, resting HR, sleep). Same rule as
+      // activities: the Garmin service writes its own, the app only what it
+      // imported from Health Connect.
+      match /wellness/{dayId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.source == 'health_connect';
+        allow update: if isOwner(uid)
+          && resource.data.source == 'health_connect'
+          && request.resource.data.source == 'health_connect';
+        allow delete: if isOwner(uid)
+          && resource.data.source == 'health_connect';
+      }
+
+      // Morning check-in, one per day, keyed by date. Items are 1 to 7.
+      match /checkIns/{day} {
+        function item(name) {
+          return request.resource.data[name] is int
+            && request.resource.data[name] >= 1
+            && request.resource.data[name] <= 7;
+        }
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.date == day
+          && request.resource.data.keys().hasOnly(
+            ['date', 'sleepQuality', 'fatigue', 'soreness', 'stress', 'motivation', 'sick'])
+          && item('sleepQuality') && item('fatigue') && item('soreness')
+          && item('stress') && item('motivation')
+          && request.resource.data.sick is bool;
+      }
+
       // Connection status of external sources. Written only by the server.
       match /integrations/{provider} {
         allow read: if isOwner(uid);

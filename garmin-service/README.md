@@ -19,7 +19,7 @@ in un documento che l'app non può leggere.
 | GET | `/healthz` | Controllo di vita |
 | POST | `/garmin/connect` | Avvia il login con `{email, password}`. Risponde `connected` oppure `mfa_required` |
 | POST | `/garmin/mfa` | Completa il login con `{code}` |
-| POST | `/garmin/sync` | Importa le attività recenti. Accetta `{daysBack}` |
+| POST | `/garmin/sync` | Importa attività, HRV, FC a riposo e sonno recenti. Accetta `{daysBack}` |
 | DELETE | `/garmin/connection` | Dimentica i token Garmin |
 | POST | `/internal/sync-all` | Sincronizza tutti gli atleti collegati (per Cloud Scheduler) |
 
@@ -33,6 +33,12 @@ Tutto sotto `users/{uid}`:
 - `private/garmin` e `private/garminMfa`: token e stato MFA cifrati. L'app non li legge.
 - `integrations/garmin`: stato del collegamento, in sola lettura per l'app.
 - `activities/garmin_{id}`: attività normalizzate (`sport` vale `swim`, `bike`, `run` o `other`).
+- `wellness/garmin_{AAAA-MM-GG}`: dati di recupero di una mattina (`hrvRmssd`,
+  `hrvWeeklyAvg`, `hrvStatus`, `hrvBaselineLow`/`High`, `restingHr`, `sleepSec`,
+  `sleepScore`), letti con `get_hrv_data_range`, `get_rhr_daily` e
+  `get_sleep_daily`. Servono al bilancio carico-recupero
+  (`docs/bilancio-carico-recupero.md`). Se uno di questi endpoint non risponde,
+  le attività si sincronizzano lo stesso.
 
 ## Variabili d'ambiente
 

@@ -50,6 +50,8 @@ e viene costruito a mano in `AppContainer`.
 ```
 users/{uid}                       profilo atleta
   activities/{garmin_ID | hc_ID}  attività normalizzate
+  wellness/{garmin_DATA | hc_DATA} HRV, FC a riposo e sonno di una mattina
+  checkIns/{DATA}                 check-in del mattino dell'atleta
   integrations/garmin             stato del collegamento (sola lettura per l'app)
   private/garmin                  token Garmin cifrati (solo server)
   private/garminMfa               stato MFA in attesa, cifrato (solo server)
