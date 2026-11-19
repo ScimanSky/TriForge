@@ -243,15 +243,33 @@ object FoodBans {
         return null
     }
 
-    /** Everything in [day] that breaks the profile: meals and fuelling. */
+    /**
+     * Everything in [day] that breaks the profile: dishes (a meal stored
+     * without dishes as a whole) and fuelling.
+     */
     fun violations(day: NutritionDay, profile: NutritionProfile): List<BanViolation> = buildList {
-        day.meals.forEach { meal -> check("${meal.name} ${meal.description}", profile)?.let { add(BanViolation(meal.name, it)) } }
+        day.meals.forEach { meal ->
+            if (meal.dishes.isEmpty()) {
+                check("${meal.name} ${meal.description}", profile)?.let { add(BanViolation(meal.name, it)) }
+            } else {
+                meal.dishes.forEach { dish -> NutriMeals.check(dish, profile)?.let { add(BanViolation("${meal.name}, ${dish.name}", it)) } }
+            }
+        }
         day.fueling.forEach { step -> check(step.text, profile)?.let { add(BanViolation(step.time, it)) } }
     }
 
-    /** [day] without the meals and fuelling steps that break the profile. */
+    /**
+     * [day] without the dishes and fuelling steps that break the profile; a
+     * meal left with no dish goes too.
+     */
     fun clean(day: NutritionDay, profile: NutritionProfile): NutritionDay = day.copy(
-        meals = day.meals.filter { check("${it.name} ${it.description}", profile) == null },
+        meals = day.meals.mapNotNull { meal ->
+            if (meal.dishes.isEmpty()) {
+                meal.takeIf { check("${it.name} ${it.description}", profile) == null }
+            } else {
+                meal.dishes.filter { NutriMeals.check(it, profile) == null }.takeIf { it.isNotEmpty() }?.let { NutriMeals.rebuilt(meal, it) }
+            }
+        },
         fueling = day.fueling.filter { check(it.text, profile) == null },
     )
 }

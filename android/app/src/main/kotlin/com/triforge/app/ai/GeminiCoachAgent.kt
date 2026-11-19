@@ -58,7 +58,7 @@ class GeminiCoachAgent<P : Any>(
     private val chatModel = model(CoachSchemas.chatReply(planSchema, handoffs), CHAT_TEMPERATURE)
 
     override suspend fun plan(request: String): P {
-        val fields = call { planModel.generateContent(request).text }
+        val fields = geminiJson { planModel.generateContent(request).text }
         return parse(fields) ?: throw CoachException(CoachException.Reason.BAD_ANSWER)
     }
 
@@ -66,7 +66,7 @@ class GeminiCoachAgent<P : Any>(
         val contents: List<Content> = history.takeLast(MAX_HISTORY).map { message ->
             content(role = if (message.fromAthlete) "user" else "model") { text(message.text) }
         } + content(role = "user") { text(turn) }
-        val fields = call { chatModel.generateContent(contents.first(), *contents.drop(1).toTypedArray()).text }
+        val fields = geminiJson { chatModel.generateContent(contents.first(), *contents.drop(1).toTypedArray()).text }
         val text = (fields["reply"] as? String)?.trim().orEmpty()
         if (text.isEmpty()) throw CoachException(CoachException.Reason.BAD_ANSWER)
         @Suppress("UNCHECKED_CAST")
@@ -75,40 +75,44 @@ class GeminiCoachAgent<P : Any>(
         return CoachReply(text, proposal, (fields["noteForPartner"] as? String)?.trim().orEmpty(), handoff)
     }
 
-    private suspend fun call(block: suspend () -> String?): Map<String, Any?> {
-        val text = try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: ServiceDisabledException) {
-            throw CoachException(CoachException.Reason.NOT_ENABLED, e)
-        } catch (e: QuotaExceededException) {
-            throw CoachException(CoachException.Reason.BUSY, e)
-        } catch (e: PromptBlockedException) {
-            throw CoachException(CoachException.Reason.BLOCKED, e)
-        } catch (e: ResponseStoppedException) {
-            throw CoachException(CoachException.Reason.BLOCKED, e)
-        } catch (e: IOException) {
-            throw CoachException(CoachException.Reason.NETWORK, e)
-        } catch (e: Exception) {
-            // Other Firebase AI errors (server, invalid key, unknown) mostly
-            // mean the service is not reachable or not set up yet.
-            val notEnabled = e.message.orEmpty().let { it.contains("not been used", true) || it.contains("disabled", true) }
-            throw CoachException(if (notEnabled) CoachException.Reason.NOT_ENABLED else CoachException.Reason.NETWORK, e)
-        } ?: throw CoachException(CoachException.Reason.BAD_ANSWER)
-        return try {
-            JSONObject(text).toMap()
-        } catch (e: JSONException) {
-            throw CoachException(CoachException.Reason.BAD_ANSWER, e)
-        }
-    }
-
     private companion object {
         const val PLAN_TEMPERATURE = 0.4f
         const val CHAT_TEMPERATURE = 0.6f
 
         /** Earlier messages sent with each chat turn: enough to follow the thread, not the whole history. */
         const val MAX_HISTORY = 20
+    }
+}
+
+/**
+ * One call to Gemini that answers in JSON: its errors become a
+ * [CoachException] the screens can explain, its text a map of fields.
+ */
+internal suspend fun geminiJson(block: suspend () -> String?): Map<String, Any?> {
+    val text = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: ServiceDisabledException) {
+        throw CoachException(CoachException.Reason.NOT_ENABLED, e)
+    } catch (e: QuotaExceededException) {
+        throw CoachException(CoachException.Reason.BUSY, e)
+    } catch (e: PromptBlockedException) {
+        throw CoachException(CoachException.Reason.BLOCKED, e)
+    } catch (e: ResponseStoppedException) {
+        throw CoachException(CoachException.Reason.BLOCKED, e)
+    } catch (e: IOException) {
+        throw CoachException(CoachException.Reason.NETWORK, e)
+    } catch (e: Exception) {
+        // Other Firebase AI errors (server, invalid key, unknown) mostly
+        // mean the service is not reachable or not set up yet.
+        val notEnabled = e.message.orEmpty().let { it.contains("not been used", true) || it.contains("disabled", true) }
+        throw CoachException(if (notEnabled) CoachException.Reason.NOT_ENABLED else CoachException.Reason.NETWORK, e)
+    } ?: throw CoachException(CoachException.Reason.BAD_ANSWER)
+    return try {
+        JSONObject(text).toMap()
+    } catch (e: JSONException) {
+        throw CoachException(CoachException.Reason.BAD_ANSWER, e)
     }
 }
 

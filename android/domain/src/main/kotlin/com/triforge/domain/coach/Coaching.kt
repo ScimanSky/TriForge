@@ -129,8 +129,17 @@ data class WeekPlan(
 /** One fuelling moment around a session: before, during, after. */
 data class FuelingStep(val time: String, val text: String)
 
-/** A meal NutriAI suggests for the day. */
-data class MealSuggestion(val name: String, val description: String, val kcal: Int?)
+/**
+ * A meal NutriAI suggests for the day. It is made of [dishes], each one
+ * replaceable on its own; a meal stored before dishes existed has none and
+ * only its [description].
+ */
+data class MealSuggestion(
+    val name: String,
+    val description: String,
+    val kcal: Int?,
+    val dishes: List<Dish> = emptyList(),
+)
 
 /** What kind of day it is for nutrition, following the training plan. */
 enum class DayType(val key: String) {

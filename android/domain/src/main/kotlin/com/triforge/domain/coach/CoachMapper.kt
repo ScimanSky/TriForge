@@ -14,6 +14,7 @@ object CoachMapper {
 
     private const val MAX_SESSION_MIN = 600
     private const val MAX_TEXT = 1_200
+    private const val MAX_INGREDIENTS = 12
 
     // ---- Week plan ---------------------------------------------------------
 
@@ -159,7 +160,9 @@ object CoachMapper {
         "proteinG" to day.proteinG,
         "fatG" to day.fatG,
         "fueling" to day.fueling.map { mapOf("time" to it.time, "text" to it.text) },
-        "meals" to day.meals.map { mapOf("name" to it.name, "description" to it.description, "kcal" to it.kcal) },
+        "meals" to day.meals.map { meal ->
+            mapOf("name" to meal.name, "description" to meal.description, "kcal" to meal.kcal, "dishes" to meal.dishes.map(::dishToFields))
+        },
         "rationale" to day.rationale,
         "noteForCoach" to day.noteForCoach,
     )
@@ -190,11 +193,77 @@ object CoachMapper {
             meals = list(fields["meals"]).mapNotNull { raw ->
                 val meal = raw as? Map<*, *> ?: return@mapNotNull null
                 val name = text(meal["name"], 40).ifBlank { return@mapNotNull null }
-                MealSuggestion(name, text(meal["description"], 200), number(meal["kcal"])?.toInt()?.takeIf { it in 0..3_000 })
+                val dishes = list(meal["dishes"]).mapNotNull { dish(it as? Map<*, *>) }.take(NutriMeals.MAX_DISHES)
+                val stored = MealSuggestion(name, text(meal["description"], 200), number(meal["kcal"])?.toInt()?.takeIf { it in 0..3_000 })
+                // With dishes the meal is their sum; without (a day stored before dishes existed) it is as written.
+                if (dishes.isEmpty()) stored else NutriMeals.rebuilt(stored, dishes)
             },
             rationale = text(fields["rationale"]),
             noteForCoach = text(fields["noteForCoach"]),
             createdAt = fields["createdAt"] as? Instant,
+        )
+    }
+
+    // ---- Dishes ------------------------------------------------------------
+
+    fun dishToFields(dish: Dish): Map<String, Any?> = buildMap {
+        put("name", dish.name)
+        put("quantity", dish.quantity)
+        put("unit", dish.unit.key)
+        put("kcal", dish.kcal)
+        put("carbsG", dish.carbsG)
+        put("proteinG", dish.proteinG)
+        put("fatG", dish.fatG)
+        if (dish.ingredients.isNotEmpty()) put("ingredients", dish.ingredients)
+        if (dish.origin != DishOrigin.PLAN) put("origin", dish.origin.key)
+        dish.replaced?.let { put("replaced", dishToFields(it.copy(replaced = null))) }
+        dish.addedWith?.let { put("addedWith", it) }
+        if (dish.confirmed) put("confirmed", true)
+    }
+
+    /**
+     * Reads a dish, from the model or from the store. One without a name, a
+     * quantity or believable numbers is dropped rather than shown.
+     */
+    fun dish(fields: Map<*, *>?, nested: Boolean = false): Dish? {
+        fields ?: return null
+        val name = text(fields["name"], 80).ifBlank { return null }
+        val unit = DishUnit.of(fields["unit"] as? String) ?: DishUnit.GRAM
+        val quantity = number(fields["quantity"])?.takeIf { it > 0 && it <= 3_000 } ?: return null
+        val kcal = number(fields["kcal"])?.toInt()?.takeIf { it in 0..3_000 } ?: return null
+        fun grams(key: String) = number(fields[key])?.takeIf { it in 0.0..600.0 } ?: 0.0
+        return Dish(
+            name = name,
+            quantity = quantity,
+            unit = unit,
+            kcal = kcal,
+            carbsG = grams("carbsG"),
+            proteinG = grams("proteinG"),
+            fatG = grams("fatG"),
+            ingredients = list(fields["ingredients"]).mapNotNull { text(it, 40).takeIf(String::isNotBlank) }.distinct().take(MAX_INGREDIENTS),
+            origin = DishOrigin.of(fields["origin"] as? String),
+            replaced = if (nested) null else dish(fields["replaced"] as? Map<*, *>, nested = true),
+            addedWith = text(fields["addedWith"], 80).takeIf(String::isNotBlank),
+            confirmed = fields["confirmed"] == true,
+        )
+    }
+
+    /** A dish the model proposes: never with the marks only the app sets. */
+    private fun proposed(fields: Map<*, *>?): Dish? =
+        dish(fields, nested = true)?.copy(origin = DishOrigin.PLAN, addedWith = null, confirmed = false)
+
+    /** NutriAI's alternatives to a dish, as the model wrote them: the app filters and scales them. */
+    fun dishAlternativesFromFields(fields: Map<String, Any?>): List<Dish> =
+        list(fields["alternatives"]).mapNotNull { proposed(it as? Map<*, *>) }
+
+    /** NutriAI's reading of a dish the athlete wrote. */
+    fun dishEstimateFromFields(fields: Map<String, Any?>): DishEstimate {
+        val dish = proposed(fields)
+        return DishEstimate(
+            understood = fields["understood"] != false && dish != null,
+            dish = dish,
+            complement = proposed(fields["complement"] as? Map<*, *>),
+            complementWhy = text(fields["complementWhy"], 300),
         )
     }
 

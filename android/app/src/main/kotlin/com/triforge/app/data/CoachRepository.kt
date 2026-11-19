@@ -13,6 +13,7 @@ import com.triforge.domain.coach.NutritionDay
 import com.triforge.domain.coach.NutritionProfile
 import com.triforge.domain.coach.WeekPlan
 import java.time.Instant
+import java.time.LocalDate
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -22,13 +23,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** The training coach's own state: its plan and what it told NutriAI. */
 data class CoachDesk(val plan: WeekPlan? = null, val brief: CoachBrief? = null)
 
-/** NutriAI's own state: the athlete's eating profile, the day's plan and its brief. */
+/** NutriAI's own state: the athlete's eating profile, the days it wrote and its brief. */
 data class NutriDesk(
     val profile: NutritionProfile? = null,
-    val day: NutritionDay? = null,
+    /** The days NutriAI prepared, by date: each only when the athlete asked for it. */
+    val days: Map<LocalDate, NutritionDay> = emptyMap(),
     val brief: CoachBrief? = null,
-    /** When the coach brief that [day] was built on was written; a newer one makes [day] stale. */
-    val basedOnCoachAt: Instant? = null,
 )
 
 /** One message in a coach chat, with the plan change it proposes, if any. */
@@ -53,7 +53,8 @@ enum class ProposalStatus(val key: String) {
  * The two coaches' data in Firestore:
  *
  * - `users/{uid}/coaching/coach`: the Coach's week plan and its brief.
- * - `users/{uid}/coaching/nutriai`: NutriAI's profile, day plan and brief.
+ * - `users/{uid}/coaching/nutriai`: NutriAI's profile, the days it wrote
+ *   (`days`, by date) and its brief.
  * - `users/{uid}/coaching/{role}/messages/{id}`: NutriAI's chat.
  * - `users/{uid}/coaching/{swim|bike|run}/messages/{id}`: the chat of each
  *   sport coach. Their week is one, in `coaching/coach`.
@@ -78,11 +79,14 @@ class CoachRepository(private val firestore: FirebaseFirestore) {
     }
 
     fun nutriDesk(uid: String): Flow<NutriDesk> = document(uid, CoachRole.NUTRI_AI) { fields ->
+        val days = (fields["days"] as? Map<*, *>).orEmpty().values
+            .mapNotNull { day -> (day as? Map<*, *>)?.let { CoachMapper.nutritionDayFromFields(it.strings()) } }
+        // The one day kept before NutriAI wrote more than today.
+        val legacy = (fields["day"] as? Map<*, *>)?.let { CoachMapper.nutritionDayFromFields(it.strings()) }
         NutriDesk(
             profile = (fields["profile"] as? Map<*, *>)?.let { CoachMapper.nutritionProfileFromFields(it.strings()) },
-            day = (fields["day"] as? Map<*, *>)?.let { CoachMapper.nutritionDayFromFields(it.strings() + ("createdAt" to fields["dayAt"])) },
+            days = (listOfNotNull(legacy) + days).associateBy { it.date },
             brief = brief(CoachRole.NUTRI_AI, fields),
-            basedOnCoachAt = fields["basedOnCoachAt"] as? Instant,
         )
     }
 
@@ -145,15 +149,24 @@ class CoachRepository(private val firestore: FirebaseFirestore) {
         ),
     )
 
-    suspend fun saveNutritionDay(uid: String, day: NutritionDay, brief: CoachBrief, basedOnCoachAt: Instant?) = write(
+    /**
+     * Writes [days] among NutriAI's days, each in place of the one of its
+     * date, and forgets those of [forget] (the weeks gone by). [brief] is
+     * left on the shared board when NutriAI wrote the days again; a dish
+     * the athlete changed does not concern the coaches.
+     */
+    suspend fun saveNutritionDays(uid: String, days: List<NutritionDay>, brief: CoachBrief? = null, forget: Collection<LocalDate> = emptyList()) = write(
         desk(uid, CoachRole.NUTRI_AI).set(
-            mapOf(
-                "day" to CoachMapper.nutritionDayToFields(day),
-                "dayAt" to FieldValue.serverTimestamp(),
-                "brief" to CoachMapper.briefToFields(brief),
-                "briefAt" to FieldValue.serverTimestamp(),
-                "basedOnCoachAt" to basedOnCoachAt?.let { com.google.firebase.Timestamp(it.epochSecond, it.nano) },
-            ),
+            buildMap<String, Any> {
+                val changes: Map<String, Any> = forget.associate { it.toString() to FieldValue.delete() } +
+                    days.associate { it.date.toString() to CoachMapper.nutritionDayToFields(it) }
+                // Merged into the days already there; an empty map would take their place.
+                if (changes.isNotEmpty()) put("days", changes)
+                if (brief != null) {
+                    put("brief", CoachMapper.briefToFields(brief))
+                    put("briefAt", FieldValue.serverTimestamp())
+                }
+            },
             SetOptions.merge(),
         ),
     )

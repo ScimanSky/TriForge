@@ -7,7 +7,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.triforge.app.ai.CoachAgent
 import com.triforge.app.ai.CoachSchemas
+import com.triforge.app.ai.DishAdvisor
 import com.triforge.app.ai.GeminiCoachAgent
+import com.triforge.app.ai.GeminiDishAdvisor
 import com.triforge.app.data.AccountRepository
 import com.triforge.app.data.ActivityRepository
 import com.triforge.app.data.AuthRepository
@@ -112,6 +114,9 @@ class AppContainer(context: Context) {
             CoachMapper.nutritionDayFromFields(it, LocalDate.now())
         }
     }
+
+    /** NutriAI's help with one dish: alternatives, and the worth of a dish the athlete writes. */
+    val dishAdvisor: DishAdvisor by lazy { GeminiDishAdvisor(BuildConfig.AI_MODEL, BuildConfig.AI_LOCATION) }
 
     /** In-app updates of test builds. Use only when [firebaseConfigured]. */
     val updater by lazy { AppUpdater() }
