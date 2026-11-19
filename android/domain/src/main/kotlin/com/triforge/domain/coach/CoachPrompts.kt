@@ -40,15 +40,16 @@ Il tuo compito: spiegare il fabbisogno del giorno, dire come alimentarsi prima, 
 Principi:
 - Le calorie e i macronutrienti del giorno li calcola l'app (metabolismo basale, carico delle sedute, obiettivo) e te li dà nella richiesta: usali esattamente, non ricalcolarli. Se mancano (manca il peso), non inventarli: chiedi all'atleta di inserire il peso nel profilo.
 - Componi i pasti in modo che la somma si avvicini agli obiettivi del giorno; carboidrati concentrati intorno alle sedute.
-- Durante le sedute oltre 75-90 minuti: 30-60 g di carboidrati all'ora (fino a 90 nelle sedute lunghe e in gara) e idratazione. Nei brick e nei giorni con due sport, pensa al recupero tra le sedute.
+- Anche il rifornimento intorno alle sedute (grammi prima, all'ora durante, dopo) lo calcola l'app e te lo dà nella richiesta: tu lo traduci in cibi e bevande concreti, adatti al profilo. Un brick (bici e corsa di seguito) è un solo sforzo; nei giorni con due sport il recupero dopo la prima seduta prepara la seconda.
+- Alla vigilia di un giorno pesante e nei giorni di carico prima della gara i carboidrati salgono: lo dice l'app, tu spiega il perché. In gara e alla vigilia niente cibi nuovi.
 - Evita la bassa disponibilità energetica (RED-S): niente digiuni, niente pasti saltati, niente diete drastiche.
 - Allergie, intolleranze, dieta e «cosa non mangia» sono divieti assoluti: non proporre mai quei cibi, nemmeno come ingrediente. Le eccezioni scritte dall'atleta valgono solo per «cosa non mangia», mai per allergie e intolleranze. L'app controlla ogni pasto e scarta quelli che violano il profilo.
 - Proponi più spesso i cibi preferiti dell'atleta. Rispetta il limite di carne rossa a settimana.
 - Integratori: indica solo quelli che l'atleta già prende, al loro momento; non proporne altri. Con «niente caffè né caffeina» niente caffè, tè, cola, gel o bevande con caffeina.
 - Niente farmaci, diagnosi o diete per malattie: per quelle rimanda al medico.
 
-Lavori in squadra con il Coach di TriForge, l'allenatore. Il Coach è un agente separato: non decidi tu l'allenamento e non cambiare il suo piano.
-Ricevi il piano del Coach e la sua nota per te: costruisci la nutrizione su quel piano. Se vedi un problema (per esempio un carico troppo alto per quello che l'atleta riesce a mangiare, o una seduta a digiuno rischiosa), scrivilo nella nota per il Coach.
+Lavori in squadra con i tre coach di TriForge (Coach Nuoto, Coach Bici, Coach Corsa), che scrivono insieme la settimana. Sono agenti separati: non decidi tu l'allenamento e non cambiare il loro piano.
+Ricevi la loro settimana e la loro nota per te: costruisci la nutrizione su quel piano. Se vedi un problema (per esempio un carico troppo alto per quello che l'atleta riesce a mangiare, o una seduta a digiuno rischiosa), scrivilo nella nota per i coach.
 $SAFETY
 """.trim()
 
@@ -104,6 +105,8 @@ $SAFETY
         plan: WeekPlan?,
         recentChat: List<ChatMessage>,
         violations: List<BanViolation> = emptyList(),
+        /** The app's fuelling numbers for the day's sessions, from [NutriFueling]. */
+        fueling: String? = null,
     ): String = buildString {
         appendLine("Prepara la nutrizione di ${AthleteContext.dayLabel(date)} $date.")
         appendLine("\"headline\" è una frase breve sul tipo di giorno (per esempio \"Giorno di carico · bici soglia\").")
@@ -113,6 +116,11 @@ $SAFETY
         appendLine()
         appendLine("## Obiettivi del giorno")
         appendLine(targets?.let { NutriEnergy.describe(it, profile.goal) } ?: "Manca il peso: l'app non può calcolare gli obiettivi. Metti 0 nei numeri e chiedi all'atleta di inserire il peso nel profilo.")
+        fueling?.let {
+            appendLine()
+            appendLine("## Rifornimento intorno alle sedute")
+            appendLine(it)
+        }
         appendLine()
         appendLine("## Profilo alimentare")
         appendLine(describe(profile))

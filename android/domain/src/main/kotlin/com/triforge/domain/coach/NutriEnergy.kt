@@ -1,5 +1,6 @@
 package com.triforge.domain.coach
 
+import com.triforge.domain.RaceGoal
 import com.triforge.domain.Sport
 import kotlin.math.max
 import kotlin.math.min
@@ -23,6 +24,16 @@ data class DayTargets(
     val trainingKcal: Int,
     /** Height or age were missing and a typical value stood in. */
     val estimated: Boolean,
+    /** Why the carbohydrates are above the day's own level: the eve of a long day or of the race. Empty when they are not. */
+    val carbLoad: String = "",
+)
+
+/** What surrounds the day in a triathlete's week: tomorrow's sessions and the race. */
+data class DayContext(
+    val tomorrow: List<PlannedSession> = emptyList(),
+    /** Days to the goal race: 0 on race day, null without a race in sight. */
+    val daysToRace: Int? = null,
+    val race: RaceGoal? = null,
 )
 
 /**
@@ -110,21 +121,22 @@ object NutriEnergy {
     fun proteinPerKg(goal: BodyGoal): Double = if (goal == BodyGoal.LOSE || goal == BodyGoal.GAIN) 2.0 else 1.8
 
     /** The day's targets; null without a weight, which NutriAI then asks for. */
-    fun targets(profile: NutritionProfile, body: BodyData, sessions: List<PlannedSession>): DayTargets? {
+    fun targets(profile: NutritionProfile, body: BodyData, sessions: List<PlannedSession>, context: DayContext = DayContext()): DayTargets? {
         val weight = body.weightKg?.takeIf { it in 30.0..250.0 } ?: return null
-        val type = dayType(sessions)
+        val type = if (context.daysToRace == 0 && sessions.any { it.sport != null && it.durationMin > 0 }) DayType.RACE else dayType(sessions)
+        val load = carbLoad(type, context)
         val bmr = bmr(body, weight)
         val training = trainingKcal(sessions, weight)
         val tdee = bmr * DAILY_LIFE_FACTOR + training
         var target = when (profile.goal) {
             BodyGoal.MAINTAIN, BodyGoal.PERFORMANCE -> tdee
             // No deficit when the day asks for fuel.
-            BodyGoal.LOSE -> if (type == DayType.HEAVY || type == DayType.RACE) tdee else tdee - min(0.15 * tdee, 7.7 * weight)
+            BodyGoal.LOSE -> if (type == DayType.HEAVY || type == DayType.RACE || load != null) tdee else tdee - min(0.15 * tdee, 7.7 * weight)
             BodyGoal.GAIN -> tdee + min(0.10 * tdee, 350.0)
         }
         target = max(target, max(bmr, floorKcal(body.sex).toDouble()))
 
-        var carbs = carbsPerKg(type) * weight
+        var carbs = max(carbsPerKg(type), load?.first ?: 0.0) * weight
         val protein = proteinPerKg(profile.goal) * weight
         var fat = (target - 4 * carbs - 4 * protein) / 9
         val fatMin = 0.8 * weight
@@ -146,7 +158,28 @@ object NutriEnergy {
             bmrKcal = bmr.roundToInt(),
             trainingKcal = training.roundToInt(),
             estimated = body.heightCm == null || body.age == null,
+            carbLoad = load?.second?.takeIf { load.first > carbsPerKg(type) }.orEmpty(),
         )
+    }
+
+    /**
+     * Carbohydrates the day needs for what comes next, in g/kg, and why. The
+     * two days before a middle or long distance race are loading days, the
+     * day before an olympic one too; the eve of a heavy day never starts low.
+     */
+    fun carbLoad(type: DayType, context: DayContext): Pair<Double, String>? {
+        val toRace = context.daysToRace
+        val race = when (context.race) {
+            RaceGoal.FULL -> if (toRace in 1..2) 10.0 else null
+            RaceGoal.HALF -> if (toRace in 1..2) 8.0 else null
+            RaceGoal.OLYMPIC -> if (toRace == 1) 7.0 else null
+            else -> null
+        }
+        if (race != null) return race to "carico di carboidrati prima della gara"
+        val next = dayType(context.tomorrow)
+        if (toRace == 1 || next == DayType.RACE) return EVE_CARBS to "vigilia della gara"
+        if (next == DayType.HEAVY && type != DayType.HEAVY && type != DayType.RACE) return EVE_CARBS to "vigilia di un giorno pesante"
+        return null
     }
 
     /** [day] with the app's numbers in place of the model's. */
@@ -159,8 +192,12 @@ object NutriEnergy {
         appendLine("Tipo di giorno: ${targets.dayType.key}.")
         appendLine("Obiettivi calcolati dall'app, da usare esattamente: ${targets.kcal} kcal, carboidrati ${targets.carbsG} g, proteine ${targets.proteinG} g, grassi ${targets.fatG} g.")
         appendLine("Come sono calcolati: metabolismo basale ${targets.bmrKcal} kcal (Mifflin-St Jeor) × $DAILY_LIFE_FACTOR per la vita quotidiana, più ${targets.trainingKcal} kcal per le sedute del giorno; obiettivo «${goal.label}».")
+        if (targets.carbLoad.isNotBlank()) appendLine("I carboidrati sono più alti del solito per questo tipo di giorno: ${targets.carbLoad}. Spiegalo all'atleta e mettili soprattutto nella cena.")
         if (targets.estimated) append("Altezza o età mancano: il calcolo usa valori tipici, dillo all'atleta.")
     }.trimEnd()
 
     private const val TYPICAL_AGE = 35.0
+
+    /** Carbohydrates the eve of a heavy day or of a race starts from, in g/kg. */
+    const val EVE_CARBS = 6.0
 }

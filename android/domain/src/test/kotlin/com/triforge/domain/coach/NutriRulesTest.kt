@@ -1,5 +1,6 @@
 package com.triforge.domain.coach
 
+import com.triforge.domain.RaceGoal
 import com.triforge.domain.Sport
 import java.time.LocalDate
 import kotlin.test.Test
@@ -218,5 +219,63 @@ class NutriRulesTest {
             "Ho saltato la colazione per fretta",
         ).forEach { assertFalse(NutriSafety.flags(it), it) }
         assertTrue(NutriSafety.REPLY.contains(NutriSafety.HELPLINE))
+    }
+
+    // ---- A triathlete's week --------------------------------------------------
+
+    @Test
+    fun `the eve of a heavy day and the days before the race carry more carbohydrates`() {
+        val profile = NutritionProfile(goal = BodyGoal.LOSE)
+        val long = listOf(session(Sport.BIKE, 180, Intensity.ENDURANCE))
+        val plain = NutriEnergy.targets(profile, body, emptyList())!!
+        val eve = NutriEnergy.targets(profile, body, emptyList(), DayContext(tomorrow = long))!!
+        assertEquals("", plain.carbLoad)
+        assertEquals((NutriEnergy.EVE_CARBS * 72).toInt(), eve.carbsG)
+        assertTrue(eve.carbLoad.contains("vigilia"))
+        assertTrue(eve.kcal > plain.kcal, "no deficit on the eve")
+
+        val heavyToday = NutriEnergy.targets(profile, body, long, DayContext(tomorrow = long))!!
+        assertEquals("", heavyToday.carbLoad, "a heavy day is already high")
+
+        val half = NutriEnergy.targets(profile, body, emptyList(), DayContext(daysToRace = 2, race = RaceGoal.HALF))!!
+        assertEquals(8 * 72, half.carbsG)
+        assertTrue(half.carbLoad.contains("gara"))
+        assertEquals(10 * 72, NutriEnergy.targets(profile, body, emptyList(), DayContext(daysToRace = 1, race = RaceGoal.FULL))!!.carbsG)
+        assertEquals("", NutriEnergy.targets(profile, body, emptyList(), DayContext(daysToRace = 2, race = RaceGoal.OLYMPIC))!!.carbLoad)
+        assertEquals((NutriEnergy.EVE_CARBS * 72).toInt(), NutriEnergy.targets(profile, body, emptyList(), DayContext(daysToRace = 1, race = RaceGoal.SPRINT))!!.carbsG)
+
+        val raceDay = NutriEnergy.targets(profile, body, listOf(session(Sport.RUN, 60, Intensity.TEMPO)), DayContext(daysToRace = 0, race = RaceGoal.SPRINT))!!
+        assertEquals(DayType.RACE, raceDay.dayType)
+        assertTrue(NutriEnergy.describe(eve, BodyGoal.LOSE).contains("vigilia di un giorno pesante"))
+    }
+
+    @Test
+    fun `fuelling follows the length of the effort, and a brick is one effort`() {
+        assertNull(NutriFueling.duringCarbs(45, hard = true, swimOnly = false))
+        assertNull(NutriFueling.duringCarbs(75, hard = false, swimOnly = false))
+        assertEquals(30..60, NutriFueling.duringCarbs(75, hard = true, swimOnly = false))
+        assertEquals(30..60, NutriFueling.duringCarbs(120, hard = false, swimOnly = false))
+        assertEquals(60..90, NutriFueling.duringCarbs(180, hard = false, swimOnly = false))
+        assertNull(NutriFueling.duringCarbs(75, hard = true, swimOnly = true))
+
+        val swim = session(Sport.SWIM, 45, Intensity.EASY)
+        val bike = session(Sport.BIKE, 120, Intensity.ENDURANCE)
+        val run = session(Sport.RUN, 20, Intensity.EASY)
+        val day = NutriFueling.plan(listOf(swim, bike, run), 72.0)
+        assertEquals(2, day.size)
+        assertEquals(listOf(Sport.BIKE, Sport.RUN), day[1].sessions.map { it.sport })
+        assertEquals(140, day[1].minutes)
+        assertEquals(30..60, day[1].duringCarbsPerHour)
+        assertNull(day[0].beforeCarbsG)
+        assertEquals(72, day[0].afterCarbsG, "another session follows: the recovery cannot wait")
+        assertEquals(22, day[0].afterProteinG)
+        assertTrue(day[1].sodium)
+
+        val text = NutriFueling.describe(listOf(swim, bike, run), 72.0, DayContext(daysToRace = 1))
+        assertTrue(text.contains("bici e corsa di seguito"))
+        assertTrue(text.contains("Più sedute nello stesso giorno"))
+        assertTrue(text.contains("Domani c'è la gara"))
+        assertTrue(NutriFueling.describe(emptyList(), 72.0).contains("resta vuoto"))
+        assertNull(NutriFueling.plan(listOf(session(Sport.RUN, 40, Intensity.EASY)), 72.0).single().afterCarbsG)
     }
 }

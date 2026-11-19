@@ -71,6 +71,24 @@ Come in SwimForge, i numeri e i divieti non li decide il modello:
   il modello non viene chiamato e la risposta è fissa: medico di base e Numero
   Verde SOS Disturbi Alimentari 800 180 969.
 
+### NutriAI sulla settimana a tre sport
+
+La giornata di un triatleta dipende anche da quello che viene dopo
+(`DayContext`): le sedute di domani e la gara.
+
+- **Vigilia.** Prima di un giorno pesante o della gara i carboidrati non
+  scendono sotto 6 g/kg, e quel giorno non c'è deficit calorico.
+- **Carico prima della gara.** Nei due giorni prima di un 70.3 (8 g/kg) o di
+  un Ironman (10 g/kg), e il giorno prima di un olimpico (7 g/kg).
+- **Rifornimento** (`NutriFueling`): per ogni sforzo del giorno l'app calcola
+  i grammi prima, all'ora durante e dopo, dalla durata e dall'intensità. Un
+  brick (bici e corsa di seguito) è un solo sforzo; con due sedute separate
+  il recupero dopo la prima è obbligato. In vasca, sotto i 90 minuti, solo
+  acqua.
+
+NutriAI riceve questi numeri nella richiesta e li traduce in cibi adatti al
+profilo: non li ricalcola.
+
 ## La regia da triathlon
 
 La forma della settimana la decidono regole dell'app (`TriRegia`), non il

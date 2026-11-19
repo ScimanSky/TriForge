@@ -13,11 +13,13 @@ import com.triforge.domain.TrainingStats
 import com.triforge.domain.coach.BanViolation
 import com.triforge.domain.coach.BodyData
 import com.triforge.domain.coach.CoachBriefs
+import com.triforge.domain.coach.DayContext
 import com.triforge.domain.coach.DayTargets
 import com.triforge.domain.coach.FoodBans
 import com.triforge.domain.coach.NutriEnergy
+import com.triforge.domain.coach.NutriFueling
 import com.triforge.domain.coach.NutriSafety
-import com.triforge.domain.coach.PlannedSession
+import com.triforge.domain.coach.WeekPlan
 import com.triforge.domain.coach.CoachMapper
 import com.triforge.domain.coach.CoachPrompts
 import com.triforge.domain.coach.CoachRole
@@ -26,6 +28,7 @@ import com.triforge.domain.coach.NutritionProfile
 import com.triforge.domain.coach.PlannedDay
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -157,11 +160,26 @@ class NutriViewModel(
         planDay()
     }
 
-    /** The app's numbers for [date] from the athlete's body and the Coach's sessions; null without a weight. */
-    private suspend fun targetsFor(profile: NutritionProfile, sessions: List<PlannedSession>): DayTargets? {
+    /** The app's numbers for a day: energy and macronutrients, and the fuelling around its sessions. */
+    private data class DayNumbers(val targets: DayTargets?, val fueling: String?)
+
+    /**
+     * What the app works out for [date] from the athlete's body, the coaches'
+     * sessions of the day, tomorrow's, and the race: null targets without a
+     * weight.
+     */
+    private suspend fun numbersFor(profile: NutritionProfile, plan: WeekPlan?, date: LocalDate): DayNumbers {
         val data = athlete.current()
         val body = BodyData(data.profile.weightKg, data.profile.heightCm, data.age, profile.sex)
-        return NutriEnergy.targets(profile, body, sessions)
+        val sessions = plan?.day(date)?.sessions.orEmpty()
+        val context = DayContext(
+            tomorrow = plan?.day(date.plusDays(1))?.sessions.orEmpty(),
+            daysToRace = data.profile.raceDate?.let { ChronoUnit.DAYS.between(date, it).toInt() }?.takeIf { it >= 0 },
+            race = data.profile.goal,
+        )
+        val targets = NutriEnergy.targets(profile, body, sessions, context)
+        val weight = data.profile.weightKg?.takeIf { targets != null }
+        return DayNumbers(targets, weight?.let { NutriFueling.describe(sessions, it, context) })
     }
 
     /**
@@ -175,12 +193,13 @@ class NutriViewModel(
         val coach = repository.coachDesk(uid).first()
         val profile = profileOverride ?: nutri.profile ?: NutritionProfile()
         val plan = coach.plan?.takeIf { it.weekStart == TrainingStats.weekStart(date) }
-        val targets = targetsFor(profile, plan?.day(date)?.sessions.orEmpty())
+        val numbers = numbersFor(profile, plan, date)
+        val targets = numbers.targets
             ?: throw CoachException(CoachException.Reason.NEEDS_WEIGHT)
         val recent = state.value.chat.takeLast(RECENT_MESSAGES).map { it.message }
         val described = athlete.describe()
         fun request(violations: List<BanViolation>) =
-            CoachPrompts.nutritionDayRequest(described, date, profile, targets, coach.brief, plan, recent, violations)
+            CoachPrompts.nutritionDayRequest(described, date, profile, targets, coach.brief, plan, recent, violations, numbers.fueling)
         var day = NutriEnergy.apply(agent.plan(request(emptyList())).copy(date = date), targets)
         val violations = FoodBans.violations(day, profile)
         if (violations.isNotEmpty()) {
@@ -206,7 +225,8 @@ class NutriViewModel(
             val date = today()
             val plan = coach.plan?.takeIf { it.weekStart == TrainingStats.weekStart(date) }
             val profile = nutri.profile ?: NutritionProfile()
-            val targets = targetsFor(profile, plan?.day(date)?.sessions.orEmpty())
+            val numbers = numbersFor(profile, plan, date)
+            val targets = numbers.targets
             val turn = CoachPrompts.chatTurn(
                 role = CoachRole.NUTRI_AI,
                 athlete = athlete.describe(),
@@ -217,6 +237,11 @@ class NutriViewModel(
                         appendLine("## Obiettivi del giorno")
                         appendLine(NutriEnergy.describe(it, profile.goal))
                         appendLine("Se proponi un giorno nuovo, l'app ricalcola i numeri: cambia pasti e alimentazione, non i numeri.")
+                        appendLine()
+                    }
+                    numbers.fueling?.let {
+                        appendLine("## Rifornimento intorno alle sedute")
+                        appendLine(it)
                         appendLine()
                     }
                     appendLine("## Profilo alimentare")
