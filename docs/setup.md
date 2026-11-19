@@ -113,8 +113,10 @@ firebase appdistribution:distribute app/build/outputs/apk/debug/app-debug.apk \
   --app <id-app-android> --project <id-progetto> --testers <email-del-tester>
 ```
 
-- Alza `versionCode` in `android/app/build.gradle.kts` a ogni versione inviata:
-  è da lì che l'app capisce che ne esiste una più recente.
+- Il numero di versione è il numero di commit dietro la build
+  (`git rev-list --count HEAD`), quindi cresce da solo a ogni modifica unita
+  su `main`. È da lì che l'app capisce che esiste una versione più recente.
+  Compila da un clone completo, non da uno superficiale.
 - Compila sempre sullo stesso computer. Un aggiornamento si installa sopra la
   versione precedente solo se è firmato con la stessa chiave di debug
   (`~/.android/debug.keystore`).
