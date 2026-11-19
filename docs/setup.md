@@ -2,6 +2,28 @@
 
 Questi passaggi servono una volta sola. Richiedono un account Google.
 
+## Progetto in uso
+
+La configurazione qui sotto è già stata fatta il 19 novembre 2026:
+
+| Cosa | Valore |
+|------|--------|
+| Progetto Firebase | `triforge-app` |
+| App Android | `com.triforge.app` |
+| Firestore | database `(default)`, `europe-west1` |
+| Accesso | Email/Password |
+| Servizio Garmin | Cloud Run `triforge-garmin`, `europe-west1`, da 0 a 2 istanze |
+| Service account | `triforge-garmin@triforge-app.iam.gserviceaccount.com`, con `Cloud Datastore User` sul progetto e `Secret Manager Secret Accessor` sui due segreti |
+| Sincronizzazione | Cloud Scheduler `triforge-garmin-sync`, ogni giorno alle 05:00 (Europe/Rome) |
+
+`google-services.json` e `android/local.properties` restano solo sul computer:
+non vanno nel repository. Il progetto predefinito per la CLI di Firebase è in
+`.firebaserc`.
+
+Per pubblicare di nuovo il servizio dopo una modifica basta ripetere il
+comando `gcloud run deploy` del punto 3. Il controllo di vita è
+`GET /health`.
+
 ## 1. Progetto Firebase
 
 1. Apri la [console Firebase](https://console.firebase.google.com) e crea un progetto.

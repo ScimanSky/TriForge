@@ -16,7 +16,7 @@ in un documento che l'app non può leggere.
 
 | Metodo | Percorso | Cosa fa |
 | --- | --- | --- |
-| GET | `/healthz` | Controllo di vita |
+| GET | `/health` | Controllo di vita |
 | POST | `/garmin/connect` | Avvia il login con `{email, password}`. Risponde `connected` oppure `mfa_required` |
 | POST | `/garmin/mfa` | Completa il login con `{code}` |
 | POST | `/garmin/sync` | Importa le attività recenti. Accetta `{daysBack}` |

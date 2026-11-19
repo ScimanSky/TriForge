@@ -7,7 +7,7 @@ reads them.
 
 Endpoints:
 
-- ``GET    /healthz``
+- ``GET    /health``
 - ``POST   /garmin/connect``     start a login with Garmin email and password
 - ``POST   /garmin/mfa``         finish a login that asked for a code
 - ``POST   /garmin/sync``        import recent activities
@@ -121,8 +121,10 @@ def create_app(
     # Handlers are plain ``def`` on purpose: the Garmin library is blocking,
     # and FastAPI runs sync handlers in a thread pool.
 
-    @app.get("/healthz")
-    def healthz() -> dict[str, str]:
+    # Not /healthz: Cloud Run keeps that path for itself on run.app addresses
+    # and answers 404 before the request reaches the app.
+    @app.get("/health")
+    def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/garmin/connect")
