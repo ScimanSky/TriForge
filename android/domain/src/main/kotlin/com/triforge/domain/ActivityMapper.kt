@@ -26,6 +26,7 @@ object ActivityMapper {
             startTime = startTime,
             durationSec = number(fields["durationSec"])?.toLong()?.coerceAtLeast(0) ?: 0,
             distanceMeters = number(fields["distanceMeters"])?.toDouble()?.coerceAtLeast(0.0) ?: 0.0,
+            movingDurationSec = number(fields["movingDurationSec"])?.toLong()?.takeIf { it > 0 },
             elevationGainMeters = number(fields["elevationGainMeters"])?.toDouble(),
             avgHr = number(fields["avgHr"])?.toInt(),
             maxHr = number(fields["maxHr"])?.toInt(),
@@ -38,7 +39,7 @@ object ActivityMapper {
             anaerobicTe = number(fields["anaerobicTe"])?.toDouble(),
             vo2max = number(fields["vo2max"])?.toDouble(),
             openWater = fields["openWater"] as? Boolean,
-            poolLengthMeters = number(fields["poolLengthMeters"])?.toDouble(),
+            poolLengthMeters = poolLength(number(fields["poolLengthMeters"])?.toDouble()),
             swolf = number(fields["swolf"])?.toInt(),
             strokes = number(fields["strokes"])?.toInt(),
             lengths = number(fields["lengths"])?.toInt(),
@@ -58,6 +59,19 @@ object ActivityMapper {
         Sport.RUN -> "run"
         Sport.OTHER -> "other"
     }
+
+    /**
+     * Garmin reports the pool length in centimetres, and documents synced
+     * before the service converted it still hold that number. No pool is
+     * [LONGEST_POOL_METERS] long, so anything above it is centimetres.
+     */
+    fun poolLength(stored: Double?): Double? = when {
+        stored == null || stored <= 0 -> null
+        stored > LONGEST_POOL_METERS -> stored / 100.0
+        else -> stored
+    }
+
+    private const val LONGEST_POOL_METERS = 200.0
 
     // Firestore hands numbers back as Long or Double depending on the value.
     private fun number(value: Any?): Number? = value as? Number

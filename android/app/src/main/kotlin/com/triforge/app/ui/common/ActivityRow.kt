@@ -44,7 +44,7 @@ fun ActivityRow(activity: Activity, onClick: () -> Unit, modifier: Modifier = Mo
     }
     val detail = listOfNotNull(
         Formatters.duration(activity.durationSec).takeIf { hasDistance },
-        Formatters.pace(activity.sport, activity.distanceMeters, activity.durationSec),
+        Formatters.pace(activity.sport, activity.distanceMeters, activity.paceSec),
     ).joinToString(" · ")
 
     ListRow(modifier = modifier, onClick = onClick) {

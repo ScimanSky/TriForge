@@ -90,10 +90,19 @@ object SessionLoadModel {
             Sport.SWIM -> {
                 val css = profile.cssSecPer100m
                 if (css != null && css > 0 && activity.distanceMeters > 0) {
-                    val speed = activity.distanceMeters / activity.durationSec
+                    // Speed and time are both those of the swimming itself.
+                    // Over the whole session the rests at the wall drag the
+                    // speed down, and the cube turns that into a third of
+                    // the real load.
+                    val swimSec = activity.movingSec
+                    val speed = activity.distanceMeters / swimSec
                     val intensity = (speed / (100.0 / css)).coerceAtMost(MAX_IF)
-                    // Medium: pauses at the wall are inside the duration.
-                    return SessionLoad(activity, hours * intensity.pow(3) * 100, LoadMethod.SWIM_PACE, LoadQuality.MEDIUM)
+                    // Medium without a measured swimming time: the pauses are
+                    // then inside the duration.
+                    val quality = if (activity.movingDurationSec != null) LoadQuality.HIGH else LoadQuality.MEDIUM
+                    return SessionLoad(
+                        activity, swimSec / 3600.0 * intensity.pow(3) * 100, LoadMethod.SWIM_PACE, quality,
+                    )
                 }
             }
 
