@@ -113,6 +113,10 @@
     <string name="marker_above">sopra il solito</string>
     <string name="marker_inside">nella norma</string>
     <string name="marker_learning">sto imparando</string>
+    <string name="recovery_week_title">Ultimi 7 giorni</string>
+    <string name="recovery_week_band">banda grigia = il tuo solito</string>
+    <string name="recovery_feel_note">dal check-in</string>
+    <string name="recovery_feel_title">Come ti senti</string>
     <string name="today_this_week">Questa settimana</string>
     <string name="today_week_total">%1$s · %2$d attività</string>
     <string name="today_sport_stats">Statistiche per sport</string>

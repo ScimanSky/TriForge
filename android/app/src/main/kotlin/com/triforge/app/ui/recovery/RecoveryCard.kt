@@ -1,6 +1,21 @@
 package com.triforge.app.ui.recovery
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.triforge.domain.CheckIn
+import java.time.LocalDate
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,8 +56,9 @@ import kotlin.math.roundToInt
 /**
  * "How am I today": the load-recovery balance on the Today tab. The number
  * is in plain text colour and its state is a word with a coloured dot, so it
- * never relies on colour alone. Under it, the three night markers against
- * the athlete's own normal range.
+ * never relies on colour alone. Under it, a sideways row with the night
+ * markers and the check-in over the last seven days, against the athlete's
+ * own normal range.
  */
 @Composable
 fun RecoveryCard(
@@ -101,27 +117,17 @@ fun RecoveryCard(
         }
 
         val markers = listOfNotNull(
-            report.hrvBand.lastOrNull()?.let {
-                Marker(stringResource(R.string.recovery_part_hrv), it, higherIsBetter = true) { v -> "${v.roundToInt()} ms" }
+            Marker(stringResource(R.string.recovery_part_hrv), report.hrvBand, higherIsBetter = true) { v -> "${v.roundToInt()} ms" },
+            Marker(stringResource(R.string.recovery_part_resting_hr), report.restingHrBand, higherIsBetter = false) { v ->
+                "${v.roundToInt()} bpm"
             },
-            report.restingHrBand.lastOrNull()?.let {
-                Marker(stringResource(R.string.recovery_part_resting_hr), it, higherIsBetter = false) { v -> "${v.roundToInt()} bpm" }
+            Marker(stringResource(R.string.recovery_part_sleep), report.sleepBand, higherIsBetter = true) { v ->
+                Formatters.duration((v * 3600).roundToInt().toLong())
             },
-            report.sleepBand.lastOrNull()?.let {
-                Marker(stringResource(R.string.recovery_part_sleep), it, higherIsBetter = true) { v ->
-                    Formatters.duration((v * 3600).roundToInt().toLong())
-                }
-            },
-        ).filter { it.band.value != null }
-        if (markers.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                markers.forEach { MarkerChip(it, Modifier.weight(1f)) }
-            }
+        ).filter { it.band?.value != null }
+        val feel = loaded.recentCheckIns.map { it.date to it.feelScore() }
+        if (markers.isNotEmpty() || feel.isNotEmpty()) {
+            MarkerRow(markers = markers, feel = feel, modifier = Modifier.padding(top = 16.dp))
         }
 
         Text(
@@ -149,10 +155,17 @@ fun RecoveryCard(
 
 private class Marker(
     val label: String,
-    val band: MarkerBand,
+    bands: List<MarkerBand>,
     val higherIsBetter: Boolean,
     val format: (Double) -> String,
-)
+) {
+    /** The last seven days, oldest first; the last one is today's. */
+    val week: List<MarkerBand> = bands.takeLast(7)
+    val band: MarkerBand? get() = week.lastOrNull()
+}
+
+/** How the athlete feels from a check-in, 1 (bad) to 5 (great): the total runs from 5 (great) to 35 (bad). */
+private fun CheckIn.feelScore(): Double = 5.0 - (total - 5) / 30.0 * 4.0
 
 /** Where a marker sits against the athlete's normal range. */
 private enum class Position { BELOW, INSIDE, ABOVE, UNKNOWN }
@@ -168,9 +181,70 @@ private fun MarkerBand.position(): Position {
     }
 }
 
+private val CARD_WIDTH = 140.dp
+private val CARD_GAP = 10.dp
+
+/**
+ * The night markers and how the athlete feels, one small card each with the
+ * last seven days against their usual range. The row scrolls sideways: the
+ * next card shows halfway and the dots say how many there are.
+ */
 @Composable
-private fun MarkerChip(marker: Marker, modifier: Modifier = Modifier) {
-    val position = marker.band.position()
+private fun MarkerRow(markers: List<Marker>, feel: List<Pair<LocalDate, Double>>, modifier: Modifier = Modifier) {
+    val scroll = rememberScrollState()
+    val count = markers.size + if (feel.isNotEmpty()) 1 else 0
+    val step = with(LocalDensity.current) { (CARD_WIDTH + CARD_GAP).toPx() }
+    val current = if (scroll.maxValue > 0 && scroll.value >= scroll.maxValue) count - 1 else (scroll.value / step).roundToInt()
+    Column(modifier = modifier) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(
+                stringResource(R.string.recovery_week_title),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(R.string.recovery_week_band),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp)
+                .horizontalScroll(scroll),
+            horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
+        ) {
+            markers.forEach { MarkerCard(it) }
+            if (feel.isNotEmpty()) FeelCard(feel)
+        }
+        if (count > 2) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .clearAndSetSemantics { },
+                horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
+            ) {
+                repeat(count) { index ->
+                    val on = index == current.coerceIn(0, count - 1)
+                    Box(
+                        Modifier
+                            .size(width = if (on) 16.dp else 5.dp, height = 5.dp)
+                            .clip(CircleShape)
+                            .background(if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarkerCard(marker: Marker) {
+    val band = marker.band ?: return
+    val position = band.position()
     val worse = (position == Position.BELOW && marker.higherIsBetter) ||
         (position == Position.ABOVE && !marker.higherIsBetter)
     val note = stringResource(
@@ -181,35 +255,104 @@ private fun MarkerChip(marker: Marker, modifier: Modifier = Modifier) {
             Position.UNKNOWN -> R.string.marker_learning
         },
     )
-    val value = marker.band.value?.let(marker.format).orEmpty()
-    val shape = RoundedCornerShape(12.dp)
+    val arrow = when (position) {
+        Position.BELOW -> "↓ "
+        Position.ABOVE -> "↑ "
+        else -> ""
+    }
+    val value = band.value?.let(marker.format).orEmpty()
+    TrendCard(
+        label = marker.label,
+        value = value,
+        note = arrow + note,
+        noteColor = if (worse) TriColors.caution else MaterialTheme.colorScheme.onSurfaceVariant,
+        lineColor = if (worse) TriColors.caution else TriColors.good,
+        values = marker.week.map { it.value },
+        lows = marker.week.map { it.low },
+        highs = marker.week.map { it.high },
+        description = "${marker.label} $value, $note",
+    )
+}
+
+@Composable
+private fun FeelCard(feel: List<Pair<LocalDate, Double>>) {
+    val today = feel.last().second
+    val label = stringResource(R.string.recovery_feel_title)
+    val value = today.roundToInt().coerceIn(1, 5).toString()
+    val note = stringResource(R.string.recovery_feel_note)
+    TrendCard(
+        label = label,
+        value = "$value/5",
+        note = note,
+        noteColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        lineColor = TriColors.good,
+        values = feel.map { it.second },
+        lows = emptyList(),
+        highs = emptyList(),
+        description = "$label $value su 5, $note",
+    )
+}
+
+@Composable
+private fun TrendCard(
+    label: String,
+    value: String,
+    note: String,
+    noteColor: Color,
+    lineColor: Color,
+    values: List<Double?>,
+    lows: List<Double?>,
+    highs: List<Double?>,
+    description: String,
+) {
+    val bandColor = Color.White.copy(alpha = 0.09f)
     Column(
-        modifier = modifier
-            .clip(shape)
+        modifier = Modifier
+            .width(CARD_WIDTH)
+            .clip(RoundedCornerShape(16.dp))
             .background(TriColors.track.copy(alpha = 0.5f))
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-            .semantics { contentDescription = "${marker.label} $value, $note" },
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+            .padding(12.dp)
+            .clearAndSetSemantics { contentDescription = description },
     ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Text(value, style = numberStyle(22.sp), maxLines = 1, modifier = Modifier.padding(top = 2.dp))
         Text(
-            text = marker.label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            note,
+            style = MaterialTheme.typography.labelSmall,
+            color = noteColor,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        Text(text = value, style = numberStyle(16.sp), maxLines = 1)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            val arrow = when (position) {
-                Position.BELOW -> "↓"
-                Position.ABOVE -> "↑"
-                else -> "="
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(36.dp)
+                .padding(top = 8.dp),
+        ) {
+            val all = (values + lows + highs).filterNotNull()
+            if (all.isEmpty()) return@Canvas
+            var min = all.min()
+            var max = all.max()
+            if (max - min < 1e-6) { min -= 1; max += 1 }
+            val n = values.size
+            fun x(i: Int) = if (n <= 1) size.width else i * size.width / (n - 1)
+            fun y(v: Double) = (size.height * (1 - (v - min) / (max - min))).toFloat()
+            // The usual range, day by day.
+            val bandIdx = lows.indices.filter { lows[it] != null && highs.getOrNull(it) != null }
+            if (bandIdx.size >= 2) {
+                val band = Path()
+                bandIdx.forEachIndexed { k, i -> if (k == 0) band.moveTo(x(i), y(highs[i]!!)) else band.lineTo(x(i), y(highs[i]!!)) }
+                bandIdx.reversed().forEach { i -> band.lineTo(x(i), y(lows[i]!!)) }
+                band.close()
+                drawPath(band, bandColor)
             }
-            Text(
-                text = "$arrow $note",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (worse) TriColors.caution else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
+            val points = values.indices.filter { values[it] != null }
+            if (points.size >= 2) {
+                val line = Path()
+                points.forEachIndexed { k, i -> if (k == 0) line.moveTo(x(i), y(values[i]!!)) else line.lineTo(x(i), y(values[i]!!)) }
+                drawPath(line, lineColor, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+            points.lastOrNull()?.let { i -> drawCircle(lineColor, radius = 3.dp.toPx(), center = Offset(x(i), y(values[i]!!))) }
         }
     }
 }
