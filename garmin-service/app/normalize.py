@@ -121,3 +121,99 @@ def normalize_activity(raw: dict[str, Any]) -> dict[str, Any] | None:
         doc["lengths"] = _rounded(raw.get("activeLengths"))
 
     return doc
+
+
+# -- daily recovery data ----------------------------------------------------
+
+
+def _positive(value: Any) -> float | None:
+    number = _number(value)
+    return number if number is not None and number > 0 else None
+
+
+def _valid_date(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.strptime(value[:10], "%Y-%m-%d").date().isoformat()
+    except ValueError:
+        return None
+
+
+def health_document_id(calendar_date: str) -> str:
+    return f"garmin_{calendar_date}"
+
+
+def normalize_health(
+    hrv: list[dict[str, Any]],
+    resting_hr: list[dict[str, Any]],
+    sleep: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Merge Garmin's daily recovery rows into one document per day.
+
+    The result maps a document id to the fields stored under
+    ``users/{uid}/wellness/{id}``. ``date`` is the morning the values belong
+    to: Garmin files a night's sleep and HRV under the day you wake up.
+
+    Fields, all optional except ``source`` and ``date``:
+
+    - ``hrvRmssd``: average overnight RMSSD in ms (Garmin ``lastNightAvg``).
+    - ``hrvWeeklyAvg``, ``hrvStatus``, ``hrvBaselineLow``, ``hrvBaselineHigh``:
+      Garmin's own 7-day average, status and personal normal range.
+    - ``restingHr``: resting heart rate in bpm.
+    - ``sleepSec``: time asleep. ``sleepScore``: Garmin's 0-100 score.
+    """
+    days: dict[str, dict[str, Any]] = {}
+
+    def day(value: Any) -> dict[str, Any] | None:
+        calendar_date = _valid_date(value)
+        if calendar_date is None:
+            return None
+        return days.setdefault(
+            calendar_date, {"source": "garmin", "date": calendar_date}
+        )
+
+    for row in hrv:
+        doc = day(row.get("calendarDate"))
+        if doc is None:
+            continue
+        baseline = row.get("baseline") if isinstance(row.get("baseline"), dict) else {}
+        status = row.get("status")
+        doc.update(
+            {
+                "hrvRmssd": _positive(row.get("lastNightAvg")),
+                "hrvWeeklyAvg": _positive(row.get("weeklyAvg")),
+                "hrvStatus": status if isinstance(status, str) else None,
+                "hrvBaselineLow": _positive(baseline.get("balancedLow")),
+                "hrvBaselineHigh": _positive(baseline.get("balancedUpper")),
+            }
+        )
+
+    for row in resting_hr:
+        doc = day(row.get("calendarDate"))
+        if doc is not None:
+            doc["restingHr"] = _rounded(_positive(row.get("value")))
+
+    for row in sleep:
+        doc = day(row.get("calendarDate"))
+        if doc is None:
+            continue
+        values = row.get("values") if isinstance(row.get("values"), dict) else row
+        sleep_sec = _positive(
+            values.get("totalSleepTimeInSeconds", values.get("sleepTimeSeconds"))
+        )
+        doc["sleepSec"] = _rounded(sleep_sec)
+        doc["sleepScore"] = _rounded(_positive(values.get("sleepScore")))
+        # The sleep endpoint repeats resting HR and HRV; use them only to fill
+        # a gap, because the dedicated endpoints are the reference.
+        if doc.get("restingHr") is None:
+            doc["restingHr"] = _rounded(_positive(values.get("restingHeartRate")))
+        if doc.get("hrvRmssd") is None:
+            doc["hrvRmssd"] = _positive(values.get("avgOvernightHrv"))
+
+    result: dict[str, dict[str, Any]] = {}
+    for calendar_date, doc in days.items():
+        fields = {key: value for key, value in doc.items() if value is not None}
+        if len(fields) > 2:  # more than source and date
+            result[health_document_id(calendar_date)] = fields
+    return result

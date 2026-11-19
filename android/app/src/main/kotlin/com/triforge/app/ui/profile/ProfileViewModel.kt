@@ -202,6 +202,8 @@ class ProfileViewModel(
         viewModelScope.launch {
             val notice = try {
                 val count = healthConnect.importWorkouts(uid, TrainingViewModel.windowStart())
+                // Recovery data is a bonus: a failure here keeps the workouts.
+                runCatching { healthConnect.importWellness(uid, TrainingViewModel.windowStart()) }
                 Notice(R.string.hc_imported, listOf(count))
             } catch (error: Exception) {
                 Notice(R.string.hc_error, isError = true)

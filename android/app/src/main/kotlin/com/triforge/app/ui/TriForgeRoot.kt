@@ -42,6 +42,8 @@ import com.triforge.app.ui.common.LoadingBox
 import com.triforge.app.ui.detail.ActivityDetailScreen
 import com.triforge.app.ui.profile.ProfileScreen
 import com.triforge.app.ui.profile.ProfileViewModel
+import com.triforge.app.ui.recovery.CheckInScreen
+import com.triforge.app.ui.recovery.RecoveryScreen
 import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.TriIcons
 import com.triforge.app.ui.today.TodayScreen
@@ -54,6 +56,11 @@ private enum class Tab(val route: String, @StringRes val label: Int, val icon: I
 
 private const val ACTIVITY_ID = "id"
 private const val ACTIVITY_ROUTE = "activity/{$ACTIVITY_ID}"
+private const val RECOVERY_ROUTE = "recovery"
+private const val CHECK_IN_ROUTE = "check-in"
+
+/** Detail pages: no tabs under them. */
+private val DETAIL_ROUTES = setOf(ACTIVITY_ROUTE, RECOVERY_ROUTE, CHECK_IN_ROUTE)
 
 @Composable
 fun TriForgeRoot(
@@ -116,7 +123,14 @@ private fun SignedIn(uid: String, container: AppContainer) {
             }
         },
     )
+    val recoveryViewModel: RecoveryViewModel = viewModel(
+        key = "recovery-$uid",
+        factory = viewModelFactory {
+            initializer { RecoveryViewModel(uid, container.activities, container.wellness, container.profiles) }
+        },
+    )
     val training by trainingViewModel.state.collectAsStateWithLifecycle()
+    val recovery by recoveryViewModel.state.collectAsStateWithLifecycle()
     val profile by profileViewModel.state.collectAsStateWithLifecycle()
 
     val navController = rememberNavController()
@@ -127,8 +141,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            // A single activity is a detail page: no tabs under it.
-            if (currentRoute != ACTIVITY_ROUTE) {
+            if (currentRoute !in DETAIL_ROUTES) {
                 NavigationBar(containerColor = TriColors.navBar, tonalElevation = 0.dp) {
                     Tab.entries.forEach { tab ->
                         NavigationBarItem(
@@ -157,16 +170,33 @@ private fun SignedIn(uid: String, container: AppContainer) {
             composable(Tab.TODAY.route) {
                 TodayScreen(
                     state = training,
+                    recovery = recovery,
                     name = profile.name,
                     onOpenProfile = { navController.openTab(Tab.PROFILE) },
                     onOpenActivity = openActivity,
                     onOpenStats = { navController.openTab(Tab.ACTIVITIES) },
+                    onOpenRecovery = { navController.navigate(RECOVERY_ROUTE) },
+                    onCheckIn = { navController.navigate(CHECK_IN_ROUTE) },
                 )
             }
             composable(Tab.ACTIVITIES.route) {
                 ActivitiesScreen(state = training, garmin = profile.garmin, onOpenActivity = openActivity)
             }
             composable(Tab.PROFILE.route) { ProfileScreen(profileViewModel) }
+            composable(RECOVERY_ROUTE) {
+                RecoveryScreen(
+                    state = recovery,
+                    onBack = { navController.popBackStack() },
+                    onCheckIn = { navController.navigate(CHECK_IN_ROUTE) },
+                )
+            }
+            composable(CHECK_IN_ROUTE) {
+                CheckInScreen(
+                    initial = (recovery as? RecoveryState.Loaded)?.todayCheckIn,
+                    onSave = recoveryViewModel::saveCheckIn,
+                    onBack = { navController.popBackStack() },
+                )
+            }
             composable(ACTIVITY_ROUTE) { entry ->
                 val id = entry.arguments?.getString(ACTIVITY_ID)
                 val activities = (training as? TrainingState.Loaded)?.activities.orEmpty()

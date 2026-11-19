@@ -8,7 +8,7 @@ from cryptography.fernet import Fernet
 
 from app.config import Settings
 from app.crypto import TokenCipher
-from app.gateway import MfaChallenge, Session
+from app.gateway import GarminData, HealthData, MfaChallenge, Session
 from app.service import GarminService
 from app.store import MemoryStore
 
@@ -20,6 +20,7 @@ class FakeGateway:
         self.login_result: Any = Session(tokens='{"t": 1}', full_name="Ada Rossi")
         self.mfa_result: Any = Session(tokens='{"t": 2}', full_name="Ada Rossi")
         self.activities: list[dict[str, Any]] = []
+        self.health = HealthData()
         self.fetch_error: Exception | None = None
         self.refreshed_tokens = '{"t": "refreshed"}'
         self.login_calls: list[tuple[str, str]] = []
@@ -38,11 +39,11 @@ class FakeGateway:
             raise self.mfa_result
         return self.mfa_result
 
-    def fetch_activities(self, tokens: str, start: date, end: date):
+    def fetch(self, tokens: str, start: date, end: date) -> GarminData:
         self.fetch_calls.append((tokens, start, end))
         if self.fetch_error:
             raise self.fetch_error
-        return self.activities, Session(tokens=self.refreshed_tokens)
+        return GarminData(self.activities, self.health, Session(tokens=self.refreshed_tokens))
 
 
 class Clock:

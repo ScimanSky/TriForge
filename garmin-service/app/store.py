@@ -6,6 +6,7 @@ Firestore layout, all under ``users/{uid}``:
 - ``private/garminMfa``    encrypted pending MFA state. Never readable by the app.
 - ``integrations/garmin``  connection status. Read-only for the app.
 - ``activities/{id}``      normalized activities. Read by the app.
+- ``wellness/{id}``        one document per day: HRV, resting HR, sleep.
 """
 
 from __future__ import annotations
@@ -33,6 +34,8 @@ class Store(Protocol):
 
     def upsert_activities(self, uid: str, docs: dict[str, dict[str, Any]]) -> None: ...
 
+    def upsert_wellness(self, uid: str, docs: dict[str, dict[str, Any]]) -> None: ...
+
     def disconnect(self, uid: str) -> None: ...
 
     def connected_uids(self) -> Iterable[str]: ...
@@ -46,6 +49,7 @@ class MemoryStore:
         self.mfa: dict[str, dict[str, Any]] = {}
         self.status: dict[str, dict[str, Any]] = {}
         self.activities: dict[str, dict[str, dict[str, Any]]] = {}
+        self.wellness: dict[str, dict[str, dict[str, Any]]] = {}
 
     def get_tokens(self, uid: str) -> str | None:
         return self.tokens.get(uid)
@@ -70,6 +74,11 @@ class MemoryStore:
 
     def upsert_activities(self, uid: str, docs: dict[str, dict[str, Any]]) -> None:
         bucket = self.activities.setdefault(uid, {})
+        for doc_id, doc in docs.items():
+            bucket.setdefault(doc_id, {}).update(doc)
+
+    def upsert_wellness(self, uid: str, docs: dict[str, dict[str, Any]]) -> None:
+        bucket = self.wellness.setdefault(uid, {})
         for doc_id, doc in docs.items():
             bucket.setdefault(doc_id, {}).update(doc)
 
@@ -123,7 +132,13 @@ class FirestoreStore:
         self._status_ref(uid).set(fields, merge=True)
 
     def upsert_activities(self, uid: str, docs: dict[str, dict[str, Any]]) -> None:
-        collection = self._user(uid).collection("activities")
+        self._upsert(uid, "activities", docs)
+
+    def upsert_wellness(self, uid: str, docs: dict[str, dict[str, Any]]) -> None:
+        self._upsert(uid, "wellness", docs)
+
+    def _upsert(self, uid: str, name: str, docs: dict[str, dict[str, Any]]) -> None:
+        collection = self._user(uid).collection(name)
         items = list(docs.items())
         for offset in range(0, len(items), BATCH_LIMIT):
             batch = self._db.batch()

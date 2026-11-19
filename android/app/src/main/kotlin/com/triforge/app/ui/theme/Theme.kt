@@ -44,6 +44,11 @@ object TriColors {
     val accentText = Color(0xFFFFB59C)
     val good = Color(0xFF5BD69A)
     val warn = Color(0xFFFFB59C)
+
+    // Load-recovery balance, from normal to persistent signs.
+    val caution = Color(0xFFFFD23F)
+    val alert = Color(0xFFFF8A4C)
+    val danger = Color(0xFFFF5C64)
     val iconBox = Color(0xFF1F2A33)
 }
 
