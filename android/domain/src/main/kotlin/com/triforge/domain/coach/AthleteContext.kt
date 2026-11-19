@@ -35,7 +35,11 @@ data class AthleteData(
     val loads: Map<String, SessionLoad> = emptyMap(),
     val recovery: RecoveryReport? = null,
     val checkIn: CheckIn? = null,
-)
+    val birthYear: Int? = null,
+) {
+    /** Age in years this year, from the year of birth of the account. */
+    val age: Int? get() = birthYear?.let { today.year - it }?.takeIf { it in 10..110 }
+}
 
 object AthleteContext {
 
@@ -49,7 +53,7 @@ object AthleteContext {
         appendLine("Oggi è ${dayLabel(data.today)} ${data.today}.")
         appendLine()
         appendLine("## Profilo")
-        profile(data.profile, data.today).forEach { appendLine("- $it") }
+        profile(data.profile, data.today, data.age).forEach { appendLine("- $it") }
         appendLine()
         appendLine("## Volume settimanale (ultime $TREND_WEEKS settimane, dalla più vecchia)")
         weeks(data).forEach { appendLine("- $it") }
@@ -62,7 +66,7 @@ object AthleteContext {
         recovery(data).forEach { appendLine("- $it") }
     }.trimEnd()
 
-    private fun profile(p: AthleteProfile, today: LocalDate): List<String> = buildList {
+    private fun profile(p: AthleteProfile, today: LocalDate, age: Int?): List<String> = buildList {
         val goal = when (p.goal) {
             RaceGoal.SPRINT -> "triathlon sprint"
             RaceGoal.OLYMPIC -> "triathlon olimpico"
@@ -78,6 +82,7 @@ object AthleteContext {
             add(if (date.isBefore(today)) "$name il $date (già passata)" else "$name il $date, tra $weeks settimane")
         }
         p.weeklyHours?.let { add("Ore disponibili a settimana: ${num(it)}") }
+        age?.let { add("Età: $it anni") }
         p.weightKg?.let { add("Peso: ${num(it)} kg") }
         p.heightCm?.let { add("Altezza: $it cm") }
         p.maxHr?.let { add("FC massima: $it bpm") }

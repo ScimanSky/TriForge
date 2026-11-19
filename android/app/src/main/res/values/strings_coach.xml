@@ -67,11 +67,61 @@
     <string name="nutri_profile_first_body">NutriAI costruisce i pasti sul piano del Coach e sul tuo modo di mangiare. Bastano pochi dati, li cambi quando vuoi.</string>
     <string name="nutri_profile_title">Profilo alimentare</string>
     <string name="nutri_profile_diet">Alimentazione</string>
-    <string name="nutri_profile_avoid">Intolleranze, allergie, cibi da evitare</string>
-    <string name="nutri_profile_avoid_hint">Es. lattosio, frutta a guscio</string>
     <string name="nutri_profile_meals">Pasti al giorno</string>
     <string name="nutri_profile_goal">Obiettivo</string>
     <string name="nutri_profile_notes">Altro da sapere</string>
     <string name="nutri_profile_notes_hint">Es. pranzo in ufficio, mi alleno a digiuno</string>
     <string name="nutri_profile_save">Salva</string>
+    <string name="nutri_profile_body">Più NutriAI sa di te, più i pasti ti somigliano. Allergie e intolleranze sono divieti assoluti.</string>
+    <string name="nutri_error_weight">Per calcolare la giornata mi serve il tuo peso: aggiungilo in Modifica profilo.</string>
+
+    <string name="nutri_section_body">Corpo</string>
+    <string name="nutri_body_hint">Peso, altezza e anno di nascita vengono dal tuo profilo. Servono all\'app per calcolare le calorie del giorno.</string>
+    <string name="nutri_profile_sex">Sesso biologico</string>
+    <string name="nutri_section_goal">Obiettivo e abitudini</string>
+
+    <string name="nutri_section_allergies">Allergie</string>
+    <string name="nutri_allergies_hint">I 14 allergeni di legge. Un cibo che li contiene non compare mai.</string>
+    <string name="nutri_other">Altro</string>
+    <string name="nutri_other_allergy_hint">Es. kiwi, pesca</string>
+    <string name="nutri_section_intolerances">Intolleranze</string>
+    <string name="nutri_intolerances_hint">Senza lattosio e prodotti senza glutine restano permessi.</string>
+    <string name="nutri_other_intolerance_hint">Es. fruttosio, sorbitolo</string>
+
+    <string name="nutri_section_likes">Cibi preferiti</string>
+    <string name="nutri_likes_hint">NutriAI li propone più spesso, se vanno bene per la giornata.</string>
+    <string name="nutri_likes_field">Cibi che ti piacciono</string>
+    <string name="nutri_likes_placeholder">Es. salmone, riso basmati, frutti di bosco</string>
+    <string name="nutri_section_dislikes">Cibi che non mangi</string>
+    <string name="nutri_dislikes_hint">Puoi indicare delle eccezioni: «latte, tranne kefir e cappuccino».</string>
+    <string name="nutri_dislike_except">tranne %1$s</string>
+    <string name="nutri_remove">Togli %1$s</string>
+    <string name="nutri_dislike_food">Cibo</string>
+    <string name="nutri_dislike_food_hint">Es. latte</string>
+    <string name="nutri_dislike_exceptions">Eccezioni (facoltative)</string>
+    <string name="nutri_dislike_exceptions_hint">Es. kefir, cappuccino</string>
+    <string name="nutri_add">Aggiungi</string>
+
+    <string name="nutri_section_red_meat">Carne rossa</string>
+    <string name="nutri_red_meat_free">Libera</string>
+    <string name="nutri_red_meat_never">Mai</string>
+    <string name="nutri_red_meat_times">%1$d a settimana</string>
+
+    <string name="nutri_section_supplements">Integratori</string>
+    <string name="nutri_supplements_hint">NutriAI usa solo quelli che prendi già, e non ne suggerisce di nuovi.</string>
+    <string name="nutri_supplement_name">Integratore</string>
+    <string name="nutri_supplement_name_hint">Es. vitamina D</string>
+    <string name="nutri_supplement_dose">Dose</string>
+    <string name="nutri_supplement_dose_hint">Es. 1000 UI</string>
+    <string name="nutri_supplement_when">Quando</string>
+
+    <string name="nutri_section_drinks">Bevande</string>
+    <string name="nutri_no_caffeine_short">Niente caffeina</string>
+    <string name="nutri_drink_name">Bevanda</string>
+    <string name="nutri_drink_name_hint">Es. caffè</string>
+    <string name="nutri_drink_per_day">Quante al giorno</string>
+    <string name="nutri_drink_per_day_hint">Es. 2</string>
+    <string name="nutri_no_caffeine">Evito la caffeina</string>
+
+    <string name="nutri_profile_footer">Le calorie e i macro li calcola l\'app, NutriAI li spiega e li trasforma in pasti. Non sostituisce un medico o un dietista.</string>
 </resources>

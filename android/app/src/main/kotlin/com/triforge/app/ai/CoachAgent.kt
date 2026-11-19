@@ -38,6 +38,9 @@ class CoachException(val reason: Reason, cause: Throwable? = null) : Exception(r
         /** The answer could not be used, e.g. a plan without sessions. */
         BAD_ANSWER,
 
+        /** NutriAI cannot work out the day without the athlete's weight. */
+        NEEDS_WEIGHT,
+
         /** The model declined to answer, e.g. for its safety filters. */
         BLOCKED,
     }

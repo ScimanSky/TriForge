@@ -10,7 +10,14 @@ import com.triforge.app.data.CoachRepository
 import com.triforge.app.data.NutriDesk
 import com.triforge.app.data.ProposalStatus
 import com.triforge.domain.TrainingStats
+import com.triforge.domain.coach.BanViolation
+import com.triforge.domain.coach.BodyData
 import com.triforge.domain.coach.CoachBriefs
+import com.triforge.domain.coach.DayTargets
+import com.triforge.domain.coach.FoodBans
+import com.triforge.domain.coach.NutriEnergy
+import com.triforge.domain.coach.NutriSafety
+import com.triforge.domain.coach.PlannedSession
 import com.triforge.domain.coach.CoachMapper
 import com.triforge.domain.coach.CoachPrompts
 import com.triforge.domain.coach.CoachRole
@@ -120,15 +127,36 @@ class NutriViewModel(
         writeDay(profile)
     }
 
+    /** The app's numbers for [date] from the athlete's body and the Coach's sessions; null without a weight. */
+    private suspend fun targetsFor(profile: NutritionProfile, sessions: List<PlannedSession>): DayTargets? {
+        val data = athlete.current()
+        val body = BodyData(data.profile.weightKg, data.profile.heightCm, data.age, profile.sex)
+        return NutriEnergy.targets(profile, body, sessions)
+    }
+
+    /**
+     * NutriAI writes the day on the app's numbers; the app checks every meal
+     * against the profile, asks once more when one breaks it, and drops what
+     * still does.
+     */
     private suspend fun writeDay(profileOverride: NutritionProfile? = null) {
         val date = today()
         val nutri = repository.nutriDesk(uid).first()
         val coach = repository.coachDesk(uid).first()
         val profile = profileOverride ?: nutri.profile ?: NutritionProfile()
         val plan = coach.plan?.takeIf { it.weekStart == TrainingStats.weekStart(date) }
+        val targets = targetsFor(profile, plan?.day(date)?.sessions.orEmpty())
+            ?: throw CoachException(CoachException.Reason.NEEDS_WEIGHT)
         val recent = state.value.chat.takeLast(RECENT_MESSAGES).map { it.message }
-        val request = CoachPrompts.nutritionDayRequest(athlete.describe(), date, profile, coach.brief, plan, recent)
-        val day = agent.plan(request).copy(date = date)
+        val described = athlete.describe()
+        fun request(violations: List<BanViolation>) =
+            CoachPrompts.nutritionDayRequest(described, date, profile, targets, coach.brief, plan, recent, violations)
+        var day = NutriEnergy.apply(agent.plan(request(emptyList())).copy(date = date), targets)
+        val violations = FoodBans.violations(day, profile)
+        if (violations.isNotEmpty()) {
+            day = NutriEnergy.apply(agent.plan(request(violations)).copy(date = date), targets)
+        }
+        day = FoodBans.clean(day, profile)
         repository.saveNutritionDay(uid, day, CoachBriefs.of(day), coach.brief?.updatedAt)
     }
 
@@ -138,24 +166,37 @@ class NutriViewModel(
         run(CoachTask.REPLYING) {
             val history = state.value.chat.map { it.message }
             repository.addMessage(uid, CoachRole.NUTRI_AI, fromAthlete = true, text = message)
+            // Signs of an eating disorder: a fixed, kind answer, and no model.
+            if (NutriSafety.flags(message)) {
+                repository.addMessage(uid, CoachRole.NUTRI_AI, fromAthlete = false, text = NutriSafety.REPLY)
+                return@run
+            }
             val nutri = repository.nutriDesk(uid).first()
             val coach = repository.coachDesk(uid).first()
             val date = today()
             val plan = coach.plan?.takeIf { it.weekStart == TrainingStats.weekStart(date) }
+            val profile = nutri.profile ?: NutritionProfile()
+            val targets = targetsFor(profile, plan?.day(date)?.sessions.orEmpty())
             val turn = CoachPrompts.chatTurn(
                 role = CoachRole.NUTRI_AI,
                 athlete = athlete.describe(),
                 partner = coach.brief,
                 ownPlan = nutri.day?.takeIf { it.date == date }?.let(CoachPrompts::describe),
                 extra = buildString {
+                    targets?.let {
+                        appendLine("## Obiettivi del giorno")
+                        appendLine(NutriEnergy.describe(it, profile.goal))
+                        appendLine("Se proponi un giorno nuovo, l'app ricalcola i numeri: cambia pasti e alimentazione, non i numeri.")
+                        appendLine()
+                    }
                     appendLine("## Profilo alimentare")
-                    appendLine(CoachPrompts.describe(nutri.profile ?: NutritionProfile()))
+                    appendLine(CoachPrompts.describe(profile))
                     plan?.day(date)?.let { append("Sedute di oggi secondo il Coach: ${CoachPrompts.describeDay(it)}") }
                 }.trimEnd(),
                 message = message,
             )
             val reply = agent.reply(history, turn)
-            val proposal = reply.proposal?.copy(date = date)
+            val proposal = reply.proposal?.copy(date = date)?.let { FoodBans.clean(NutriEnergy.apply(it, targets), profile) }
             repository.addMessage(uid, CoachRole.NUTRI_AI, fromAthlete = false, text = reply.text, proposal = proposal?.let(CoachMapper::nutritionDayToFields))
             if (reply.noteForPartner.isNotBlank()) repository.leaveNote(uid, CoachRole.NUTRI_AI, reply.noteForPartner)
         }

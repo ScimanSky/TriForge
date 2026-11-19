@@ -47,6 +47,30 @@ settimane, sedute degli ultimi 14 giorni, modello di carico (fitness, fatica,
 forma), indice Carico e recupero, HRV, FC a riposo, sonno e check-in. Mai nome,
 email o foto. Niente viene inviato senza il consenso "Coach AI".
 
+## NutriAI: le regole le decide l'app
+
+Come in SwimForge, i numeri e i divieti non li decide il modello:
+
+- **Energia** (`NutriEnergy`): metabolismo basale Mifflin-St Jeor × 1,4 per la
+  vita quotidiana, più le sedute del giorno (MET × peso × ore). Carboidrati
+  per tipo di giornata (da 3 g/kg a riposo a 9 g/kg in gara), proteine 1,8 g/kg
+  (2 g/kg per calare o crescere), grassi tra 0,8 g/kg e il 35%. Mai sotto il
+  basale né sotto 1500 kcal (1200 per una donna); per calare al massimo
+  7,7 kcal × kg al giorno (circa 0,7% del peso a settimana) e nessun deficit
+  nei giorni duri o di gara. Senza peso NutriAI non prepara la giornata e lo
+  chiede. I numeri del modello vengono sostituiti da quelli dell'app.
+- **Divieti** (`FoodBans`): allergie (i 14 allergeni UE), intolleranze
+  (lattosio, glutine), dieta, carne rossa a zero, caffeina e cibi non mangiati
+  con le loro eccezioni. Ogni pasto proposto viene controllato: se uno viola il
+  profilo NutriAI riscrive la giornata una volta, poi l'app toglie quello che
+  ancora non va. Le eccezioni dei cibi non mangiati non sbloccano mai
+  un'allergia.
+- **Sicurezza** (`NutriSafety`): prima di chiamare il modello, in entrambe le
+  chat, l'app cerca segnali di disturbo alimentare (digiuni di giorni, vomito,
+  lassativi, abbuffate con senso di colpa, calorie sotto 1000). Se ne trova uno
+  il modello non viene chiamato e la risposta è fissa: medico di base e Numero
+  Verde SOS Disturbi Alimentari 800 180 969.
+
 ## App Check
 
 Firebase AI Logic applica App Check: senza un token valido Gemini rifiuta la

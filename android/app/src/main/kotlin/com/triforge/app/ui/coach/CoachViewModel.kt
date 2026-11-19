@@ -14,6 +14,7 @@ import com.triforge.domain.coach.CoachBriefs
 import com.triforge.domain.coach.CoachMapper
 import com.triforge.domain.coach.CoachPrompts
 import com.triforge.domain.coach.CoachRole
+import com.triforge.domain.coach.NutriSafety
 import com.triforge.domain.coach.WeekPlan
 import java.time.LocalDate
 import java.time.ZoneId
@@ -104,6 +105,10 @@ class CoachViewModel(
         run(CoachTask.REPLYING) {
             val history = state.value.chat.map { it.message }
             repository.addMessage(uid, CoachRole.COACH, fromAthlete = true, text = message)
+            if (NutriSafety.flags(message)) {
+                repository.addMessage(uid, CoachRole.COACH, fromAthlete = false, text = NutriSafety.REPLY)
+                return@run
+            }
             val nutri = repository.nutriDesk(uid).first()
             val plan = repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == thisWeek() }
             val turn = CoachPrompts.chatTurn(

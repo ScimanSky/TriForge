@@ -19,15 +19,16 @@ class AthleteSource(
     private val training: Flow<TrainingState>,
     private val recovery: Flow<RecoveryState>,
     private val profile: Flow<AthleteProfile>,
+    private val birthYear: Flow<Int?>,
 ) {
     /** Waits until activities and recovery are loaded, then describes them as text. */
     suspend fun describe(): String = AthleteContext.describe(current())
 
     suspend fun current(): AthleteData {
         val zone = ZoneId.systemDefault()
-        return combine(training, recovery, profile) { t, r, p -> Triple(t, r, p) }
-            .first { (t, r, _) -> t !is TrainingState.Loading && r !is RecoveryState.Loading }
-            .let { (t, r, p) ->
+        return combine(training, recovery, profile, birthYear) { t, r, p, y -> Loaded(t, r, p, y) }
+            .first { (t, r) -> t !is TrainingState.Loading && r !is RecoveryState.Loading }
+            .let { (t, r, p, y) ->
                 val loaded = r as? RecoveryState.Loaded
                 AthleteData(
                     today = LocalDate.now(zone),
@@ -37,7 +38,10 @@ class AthleteSource(
                     loads = loaded?.loads.orEmpty(),
                     recovery = loaded?.report,
                     checkIn = loaded?.todayCheckIn,
+                    birthYear = y,
                 )
             }
     }
 }
+
+private data class Loaded(val training: TrainingState, val recovery: RecoveryState, val profile: AthleteProfile, val birthYear: Int?)
