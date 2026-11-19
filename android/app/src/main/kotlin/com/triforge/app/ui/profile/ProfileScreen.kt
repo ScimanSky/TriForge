@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -270,8 +271,9 @@ private fun WeekSetupCard(onOpen: () -> Unit) {
 /** Totals of the loaded weeks, and how the time splits across the three sports. */
 @Composable
 private fun TrainingCard(summary: ProfileSummary) {
-    val shares = Sport.entries.filter { it != Sport.OTHER }.map { it to summary.timeShare(it) }
-    val shareText = shares.joinToString(", ") { (sport, share) -> "${(share * 100).roundToInt()}%" }
+    // Swim, bike and run always; the gym and the other activities when the weeks hold any.
+    val shares = summary.bySport.map { it.sport to summary.timeShare(it.sport) }
+    val shareText = shares.map { (sport, share) -> "${stringResource(sport.labelRes())} ${(share * 100).roundToInt()}%" }.joinToString(", ")
 
     TriCard {
         CardHeader(
@@ -296,11 +298,12 @@ private fun TrainingCard(summary: ProfileSummary) {
             shares = shares.map { (sport, share) -> SportColors.of(sport) to share },
             description = stringResource(R.string.profile_split_chart, shareText),
         )
-        Row(
+        FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             shares.forEach { (sport, share) ->
                 LegendDot(

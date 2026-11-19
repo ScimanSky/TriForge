@@ -57,7 +57,7 @@ object Formatters {
             Sport.SWIM -> minutesAndSeconds(seconds / (meters / 100.0))
             Sport.RUN -> minutesAndSeconds(seconds / (meters / 1000.0))
             Sport.BIKE -> "%.1f".format(locale, meters / seconds * 3.6)
-            Sport.OTHER -> null
+            Sport.STRENGTH, Sport.OTHER -> null
         }
     }
 
@@ -65,7 +65,7 @@ object Formatters {
         Sport.SWIM -> "/100 m"
         Sport.RUN -> "/km"
         Sport.BIKE -> "km/h"
-        Sport.OTHER -> ""
+        Sport.STRENGTH, Sport.OTHER -> ""
     }
 
     /** "5:20" from a number of seconds. */

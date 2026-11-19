@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,11 +42,15 @@ import com.triforge.app.ui.common.SecondaryButton
 import com.triforge.app.ui.common.TriCard
 import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.TriIcons
+import com.triforge.domain.Activity
 import com.triforge.domain.AthleteProfile
 import com.triforge.domain.Sport
 import com.triforge.domain.coach.TableVoice
+import com.triforge.domain.coach.TrainingAvailability
 import com.triforge.domain.coach.TriRegia
+import com.triforge.domain.coach.WeekReview
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 private val palette = CoachPalette.Coach
@@ -60,6 +65,9 @@ fun CoachScreen(
     onOpenWeekSetup: () -> Unit,
     onOpenNutri: () -> Unit,
     modifier: Modifier = Modifier,
+    /** What the watch recorded, to set the week as planned next to the week as it went; null while it loads. */
+    activities: List<Activity>? = null,
+    availability: TrainingAvailability = TrainingAvailability(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var chat by rememberSaveable { mutableStateOf(false) }
@@ -92,7 +100,7 @@ fun CoachScreen(
     Column(modifier.fillMaxSize()) {
         CoachHeader(
             title = stringResource(R.string.coach_title),
-            subtitle = subtitle(profile),
+            subtitle = subtitle(profile, availability),
             icon = TriIcons.Sparkle,
             palette = palette,
         )
@@ -121,13 +129,22 @@ fun CoachScreen(
         } else if (chat) {
             CoachChat(state, viewModel, sport = chatSport, onSelect = { chatSport = it }, onOpenNutri = onOpenNutri)
         } else {
-            WeekTab(state, viewModel, profile, onOpenSession = { openSession = it }, onAskChange = { chat = true })
+            WeekTab(state, viewModel, profile, activities, availability, onOpenSession = { openSession = it }, onAskChange = { chat = true })
         }
     }
 }
 
 @Composable
-private fun subtitle(profile: AthleteProfile): String {
+private fun subtitle(profile: AthleteProfile, availability: TrainingAvailability): String {
+    // Once a sport is in pause or with the athlete's trainer, the header says who does what.
+    val coached = TriRegia.SPORTS.filter(availability::isCoached)
+    val own = TriRegia.SPORTS.filter { it in availability.ownSports }
+    if (coached.size < TriRegia.SPORTS.size && (coached.isNotEmpty() || own.isNotEmpty())) {
+        return listOfNotNull(
+            coached.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.coach_subtitle_ai, sportNames(it)) },
+            own.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.coach_subtitle_own, sportNames(it)) },
+        ).joinToString(" · ")
+    }
     val race = profile.raceDate?.takeIf { !it.isBefore(LocalDate.now()) }
     return if (race != null) {
         val weeks = ChronoUnit.WEEKS.between(LocalDate.now(), race).toInt()
@@ -135,6 +152,12 @@ private fun subtitle(profile: AthleteProfile): String {
     } else {
         stringResource(R.string.coach_subtitle)
     }
+}
+
+/** "Nuoto e corsa": the sports in a sentence. */
+private fun sportNames(sports: List<Sport>): String {
+    val names = sports.mapIndexed { index, sport -> TriRegia.sportName(sport).let { if (index == 0) it else it.lowercase() } }
+    return if (names.size <= 1) names.joinToString() else names.dropLast(1).joinToString(", ") + " e " + names.last()
 }
 
 @Composable
@@ -178,10 +201,17 @@ private fun WeekTab(
     state: CoachUiState,
     viewModel: CoachViewModel,
     profile: AthleteProfile,
+    activities: List<Activity>?,
+    availability: TrainingAvailability,
     onOpenSession: (String) -> Unit,
     onAskChange: () -> Unit,
 ) {
     val plan = state.plan
+    val today = LocalDate.now()
+    // Until the activities are loaded nothing can be called missed: the week shows as written.
+    val review = remember(plan, activities, today) {
+        if (plan == null || activities == null) null else WeekReview.of(plan, activities, today, ZoneId.systemDefault())
+    }
     LazyColumn(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -212,8 +242,8 @@ private fun WeekTab(
             }
             return@LazyColumn
         }
-        item { WeekSummary(plan) }
-        item { WeekDays(plan, profile, onOpenSession) }
+        item { WeekSummary(plan, review, availability) }
+        item { WeekDays(plan, profile, onOpenSession, review ?: WeekReview(emptyList()), availability) }
         if (plan.fromTable) {
             item { TableCard(plan) }
         } else if (plan.rationale.isNotBlank()) {
@@ -245,8 +275,10 @@ private fun WeekTab(
         }
         if (plan.days.any { day -> day.sessions.any { it.hasDetail() } }) {
             item {
+                val ownSessions = plan.days.any { day -> day.sessions.any { it.own } }
                 Text(
-                    stringResource(R.string.coach_week_hint),
+                    stringResource(R.string.coach_week_hint) +
+                        if (ownSessions) " " + stringResource(R.string.coach_week_hint_own) else "",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp),

@@ -70,6 +70,7 @@ import com.triforge.app.ui.settings.SourcesScreen
 import com.triforge.domain.AccountGate
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.map
 
 private enum class Tab(val route: String, @StringRes val label: Int, val icon: ImageVector) {
@@ -211,6 +212,10 @@ private fun SignedIn(uid: String, container: AppContainer) {
     )
     val training by trainingViewModel.state.collectAsStateWithLifecycle()
     val recovery by recoveryViewModel.state.collectAsStateWithLifecycle()
+    // Each activity's load in the app's scale, for the lists and the detail.
+    val loads = remember(recovery) {
+        (recovery as? RecoveryState.Loaded)?.loads.orEmpty().mapValues { it.value.tss.roundToInt() }
+    }
     val profile by profileViewModel.state.collectAsStateWithLifecycle()
     val account by accountViewModel.state.collectAsStateWithLifecycle()
     val weekSetup by weekSetupViewModel.state.collectAsStateWithLifecycle()
@@ -284,6 +289,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
                     onOpenActivity = openActivity,
                     cssSecPer100 = profile.stored.cssSecPer100m,
                     onUseCss = profileViewModel::useCss,
+                    loads = loads,
                 )
             }
             composable(Tab.COACH.route) {
@@ -295,6 +301,8 @@ private fun SignedIn(uid: String, container: AppContainer) {
                     weekSetupDone = !weekSetup.loaded || weekSetup.availability.isSet,
                     onOpenWeekSetup = { navController.navigate(WEEK_SETUP_ROUTE) },
                     onOpenNutri = { navController.openTab(Tab.NUTRI) },
+                    activities = (training as? TrainingState.Loaded)?.activities,
+                    availability = weekSetup.availability,
                 )
             }
             composable(Tab.NUTRI.route) {
@@ -377,6 +385,8 @@ private fun SignedIn(uid: String, container: AppContainer) {
                         history = activities,
                         onBack = { navController.popBackStack() },
                         cssSecPer100 = profile.stored.cssSecPer100m,
+                        load = id?.let { loads[it] },
+                        weightKg = profile.stored.weightKg,
                     )
                 }
             }

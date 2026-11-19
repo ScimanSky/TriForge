@@ -49,7 +49,7 @@ private val weekLabel = DateTimeFormatter.ofPattern("d/M", Locale.ITALY)
  */
 @Composable
 fun StackedWeekBars(trend: List<WeekSummary>, description: String, modifier: Modifier = Modifier) {
-    val sports = TrainingStats.triathlonSports + Sport.OTHER
+    val sports = TrainingStats.allSports
     val peak = (trend.maxOfOrNull { it.durationSec } ?: 0L).coerceAtLeast(1L)
 
     Column(modifier = modifier.semantics { contentDescription = description }) {

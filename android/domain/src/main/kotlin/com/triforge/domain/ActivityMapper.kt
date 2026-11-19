@@ -18,10 +18,12 @@ object ActivityMapper {
             "health_connect" -> ActivitySource.HEALTH_CONNECT
             else -> return null
         }
+        val type = fields["type"] as? String ?: ""
+        val sport = sportOf(fields["sport"], type)
         return Activity(
             id = id,
             source = source,
-            sport = sportOf(fields["sport"]),
+            sport = sport,
             name = fields["name"] as? String ?: "",
             startTime = startTime,
             durationSec = number(fields["durationSec"])?.toLong()?.coerceAtLeast(0) ?: 0,
@@ -45,6 +47,24 @@ object ActivityMapper {
             lengths = number(fields["lengths"])?.toInt(),
             strokeDistanceMeters = number(fields["strokeDistanceMeters"])?.toDouble()?.takeIf { it > 0 },
             laps = laps(fields["laps"]),
+            type = type,
+            kind = if (sport == Sport.OTHER) OtherKind.of(fields["kind"]) ?: ActivityTypes.otherKind(type) else OtherKind.GENERIC,
+            sets = number(fields["sets"])?.toInt()?.takeIf { it > 0 },
+            reps = number(fields["reps"])?.toInt()?.takeIf { it > 0 },
+            exercises = exercises(fields["exercises"]),
+        )
+    }
+
+    /** The `exercises` list of a gym document; malformed entries are skipped. */
+    fun exercises(value: Any?): List<ExerciseSummary> = (value as? List<*>).orEmpty().mapNotNull { item ->
+        val exercise = item as? Map<*, *> ?: return@mapNotNull null
+        val category = (exercise["category"] as? String)?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val sets = number(exercise["sets"])?.toInt()?.takeIf { it > 0 } ?: return@mapNotNull null
+        ExerciseSummary(
+            category = category,
+            sets = sets,
+            reps = number(exercise["reps"])?.toInt()?.takeIf { it > 0 },
+            volumeKg = number(exercise["volumeKg"])?.toDouble()?.takeIf { it > 0 },
         )
     }
 
@@ -73,17 +93,23 @@ object ActivityMapper {
         )
     }
 
-    fun sportOf(value: Any?): Sport = when (value) {
+    /**
+     * The sport of a document. Gym sessions synced before the service knew
+     * them were stored as "other" with their type: the type still tells.
+     */
+    fun sportOf(value: Any?, type: String? = null): Sport = when (value) {
         "swim" -> Sport.SWIM
         "bike" -> Sport.BIKE
         "run" -> Sport.RUN
-        else -> Sport.OTHER
+        "strength" -> Sport.STRENGTH
+        else -> if (ActivityTypes.isStrength(type)) Sport.STRENGTH else Sport.OTHER
     }
 
     fun sportKey(sport: Sport): String = when (sport) {
         Sport.SWIM -> "swim"
         Sport.BIKE -> "bike"
         Sport.RUN -> "run"
+        Sport.STRENGTH -> "strength"
         Sport.OTHER -> "other"
     }
 

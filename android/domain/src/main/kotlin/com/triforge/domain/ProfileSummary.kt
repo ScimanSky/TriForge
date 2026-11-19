@@ -9,7 +9,7 @@ data class ProfileSummary(
     val sessions: Int,
     val durationSec: Long,
     val distanceMeters: Double,
-    /** Swim, bike and run, in race order, even when one of them is zero. */
+    /** Swim, bike and run, in race order, even when one of them is zero; then the gym and the other activities, when there are any. */
     val bySport: List<SportTotals>,
     /** Weeks with at least one activity, out of [weeks]. */
     val activeWeeks: Int,
@@ -30,7 +30,8 @@ object ProfileStats {
         val inWindow = activities.filter {
             !it.startTime.atZone(zone).toLocalDate().isBefore(firstWeek)
         }
-        val bySport = TrainingStats.triathlonSports.map { sport ->
+        // The three disciplines always, the gym and the rest when there is any.
+        val bySport = TrainingStats.allSports.map { sport ->
             val ofSport = inWindow.filter { it.sport == sport }
             SportTotals(
                 sport = sport,
@@ -39,7 +40,7 @@ object ProfileStats {
                 durationSec = ofSport.sumOf { it.durationSec },
                 elevationGainMeters = ofSport.sumOf { it.elevationGainMeters ?: 0.0 },
             )
-        }
+        }.filter { it.sport in TrainingStats.triathlonSports || it.sessions > 0 }
         val activeWeeks = inWindow
             .map { TrainingStats.weekStart(it.startTime.atZone(zone).toLocalDate()) }
             .distinct()

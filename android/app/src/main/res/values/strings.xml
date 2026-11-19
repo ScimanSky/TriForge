@@ -40,6 +40,12 @@
     <string name="sport_bike">Bici</string>
     <string name="sport_run">Corsa</string>
     <string name="sport_other">Altro</string>
+    <string name="sport_strength">Palestra</string>
+    <string name="kind_walk">Camminata</string>
+    <string name="kind_hike">Escursione</string>
+    <string name="kind_mobility">Yoga e mobilità</string>
+    <string name="kind_cardio">Cardio</string>
+    <string name="kind_generic">Altra attività</string>
 
     <!-- Common -->
     <string name="action_back">Indietro</string>
@@ -63,6 +69,7 @@
     <string name="unit_watt_value">%1$d W</string>
     <string name="unit_m_value">%1$s m</string>
     <string name="unit_kcal_value">%1$s kcal</string>
+    <string name="unit_kg_value">%1$s kg</string>
 
     <!-- Today -->
     <string name="today_form_period">ultimi %1$d giorni</string>
@@ -140,6 +147,52 @@
     <string name="activities_last_week">Settimana scorsa</string>
     <string name="activities_week_of">Settimana del %1$s</string>
     <string name="activity_untitled">Allenamento</string>
+    <string name="activity_sets">%1$d serie</string>
+    <string name="activity_reps_one">1 ripetizione</string>
+    <string name="activity_reps_many">%1$d ripetizioni</string>
+    <string name="activity_load">carico %1$d</string>
+
+    <!-- Attività: schede Palestra e Altro -->
+    <string name="support_empty_gym_title">Nessuna seduta in palestra</string>
+    <string name="support_empty_gym_body">Le sedute compaiono qui quando il Garmin le registra come allenamento di forza.</string>
+    <string name="support_empty_other_title">Nessun\'altra attività</string>
+    <string name="support_empty_other_body">Camminate, escursioni, yoga, cardio e tutto il resto compaiono qui quando il Garmin li registra.</string>
+    <string name="support_kpi_time">Tempo</string>
+    <string name="support_kpi_load">Carico</string>
+    <string name="support_kpi_load_share">in media · %1$d%% del totale</string>
+    <string name="support_hours_title">Ore a settimana</string>
+    <string name="support_exercises_title">Esercizi più frequenti</string>
+    <string name="support_exercises_source">dal Garmin</string>
+    <string name="support_exercises_note">Compare quando l\'orologio registra serie, ripetizioni e pesi. Senza, restano tempo, battiti e carico.</string>
+    <string name="support_bodyweight">a corpo libero</string>
+    <string name="support_kinds_title">Per tipo</string>
+    <string name="support_kind_count">%1$d attività</string>
+    <string name="support_heart_title">Battiti e calorie</string>
+    <string name="support_heart_peak">FC più alta</string>
+    <string name="support_calories_total">Calorie in tutto</string>
+    <string name="support_calories_session">Calorie per seduta</string>
+    <string name="support_sessions_in">%1$d in %2$d settimane</string>
+
+    <!-- Dettaglio di una seduta in palestra o di un'altra attività -->
+    <string name="support_detail_duration">durata</string>
+    <string name="support_detail_sets">serie</string>
+    <string name="support_detail_reps">ripetizioni</string>
+    <string name="support_detail_lifted">Peso sollevato in tutto</string>
+    <string name="support_detail_exercises">Esercizi</string>
+    <string name="support_detail_exercises_count">%1$d esercizi</string>
+    <string name="support_detail_exercises_note">Compare quando l\'orologio registra serie e pesi durante la seduta.</string>
+    <string name="support_counts_title">Come conta questa seduta</string>
+    <string name="support_counts_load">Carico.</string>
+    <string name="support_counts_load_value">Carico %1$d.</string>
+    <string name="support_counts_load_gym">Parte dal carico del Garmin, con un minimo per ogni ora di palestra: i battiti sottostimano il lavoro di forza.</string>
+    <string name="support_counts_load_other">Parte dal carico del Garmin o, se manca, dalla durata e dal tipo di attività: una camminata pesa meno di un\'ora di cardio.</string>
+    <string name="support_counts_form">Forma e recupero.</string>
+    <string name="support_counts_form_text">Entra in fitness, fatica e nell\'indice Carico e recupero, insieme a nuoto, bici e corsa.</string>
+    <string name="support_counts_coach">Coach.</string>
+    <string name="support_counts_coach_text">I coach la vedono tra gli allenamenti degli ultimi giorni quando scrivono o cambiano la settimana.</string>
+    <string name="support_counts_nutri">NutriAI.</string>
+    <string name="support_counts_nutri_kcal">Vale circa %1$s kcal nel fabbisogno del suo giorno.</string>
+    <string name="support_counts_nutri_text">Entra nel fabbisogno del suo giorno. Con il peso nel profilo vedi qui di quanto.</string>
     <string name="source_garmin">Garmin</string>
     <string name="source_health_connect">Health Connect</string>
 
@@ -297,7 +350,7 @@
 
     <!-- Health permissions rationale -->
     <string name="rationale_title">Perché TriForge legge i tuoi dati</string>
-    <string name="rationale_body">TriForge legge da Health Connect gli allenamenti di nuoto, bici e corsa, con distanza, frequenza cardiaca e calorie, per mostrarti le statistiche e adattare i consigli di allenamento. I dati vengono salvati nel tuo account TriForge e non vengono condivisi con altri. Puoi revocare l\'accesso in qualsiasi momento dalle impostazioni di Health Connect.</string>
+    <string name="rationale_body">TriForge legge da Health Connect i tuoi allenamenti (nuoto, bici, corsa, palestra e le altre attività), con distanza, frequenza cardiaca e calorie, per mostrarti le statistiche e adattare i consigli di allenamento. I dati vengono salvati nel tuo account TriForge e non vengono condivisi con altri. Puoi revocare l\'accesso in qualsiasi momento dalle impostazioni di Health Connect.</string>
     <!-- Load-recovery balance -->
     <string name="recovery_title">Carico e recupero</string>
     <string name="recovery_score_description">Bilancio carico-recupero %1$d su 100: %2$s.</string>
@@ -396,10 +449,10 @@
     <string name="profile_race_day">giorno</string>
     <string name="profile_race_days">giorni</string>
     <string name="profile_training_title">Il tuo allenamento</string>
-    <string name="profile_training_empty">Collega Garmin o Health Connect: qui vedrai ore, sedute e come dividi il tempo tra nuoto, bici e corsa.</string>
+    <string name="profile_training_empty">Collega Garmin o Health Connect: qui vedrai ore, sedute e come dividi il tempo tra nuoto, bici, corsa e palestra.</string>
     <string name="profile_sessions">sedute</string>
     <string name="profile_split_title">Come dividi il tempo</string>
-    <string name="profile_split_chart">Ripartizione del tempo tra nuoto, bici e corsa: %1$s.</string>
+    <string name="profile_split_chart">Ripartizione del tempo: %1$s.</string>
     <string name="profile_active_weeks">Settimane con almeno un allenamento</string>
     <string name="profile_active_weeks_value">%1$d su %2$d</string>
     <string name="profile_tile_css">CSS</string>

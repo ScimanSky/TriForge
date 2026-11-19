@@ -35,6 +35,7 @@ object CoachMapper {
                         "details" to session.details,
                         "focus" to session.focus,
                         "why" to session.why,
+                        "own" to session.own,
                         "steps" to session.steps.map(::stepToFields),
                     )
                 },
@@ -44,6 +45,7 @@ object CoachMapper {
         "rounds" to plan.rounds,
         "availableMin" to plan.availableMin,
         "maxHard" to plan.maxHard,
+        "plannedFrom" to plan.plannedFrom?.toString(),
     )
 
     private fun stepToFields(step: WorkoutStep): Map<String, Any?> = mapOf(
@@ -130,6 +132,7 @@ object CoachMapper {
             rounds = number(fields["rounds"])?.toInt()?.coerceIn(0, 9) ?: 0,
             availableMin = number(fields["availableMin"])?.toInt(),
             maxHard = number(fields["maxHard"])?.toInt(),
+            plannedFrom = date(fields["plannedFrom"])?.takeIf { !it.isBefore(start) && it.isBefore(end) },
         )
     }
 
@@ -146,6 +149,7 @@ object CoachMapper {
             focus = text(fields["focus"], 40),
             steps = list(fields["steps"]).mapNotNull { step(it as? Map<*, *>) }.take(Workouts.MAX_STEPS),
             why = text(fields["why"], 500),
+            own = fields["own"] as? Boolean ?: false,
         )
     }
 
@@ -346,6 +350,7 @@ object CoachMapper {
         Sport.SWIM -> "swim"
         Sport.BIKE -> "bike"
         Sport.RUN -> "run"
+        Sport.STRENGTH -> "strength"
         Sport.OTHER -> "other"
         null -> "rest"
     }
@@ -354,7 +359,8 @@ object CoachMapper {
         "swim" -> Sport.SWIM
         "bike" -> Sport.BIKE
         "run" -> Sport.RUN
-        "other", "strength", "mobility" -> Sport.OTHER
+        "strength" -> Sport.STRENGTH
+        "other", "mobility" -> Sport.OTHER
         else -> null
     }
 

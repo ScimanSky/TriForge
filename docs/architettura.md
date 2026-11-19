@@ -60,11 +60,15 @@ users/{uid}                       profilo atleta
 ```
 
 Campi di un'attività: `source` (`garmin` o `health_connect`), `sport` (`swim`,
-`bike`, `run`, `other`), `name`, `startTime`, `durationSec`, `distanceMeters`,
+`bike`, `run`, `strength` per la palestra, `other` per tutto il resto), `type`
+(il nome del tipo secondo la fonte: da lì l'app capisce se un'altra attività
+è una camminata, un'escursione, yoga o cardio), `name`, `startTime`, `durationSec`, `distanceMeters`,
 più i campi opzionali `elevationGainMeters`, `avgHr`, `maxHr`, `calories`,
 `movingDurationSec`, `avgSpeedMps`, `avgPowerWatts`, `trainingLoad`, `aerobicTe`,
 `vo2max` e, per il nuoto, `poolLengthMeters`, `swolf`, `strokes`, `lengths`,
-`openWater`, `strokeDistanceMeters`, `laps` e `hasLaps`.
+`openWater`, `strokeDistanceMeters`, `laps` e `hasLaps`; per la palestra, quando
+l'orologio ha contato le serie, `sets`, `reps` ed `exercises` (categoria, serie,
+ripetizioni e chili sollevati per esercizio).
 
 `laps` sono le ripetute di una nuotata Garmin, nell'ordine: `distanceMeters`,
 `durationSec`, e se misurati `strokes`, `swolf`, `avgHr`, `maxHr`, `stroke`
@@ -104,7 +108,8 @@ Tre regole valgono per ogni schermata nuova:
 
 Schermate: Accesso, Oggi (forma degli ultimi 42 giorni, settimana in corso
 rispetto alla media delle quattro precedenti), Attività (schede Tutte, Nuoto,
-Bici, Corsa, con le statistiche per sport), Dettaglio attività, Profilo atleta
+Bici, Corsa, Palestra e Altro, con le statistiche per sport; ogni attività
+mostra il suo carico), Dettaglio attività, Profilo atleta
 (sorgenti dati, obiettivo, fisico, soglie).
 
 L'app carica le ultime 16 settimane di attività, e la prima sincronizzazione

@@ -30,6 +30,9 @@ object TrainingStats {
     /** The three disciplines shown on the dashboard, in race order. */
     val triathlonSports = listOf(Sport.SWIM, Sport.BIKE, Sport.RUN)
 
+    /** Everything the athlete does, in the order charts stack it: the three disciplines, the gym, the rest. */
+    val allSports = triathlonSports + Sport.STRENGTH + Sport.OTHER
+
     fun weekStart(date: LocalDate): LocalDate =
         date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
 

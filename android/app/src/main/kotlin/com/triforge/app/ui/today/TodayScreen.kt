@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -204,11 +205,15 @@ private fun Dashboard(
                     trend = volume,
                     description = stringResource(R.string.today_volume_chart, VOLUME_WEEKS),
                 )
-                Row(
+                FlowRow(
                     modifier = Modifier.padding(top = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    (TrainingStats.triathlonSports + Sport.OTHER).forEach { sport ->
+                    // Swim, bike and run always; the gym and the rest when the weeks hold any.
+                    TrainingStats.allSports.filter { sport ->
+                        sport in TrainingStats.triathlonSports || volume.any { it.of(sport).sessions > 0 }
+                    }.forEach { sport ->
                         LegendDot(SportColors.of(sport), stringResource(sport.labelRes()))
                     }
                 }

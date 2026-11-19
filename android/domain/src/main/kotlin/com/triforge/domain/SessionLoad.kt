@@ -16,7 +16,8 @@ data class SessionLoad(
 )
 
 /**
- * Puts swim, bike and run on one load scale, so the three can be added up.
+ * Puts every session on one load scale, so swim, bike, run, the gym and
+ * whatever else the watch recorded can be added up.
  *
  * Order of preference for each session:
  * 1. bike with power and FTP: hours x (NP/FTP)^2 x 100;
@@ -25,7 +26,12 @@ data class SessionLoad(
  *    interval by interval when the laps are known;
  * 4. Garmin training load, rescaled to TSS on the athlete's own sessions
  *    that have both measures;
- * 5. duration only, at a typical intensity for the sport.
+ * 5. duration only, at a typical intensity for the sport or, outside the
+ *    three disciplines, for the kind of activity (a walk is not a HIIT class).
+ *
+ * The gym never counts less than its duration at [STRENGTH_FLOOR_INTENSITY]:
+ * the watch works its load out from the heart rate, which stays low between
+ * sets and misses most of what lifting costs the muscles.
  *
  * Pace-based loads use average speed over the whole session, pauses
  * included, so interval sessions come out a little low. Swim heart rate from
@@ -45,12 +51,28 @@ object SessionLoadModel {
     /** Sessions with both measures needed before the personal ratio is used. */
     const val MIN_CALIBRATION_SESSIONS = 3
 
+    /** The intensity a gym session counts for at least, whatever the heart rate said: about 36 TSS an hour. */
+    const val STRENGTH_FLOOR_INTENSITY = 0.60
+
     fun typicalIntensity(sport: Sport): Double = when (sport) {
         Sport.SWIM -> 0.75
         Sport.BIKE -> 0.70
         Sport.RUN -> 0.80
-        Sport.OTHER -> 0.60
+        Sport.STRENGTH -> STRENGTH_FLOOR_INTENSITY
+        Sport.OTHER -> typicalIntensity(OtherKind.GENERIC)
     }
+
+    /** Typical intensity of an activity outside the three disciplines and the gym. */
+    fun typicalIntensity(kind: OtherKind): Double = when (kind) {
+        OtherKind.MOBILITY -> 0.30
+        OtherKind.WALK -> 0.40
+        OtherKind.HIKE -> 0.55
+        OtherKind.CARDIO -> 0.70
+        OtherKind.GENERIC -> 0.60
+    }
+
+    fun typicalIntensity(activity: Activity): Double =
+        if (activity.sport == Sport.OTHER) typicalIntensity(activity.kind) else typicalIntensity(activity.sport)
 
     fun estimate(activities: List<Activity>, profile: AthleteProfile): List<SessionLoad> {
         val direct = activities.associateWith { direct(it, profile) }
@@ -110,19 +132,21 @@ object SessionLoadModel {
                 }
             }
 
-            Sport.OTHER -> Unit
+            Sport.STRENGTH, Sport.OTHER -> Unit
         }
         return null
     }
 
     private fun fallback(activity: Activity, ratio: Double, calibrated: Boolean): SessionLoad {
+        val hours = activity.durationSec.coerceAtLeast(0) / 3600.0
+        val byDuration = SessionLoad(activity, hours * typicalIntensity(activity).pow(2) * 100, LoadMethod.DURATION, LoadQuality.LOW)
         val garmin = activity.trainingLoad
         if (garmin != null && garmin > 0) {
-            val quality = if (calibrated && activity.sport != Sport.SWIM) LoadQuality.MEDIUM else LoadQuality.LOW
-            return SessionLoad(activity, garmin * ratio, LoadMethod.GARMIN_LOAD, quality)
+            // Heart rate reads a swim badly at the wrist and a gym session badly by nature.
+            val trusted = calibrated && activity.sport != Sport.SWIM && activity.sport != Sport.STRENGTH
+            val byWatch = SessionLoad(activity, garmin * ratio, LoadMethod.GARMIN_LOAD, if (trusted) LoadQuality.MEDIUM else LoadQuality.LOW)
+            return if (activity.sport == Sport.STRENGTH && byDuration.tss > byWatch.tss) byDuration else byWatch
         }
-        val hours = activity.durationSec.coerceAtLeast(0) / 3600.0
-        val tss = hours * typicalIntensity(activity.sport).pow(2) * 100
-        return SessionLoad(activity, tss, LoadMethod.DURATION, LoadQuality.LOW)
+        return byDuration
     }
 }

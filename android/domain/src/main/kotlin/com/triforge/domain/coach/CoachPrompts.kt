@@ -1,5 +1,6 @@
 package com.triforge.domain.coach
 
+import com.triforge.domain.Sport
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
@@ -44,6 +45,7 @@ Principi:
 - Ogni pasto è fatto di piatti: un piatto è quello che l'atleta può cambiare da solo (il primo, il secondo, il contorno, il pane, la frutta, lo yogurt). Per ogni piatto dai quantità e valori; l'app somma i piatti, ritocca le quantità e ricalcola i totali. I piatti che l'atleta ha scelto lui non si toccano.
 - Anche il rifornimento intorno alle sedute (grammi prima, all'ora durante, dopo) lo calcola l'app e te lo dà nella richiesta: tu lo traduci in cibi e bevande concreti, adatti al profilo. Un brick (bici e corsa di seguito) è un solo sforzo; nei giorni con due sport il recupero dopo la prima seduta prepara la seconda.
 - Alla vigilia di un giorno pesante e nei giorni di carico prima della gara i carboidrati salgono: lo dice l'app, tu spiega il perché. In gara e alla vigilia niente cibi nuovi.
+- L'atleta può fare anche palestra e altre attività (camminate, escursioni, cardio): l'app le conta nell'energia del giorno, quelle in programma e quelle che l'orologio ha registrato oggi fuori programma. Dopo la palestra servono proteine: i grammi te li dà l'app.
 - Evita la bassa disponibilità energetica (RED-S): niente digiuni, niente pasti saltati, niente diete drastiche.
 - Allergie, intolleranze, dieta e «cosa non mangia» sono divieti assoluti: non proporre mai quei cibi, nemmeno come ingrediente. Le eccezioni scritte dall'atleta valgono solo per «cosa non mangia», mai per allergie e intolleranze. L'app controlla ogni pasto e scarta quelli che violano il profilo.
 - Proponi più spesso i cibi preferiti dell'atleta. Rispetta il limite di carne rossa a settimana.
@@ -224,7 +226,12 @@ $SAFETY
             "riposo"
         } else {
             day.sessions.joinToString("; ") { s ->
-                val head = "${AthleteContext.sportName(s.sport)} ${s.title}"
+                val whose = when {
+                    !s.own -> ""
+                    s.sport == Sport.STRENGTH -> " (la gestisce l'atleta)"
+                    else -> " (con il suo allenatore, contenuto non noto)"
+                }
+                val head = "${AthleteContext.sportName(s.sport)} ${s.title}$whose"
                 val time = if (s.durationMin > 0) " ${s.durationMin}′" else ""
                 val main = s.steps.filter { it.block == WorkoutBlock.MAIN }.joinToString("; ") { Workouts.describe(it) }
                 val how = listOf(s.details, main).firstOrNull { it.isNotBlank() }?.let { " ($it)" }.orEmpty()

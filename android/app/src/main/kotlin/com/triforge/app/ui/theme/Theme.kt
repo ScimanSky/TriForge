@@ -57,12 +57,18 @@ object SportColors {
     val swim = Color(0xFF4CC2FF)
     val bike = Color(0xFFFFD23F)
     val run = Color(0xFFB78CFF)
+    val strength = Color(0xFFFF7EB6)
     val other = Color(0xFF9AA3AF)
+
+    /** Border of a selected day of the gym, and its text. */
+    val strengthSelected = Color(0xFF33172A)
+    val strengthOnSelected = Color(0xFFFFC2DC)
 
     fun of(sport: Sport): Color = when (sport) {
         Sport.SWIM -> swim
         Sport.BIKE -> bike
         Sport.RUN -> run
+        Sport.STRENGTH -> strength
         Sport.OTHER -> other
     }
 
@@ -71,6 +77,7 @@ object SportColors {
         Sport.SWIM -> Color(0xFF1B4A63)
         Sport.BIKE -> Color(0xFF5C5226)
         Sport.RUN -> Color(0xFF3E3260)
+        Sport.STRENGTH -> Color(0xFF5C2A44)
         Sport.OTHER -> Color(0xFF3A404A)
     }
 
@@ -79,6 +86,7 @@ object SportColors {
         Sport.SWIM -> Color(0xFF13303F)
         Sport.BIKE -> Color(0xFF3A3214)
         Sport.RUN -> Color(0xFF2A2240)
+        Sport.STRENGTH -> Color(0xFF3A1A2B)
         Sport.OTHER -> Color(0xFF23272E)
     }
 }

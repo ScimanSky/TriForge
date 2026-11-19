@@ -240,7 +240,10 @@ class NutriViewModel(
             daysToRace = data.profile.raceDate?.let { ChronoUnit.DAYS.between(date, it).toInt() }?.takeIf { it >= 0 },
             race = data.profile.goal,
         )
-        val targets = NutriEnergy.targets(profile, body, sessions, context)
+        // The energy also counts what the watch recorded that day outside the plan: a walk, a hike,
+        // a gym session on a day without one. The fuelling stays on the planned sessions.
+        val recorded = data.activities.filter { it.startTime.atZone(data.zone).toLocalDate() == date }
+        val targets = NutriEnergy.targets(profile, body, NutriEnergy.withDone(sessions, recorded), context)
         val weight = data.profile.weightKg?.takeIf { targets != null }
         return DayNumbers(targets, weight?.let { NutriFueling.describe(sessions, it, context) })
     }

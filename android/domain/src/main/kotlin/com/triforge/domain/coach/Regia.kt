@@ -23,7 +23,7 @@ enum class CyclePhase(val key: String, val label: String) {
     RACE_WEEK("race_week", "settimana di gara"),
 }
 
-/** What the athlete actually did in the four weeks before the one being planned. */
+/** What the athlete actually did in the four weeks before the one being planned: the three disciplines and the gym. */
 data class RecentTraining(
     /** Average minutes a week, per sport. */
     val weeklyMinutes: Map<Sport, Double> = emptyMap(),
@@ -34,6 +34,9 @@ data class RecentTraining(
 ) {
     val totalWeeklyMinutes: Double get() = weeklyMinutes.values.sum()
 
+    /** Average minutes a week in the gym. */
+    val gymWeeklyMinutes: Double get() = weeklyMinutes[Sport.STRENGTH] ?: 0.0
+
     companion object {
         const val VOLUME_WEEKS = 4L
         const val SESSION_WEEKS = 6L
@@ -42,7 +45,7 @@ data class RecentTraining(
             fun between(weeks: Long) = activities.filter {
                 val day = it.startTime.atZone(zone).toLocalDate()
                 !day.isBefore(weekStart.minusWeeks(weeks)) && day.isBefore(weekStart)
-            }.filter { it.sport in TriRegia.SPORTS && it.durationSec > 0 }
+            }.filter { (it.sport in TriRegia.SPORTS || it.sport == Sport.STRENGTH) && it.durationSec > 0 }
             val volume = between(VOLUME_WEEKS).groupBy { it.sport }
                 .mapValues { (_, list) -> list.sumOf { it.durationSec } / 60.0 / VOLUME_WEEKS }
             val sessions = between(SESSION_WEEKS).groupBy { it.sport }
@@ -80,7 +83,30 @@ data class WeekBudget(
     val bricksAllowed: Boolean,
     /** The weekly hours were not given and came from the recent volume or a default. */
     val hoursEstimated: Boolean,
-)
+    /** Minutes of the week the athlete's gym takes: inside [availableMinutes], outside [totalMinutes]. */
+    val gymMinutes: Int = 0,
+    /** The disciplines the athlete is not doing in this period: no minutes, no sessions. */
+    val paused: Set<Sport> = emptySet(),
+    /**
+     * Minutes of the week of each discipline the athlete does with their own
+     * trainer: inside [availableMinutes], outside [totalMinutes], like the gym.
+     */
+    val ownMinutes: Map<Sport, Int> = emptyMap(),
+    /** How long one session with the trainer usually lasts, per discipline. */
+    val ownSessionMinutes: Map<Sport, Int> = emptyMap(),
+) {
+    /** The disciplines the athlete does with their own trainer. */
+    val own: Set<Sport> get() = ownMinutes.keys
+
+    /** The disciplines an AI coach writes this week. */
+    val coached: List<Sport> get() = TriRegia.SPORTS.filter { it !in paused && it !in own }
+
+    /** Minutes the athlete's own sessions take: the gym and the sports done with their trainer. */
+    val fixedMinutes: Int get() = gymMinutes + ownMinutes.values.sum()
+
+    /** What the available time leaves to the AI coaches once the athlete's own sessions are in. */
+    val sportMinutesAvailable: Int get() = (availableMinutes - fixedMinutes).coerceAtLeast(0)
+}
 
 enum class RegiaRule {
     TOTAL_TIME, SPORT_TIME, HARD_SESSIONS, SPORT_QUALITY, HARD_IN_A_ROW, NO_REST_DAY, REST_DAY,
@@ -94,7 +120,9 @@ data class RegiaConflict(val rule: RegiaRule, val date: LocalDate?, val text: St
  * The triathlon regia: rules of the app that set the shape of the week (total
  * time, the share of each sport, how many hard sessions and where, rest,
  * bricks, safety limits) and check what the coaches write. The coaches fill
- * the sessions; the regia never writes one.
+ * the sessions; the only ones the regia writes are the athlete's own (the
+ * gym days, the sports done with their trainer), as fixed blocks the
+ * coaches plan around.
  */
 object TriRegia {
 
@@ -120,6 +148,20 @@ object TriRegia {
     /** Minutes a sport starts from when it has no history. */
     const val NEW_SPORT_MINUTES = 90
 
+    /** The longest gym session of a taper week. */
+    const val TAPER_GYM_MINUTES = 45
+
+    /** The focus of the athlete's own gym session, as the week shows it. */
+    const val GYM_FOCUS = "Forza"
+
+    /** The focus of a session the athlete does with their own trainer. */
+    const val OWN_FOCUS = "Tuo allenatore"
+
+    /** How long a session with the trainer is taken to last without history. */
+    const val OWN_SESSION_MINUTES = 60
+
+    private val OWN_SESSION_RANGE = 20..180
+
     const val DEFAULT_WEEKLY_HOURS = 6.0
 
     private val italian = Locale.ITALIAN
@@ -133,21 +175,105 @@ object TriRegia {
         else -> mapOf(Sport.SWIM to 0.20, Sport.BIKE to 0.45, Sport.RUN to 0.35)
     }
 
-    /** The shares with the weak sport brought up, the other two scaled down. */
-    fun shares(goal: RaceGoal?, weak: Sport?): Map<Sport, Double> {
-        val base = baseShares(goal)
-        val weakShare = weak?.let { base[it] } ?: return base
+    /**
+     * The shares with the weak sport brought up, the others scaled down. A
+     * sport not in [active] (paused by the athlete) has no share: the others
+     * split the week in the same proportions they had.
+     */
+    fun shares(goal: RaceGoal?, weak: Sport?, active: List<Sport> = SPORTS): Map<Sport, Double> {
+        val all = baseShares(goal)
+        val sum = active.sumOf { all.getValue(it) }
+        val base = SPORTS.associateWith { if (it in active && sum > 0) all.getValue(it) / sum else 0.0 }
+        val weakShare = weak?.takeIf { it in active && active.size > 1 }?.let { base.getValue(it) } ?: return base
         val scale = (1 - weakShare - WEAK_BONUS) / (1 - weakShare)
         return base.mapValues { (sport, share) -> if (sport == weak) share + WEAK_BONUS else share * scale }
     }
 
-    /** The sport furthest below its share in the recent weeks, or null without data. */
-    fun weakFromData(recent: RecentTraining, goal: RaceGoal?): Sport? {
-        val total = recent.totalWeeklyMinutes
+    /** The sport furthest below its share in the recent weeks, among the [active] ones, or null without data. */
+    fun weakFromData(recent: RecentTraining, goal: RaceGoal?, active: List<Sport> = SPORTS): Sport? {
+        if (active.size < 2) return null
+        val total = active.sumOf { recent.weeklyMinutes[it] ?: 0.0 }
         if (total < HISTORY_MINUTES * 2) return null
         val base = baseShares(goal)
-        return SPORTS.minByOrNull { (recent.weeklyMinutes[it] ?: 0.0) / total / base.getValue(it) }
+        return active.minByOrNull { (recent.weeklyMinutes[it] ?: 0.0) / total / base.getValue(it) }
     }
+
+    /** How long one of the athlete's gym sessions is planned for: shorter in the taper. */
+    fun gymSessionMinutes(availability: TrainingAvailability, phase: CyclePhase): Int = when (phase) {
+        CyclePhase.RACE_WEEK -> 0
+        CyclePhase.TAPER -> min(availability.gym.minutes, TAPER_GYM_MINUTES)
+        else -> availability.gym.minutes
+    }
+
+    /**
+     * The athlete's gym session of [date], or null: the gym days of board 8,
+     * never the preferred rest day, none in race week and a light one in the
+     * taper. It is theirs, so it has no steps and no coach.
+     */
+    fun gymSession(availability: TrainingAvailability, phase: CyclePhase, date: LocalDate): PlannedSession? {
+        if (date.dayOfWeek !in availability.gymDays) return null
+        val minutes = gymSessionMinutes(availability, phase).takeIf { it > 0 } ?: return null
+        val light = phase == CyclePhase.TAPER
+        return PlannedSession(
+            sport = Sport.STRENGTH,
+            title = if (light) "Palestra leggera" else "Palestra",
+            durationMin = minutes,
+            intensity = if (light) Intensity.EASY else Intensity.TEMPO,
+            focus = GYM_FOCUS,
+            why = if (light) "Scarico prima della gara: in palestra solo lavoro leggero, niente carichi massimi."
+            else "Il tuo giorno di palestra: i coach hanno scritto le loro sedute tenendone conto.",
+            own = true,
+        )
+    }
+
+    /**
+     * Minutes of the week the gym takes: the days the athlete gave, or
+     * without days what they did in the last weeks.
+     */
+    fun gymMinutes(availability: TrainingAvailability, phase: CyclePhase, recent: RecentTraining): Int {
+        if (phase == CyclePhase.RACE_WEEK) return 0
+        val days = availability.gymDays
+        if (days.isNotEmpty()) return days.size * gymSessionMinutes(availability, phase)
+        return (recent.gymWeeklyMinutes / 5).roundToInt() * 5
+    }
+
+    /** How long one session with the athlete's trainer usually lasts: the median of the last weeks. */
+    fun ownSessionMinutes(sport: Sport, recent: RecentTraining): Int =
+        recent.medianMinutes[sport]?.coerceIn(OWN_SESSION_RANGE)?.let { (it / 5.0).roundToInt() * 5 } ?: OWN_SESSION_MINUTES
+
+    /**
+     * Minutes of the week a sport done with the trainer takes: the days the
+     * athlete gave, or without days what they did in the last weeks.
+     */
+    fun ownMinutes(sport: Sport, availability: TrainingAvailability, recent: RecentTraining): Int {
+        val days = availability.ownDays(sport)
+        if (days.isNotEmpty()) return days.size * ownSessionMinutes(sport, recent)
+        return ((recent.weeklyMinutes[sport] ?: 0.0) / 5).roundToInt() * 5
+    }
+
+    /**
+     * The session [sport] has on [date] with the athlete's trainer, or null.
+     * What is in it only the trainer knows: the week shows the time it takes
+     * and counts it as a medium session until the watch says what it was.
+     */
+    fun ownSession(sport: Sport, availability: TrainingAvailability, budget: WeekBudget, date: LocalDate): PlannedSession? {
+        if (date.dayOfWeek !in availability.ownDays(sport)) return null
+        val minutes = budget.ownSessionMinutes[sport]?.takeIf { it > 0 } ?: return null
+        return PlannedSession(
+            sport = sport,
+            title = sportName(sport),
+            durationMin = minutes,
+            intensity = Intensity.TEMPO,
+            focus = OWN_FOCUS,
+            why = "La seduta la decide il tuo allenatore: i coach hanno scritto le loro tenendone conto.",
+            own = true,
+        )
+    }
+
+    /** The athlete's own sessions of [date]: the sports done with their trainer, then the gym. */
+    fun fixedSessions(availability: TrainingAvailability, budget: WeekBudget, date: LocalDate): List<PlannedSession> =
+        SPORTS.filter { it in budget.own }.mapNotNull { ownSession(it, availability, budget, date) } +
+            listOfNotNull(gymSession(availability, budget.phase, date))
 
     fun phase(profile: AthleteProfile, weekStart: LocalDate, recent: RecentTraining): CyclePhase {
         val race = profile.raceDate?.takeIf { profile.goal != RaceGoal.FITNESS && !it.isBefore(weekStart) }
@@ -177,28 +303,45 @@ object TriRegia {
         CyclePhase.GENERAL, CyclePhase.SPECIFIC -> MAX_HARD_SESSIONS
     }
 
-    /** The week's budget: total time, each sport's minutes and limits. */
+    /**
+     * The week's budget: total time, each sport's minutes and limits.
+     *
+     * The weekly hours hold all the training, so the athlete's own sessions
+     * come off first: the gym and the sports done with their trainer. What
+     * is left is split among the sports the AI coaches write, by the shares,
+     * each stopping at what it can safely grow to from its recent weeks; the
+     * time a sport cannot use (it is paused, or it would grow too fast) goes
+     * to the others, which stop at their own limit too. So nobody is cut
+     * below their habit while time is free, and nothing grows faster than
+     * its rule.
+     */
     fun budget(profile: AthleteProfile, availability: TrainingAvailability, recent: RecentTraining, weekStart: LocalDate): WeekBudget {
         val phase = phase(profile, weekStart, recent)
-        val weak = availability.weakSport ?: weakFromData(recent, profile.goal)
-        val shares = shares(profile.goal, weak)
+        val active = SPORTS.filter(availability::isCoached)
+        val own = availability.ownSports
+        val weak = availability.weakSport?.takeIf { it in active } ?: weakFromData(recent, profile.goal, active)
+        val shares = shares(profile.goal, weak, active)
         val hours = profile.weeklyHours
             ?: (recent.totalWeeklyMinutes / 60).takeIf { it >= 1 }
             ?: DEFAULT_WEEKLY_HOURS
         val available = (hours * 60).roundToInt()
-        val planned = available * phaseFactor(phase)
+        val gym = min(gymMinutes(availability, phase, recent), available)
+        val ownMinutes = own.associateWith { ownMinutes(it, availability, recent) }
+        val planned = (available - gym - ownMinutes.values.sum()).coerceAtLeast(0) * phaseFactor(phase)
         val hard = maxHard(phase)
-        val sports = SPORTS.associateWith { sport ->
-            val share = shares.getValue(sport)
+        val caps = active.associateWith { sport ->
             val history = recent.weeklyMinutes[sport] ?: 0.0
-            val cap = if (history >= HISTORY_MINUTES) history * growth(sport) else NEW_SPORT_MINUTES.toDouble()
-            val minutes = min(planned * share, cap)
+            if (history >= HISTORY_MINUTES) history * growth(sport) else NEW_SPORT_MINUTES.toDouble()
+        }
+        val given = split(planned, shares, caps)
+        val sports = SPORTS.associateWith { sport ->
+            val minutes = given[sport] ?: 0.0
             SportBudget(
                 sport = sport,
-                share = share,
+                share = shares.getValue(sport),
                 minutes = (minutes / 5).roundToInt() * 5,
-                longestMin = longest(sport, minutes, recent, availability),
-                maxQuality = min(MAX_QUALITY_PER_SPORT, hard),
+                longestMin = if (sport in active) longest(sport, minutes, recent, availability) else null,
+                maxQuality = if (sport in active) min(MAX_QUALITY_PER_SPORT, hard) else 0,
             )
         }
         return WeekBudget(
@@ -208,10 +351,36 @@ object TriRegia {
             maxHardSessions = hard,
             sports = sports,
             weakSport = weak,
-            weakFromData = availability.weakSport == null && weak != null,
-            bricksAllowed = phase == CyclePhase.SPECIFIC,
+            weakFromData = availability.weakSport?.takeIf { it in active } == null && weak != null,
+            bricksAllowed = phase == CyclePhase.SPECIFIC && Sport.BIKE in active && Sport.RUN in active,
             hoursEstimated = profile.weeklyHours == null,
+            gymMinutes = gym,
+            paused = SPORTS.filterNot(availability::isActive).toSet(),
+            ownMinutes = ownMinutes,
+            ownSessionMinutes = own.associateWith { ownSessionMinutes(it, recent) },
         )
+    }
+
+    /**
+     * [minutes] split among the sports of [caps] by their [shares], none
+     * above its cap: what a capped sport leaves goes to the others, again by
+     * share, until the time or the room is finished.
+     */
+    fun split(minutes: Double, shares: Map<Sport, Double>, caps: Map<Sport, Double>): Map<Sport, Double> {
+        val given = caps.keys.associateWith { 0.0 }.toMutableMap()
+        var left = minutes
+        var open = caps.keys.filter { (shares[it] ?: 0.0) > 0 }
+        while (left > 0.5 && open.isNotEmpty()) {
+            val weight = open.sumOf { shares.getValue(it) }
+            val round = left
+            open.forEach { sport ->
+                val take = min(round * shares.getValue(sport) / weight, caps.getValue(sport) - given.getValue(sport))
+                given[sport] = given.getValue(sport) + take
+                left -= take
+            }
+            open = open.filter { caps.getValue(it) - given.getValue(it) > 0.5 }
+        }
+        return given
     }
 
     private fun longest(sport: Sport, minutes: Double, recent: RecentTraining, availability: TrainingAvailability): Int? {
@@ -222,7 +391,7 @@ object TriRegia {
                 val share = max(0.30 * minutes, 40.0)
                 recent.longestMinutes[sport]?.let { min(it * 1.5, share) } ?: share
             }
-            Sport.OTHER -> null
+            Sport.STRENGTH, Sport.OTHER -> null
         }
         val ride = if (sport == Sport.BIKE) availability.longestRideMin?.toDouble() else null
         val limit = listOfNotNull(fromHistory, ride).minOrNull() ?: return null
@@ -245,14 +414,18 @@ object TriRegia {
     ): List<RegiaConflict> {
         val found = mutableListOf<RegiaConflict>()
         val days = plan.days.sortedBy { it.date }
-        val sessions = days.flatMap { it.sessions }.filter { it.sport in SPORTS && it.durationMin > 0 }
+        // The budget is of the sports the AI coaches write: the athlete's own sessions have their own minutes.
+        val coached = budget.coached
+        val sessions = days.flatMap { it.sessions }.filter { it.sport in coached && it.durationMin > 0 && !it.own }
 
         val total = sessions.sumOf { it.durationMin }
-        val totalLimit = min(budget.totalMinutes + tolerance(budget.totalMinutes), budget.availableMinutes + tolerance(budget.availableMinutes))
+        val free = budget.sportMinutesAvailable
+        val totalLimit = min(budget.totalMinutes + tolerance(budget.totalMinutes), free + tolerance(free))
         if (total > totalLimit) {
-            found += RegiaConflict(RegiaRule.TOTAL_TIME, null, "La settimana dura $total minuti: il budget è ${budget.totalMinutes}, con ${hoursText(budget.availableMinutes)} h disponibili.")
+            val fixed = if (budget.fixedMinutes > 0) ", di cui ${budget.fixedMinutes} minuti già presi dalle sedute dell'atleta (${fixedNames(budget)})" else ""
+            found += RegiaConflict(RegiaRule.TOTAL_TIME, null, "Le sedute dei coach durano $total minuti: il budget è ${budget.totalMinutes}, con ${hoursText(budget.availableMinutes)} h disponibili$fixed.")
         }
-        SPORTS.forEach { sport ->
+        coached.forEach { sport ->
             val sportBudget = budget.sports.getValue(sport)
             val minutes = sessions.filter { it.sport == sport }.sumOf { it.durationMin }
             if (minutes > sportBudget.minutes + tolerance(sportBudget.minutes)) {
@@ -274,7 +447,8 @@ object TriRegia {
         if (hard > budget.maxHardSessions) {
             found += RegiaConflict(RegiaRule.HARD_SESSIONS, null, "$hard sedute dure nella settimana, al massimo ${budget.maxHardSessions} in fase ${budget.phase.label}.")
         }
-        if (days.size == 7 && days.none { day -> day.sessions.none { it.sport in SPORTS && it.durationMin > 0 } }) {
+        // A gym day is not a rest day. The athlete's own sessions stay: the day to free is one without them.
+        if (days.size == 7 && days.none { day -> day.sessions.none(::isTraining) } && days.any { day -> day.sessions.none(::isFixed) }) {
             found += RegiaConflict(RegiaRule.NO_REST_DAY, null, "Manca un giorno di riposo.")
         }
 
@@ -286,19 +460,25 @@ object TriRegia {
             }
         }
         days.filter { !it.date.isBefore(from) }.forEach { day ->
-            val real = day.sessions.filter { it.sport in SPORTS && it.durationMin > 0 }
+            val real = day.sessions.filter { it.sport in SPORTS && it.durationMin > 0 && !it.own }
             if (real.isNotEmpty() && day.date.dayOfWeek == availability.restDay) {
                 found += RegiaConflict(RegiaRule.REST_DAY, day.date, "${label(day.date)} è il giorno di riposo preferito dall'atleta.")
             }
-            if (real.mapNotNull { it.sport }.distinct().size > MAX_SPORTS_PER_DAY) {
-                found += RegiaConflict(RegiaRule.TOO_MANY_SPORTS, day.date, "${label(day.date)}: più di $MAX_SPORTS_PER_DAY sport nello stesso giorno.")
+            if (day.sessions.filter(::isTraining).mapNotNull { it.sport }.distinct().size > MAX_SPORTS_PER_DAY && real.isNotEmpty()) {
+                val fixed = day.sessions.filter(::isFixed).mapNotNull { it.sport }.distinct()
+                val with = if (fixed.isEmpty()) "" else ", ${fixed.joinToString(" e ") { sportName(it).lowercase() }} dell'atleta compres${if (fixed.size > 1) "i" else "a"}"
+                found += RegiaConflict(RegiaRule.TOO_MANY_SPORTS, day.date, "${label(day.date)}: più di $MAX_SPORTS_PER_DAY sport nello stesso giorno$with.")
             }
             if (!budget.bricksAllowed && isBrick(real)) {
                 found += RegiaConflict(RegiaRule.BRICK, day.date, "${label(day.date)}: corsa subito dopo la bici, ma i brick sono solo in fase specifica (questa è fase ${budget.phase.label}).")
             }
             real.forEach { session ->
                 val sport = session.sport!!
-                if (!availability.allows(sport, day.date.dayOfWeek)) {
+                if (!availability.isActive(sport)) {
+                    found += RegiaConflict(RegiaRule.UNAVAILABLE_DAY, day.date, "${label(day.date)}: ${sportName(sport).lowercase()} è in pausa, l'atleta non lo pratica in questo periodo.", sport)
+                } else if (!availability.isCoached(sport)) {
+                    found += RegiaConflict(RegiaRule.UNAVAILABLE_DAY, day.date, "${label(day.date)}: ${sportName(sport).lowercase()} lo segue l'allenatore dell'atleta, nessun coach ne scrive le sedute.", sport)
+                } else if (!availability.allows(sport, day.date.dayOfWeek)) {
                     found += RegiaConflict(RegiaRule.UNAVAILABLE_DAY, day.date, "${label(day.date)}: ${sportName(sport).lowercase()} in un giorno in cui l'atleta non può (${dayList(availability.slot(sport)?.days.orEmpty())}).", sport)
                 }
                 val longest = budget.sports[sport]?.longestMin
@@ -309,6 +489,20 @@ object TriRegia {
         }
         return found
     }
+
+    /** The athlete's own gym session, which no rule moves. */
+    fun isGym(session: PlannedSession): Boolean = session.sport == Sport.STRENGTH && session.durationMin > 0
+
+    /** A session that is the athlete's own, which no rule moves: the gym, or a sport done with their trainer. */
+    fun isFixed(session: PlannedSession): Boolean = session.durationMin > 0 && (session.own || session.sport == Sport.STRENGTH)
+
+    /** The athlete's own sessions of the week in words: "nuoto con il suo allenatore, palestra". */
+    private fun fixedNames(budget: WeekBudget): String =
+        (SPORTS.filter { (budget.ownMinutes[it] ?: 0) > 0 }.map { "${sportName(it).lowercase()} con il suo allenatore" } +
+            listOfNotNull("palestra".takeIf { budget.gymMinutes > 0 })).joinToString(", ")
+
+    /** Anything that makes a day a training day: a session of the three sports or the gym. */
+    fun isTraining(session: PlannedSession): Boolean = (session.sport in SPORTS || session.sport == Sport.STRENGTH) && session.durationMin > 0
 
     /** Bike then run on the same day, in the order the plan lists them. */
     fun isBrick(sessions: List<PlannedSession>): Boolean {
@@ -324,6 +518,7 @@ object TriRegia {
         Sport.SWIM -> "Nuoto"
         Sport.BIKE -> "Bici"
         Sport.RUN -> "Corsa"
+        Sport.STRENGTH -> "Palestra"
         Sport.OTHER -> "Altro"
     }
 
@@ -347,27 +542,61 @@ object TriRegia {
         appendLine(
             "Ore disponibili: ${hoursText(budget.availableMinutes)} h a settimana" +
                 (if (budget.hoursEstimated) " (stimate dal volume recente: l'atleta non le ha indicate)" else "") +
-                "; budget di questa settimana: ${budget.totalMinutes} minuti in tutto.",
+                "; budget di questa settimana per le sedute scritte dai coach" +
+                (if (budget.coached.size in 1..2) " (${budget.coached.joinToString(", ") { sportName(it).lowercase() }})" else "") +
+                ": ${budget.totalMinutes} minuti in tutto.",
         )
-        appendLine(
-            "Quote e minuti per sport: " + SPORTS.joinToString(", ") { sport ->
-                val b = budget.sports.getValue(sport)
-                "${sportName(sport).lowercase()} ${percent(b.share)}% (${b.minutes} min" + (b.longestMin?.let { ", seduta più lunga al massimo $it min" } ?: "") + ")"
-            } + ".",
-        )
+        val active = budget.coached
+        if (budget.paused.isNotEmpty()) {
+            appendLine(
+                "Sport in pausa: ${budget.paused.joinToString(", ") { sportName(it).lowercase() }}. L'atleta non li pratica in questo periodo: " +
+                    "nessuna seduta e nessun minuto, il loro tempo è passato agli altri sport.",
+            )
+        }
+        if (budget.gymMinutes > 0) {
+            val days = availability.gymDays
+            val whenText = if (days.isEmpty()) "nei giorni che sceglie l'atleta" else "${dayList(days)}" + (availability.gym.time?.let { " alle $it" } ?: "")
+            val each = if (days.isEmpty()) "" else ", ${gymSessionMinutes(availability, budget.phase)} minuti a seduta"
+            appendLine(
+                "Palestra (forza, la gestisce l'atleta: nessun coach la scrive o la sposta): $whenText$each, ${budget.gymMinutes} minuti nella settimana, già tolti dalle ore disponibili. " +
+                    "È fatica vera per i muscoli: la qualità va prima della palestra nello stesso giorno, non il giorno dopo una palestra pesante per gli stessi muscoli.",
+            )
+        }
+        SPORTS.filter { it in budget.own }.forEach { sport ->
+            val days = availability.ownDays(sport)
+            val name = sportName(sport)
+            val whenText = if (days.isEmpty()) "nei giorni che decide con l'allenatore" else dayList(days) + (availability.slot(sport)?.time?.let { " alle $it" } ?: "")
+            val each = if (days.isEmpty()) "" else ", circa ${budget.ownSessionMinutes[sport]} minuti a seduta"
+            appendLine(
+                "$name (lo segue l'allenatore dell'atleta, di persona: nessun coach AI scrive, sposta o corregge le sue sedute): $whenText$each, " +
+                    "${budget.ownMinutes[sport]} minuti nella settimana, già tolti dalle ore disponibili. Che cosa farà in ogni seduta non si sa prima: " +
+                    "considerala una seduta vera, di media intensità, e guarda nei dati quelle già fatte. Il Coach $name le legge e le commenta.",
+            )
+        }
+        if (active.isNotEmpty()) {
+            appendLine(
+                "Quote e minuti per sport: " + active.joinToString(", ") { sport ->
+                    val b = budget.sports.getValue(sport)
+                    "${sportName(sport).lowercase()} ${percent(b.share)}% (${b.minutes} min" + (b.longestMin?.let { ", seduta più lunga al massimo $it min" } ?: "") + ")"
+                } + ".",
+            )
+        }
         budget.weakSport?.let {
             appendLine("Punto debole: ${sportName(it).lowercase()} (" + (if (budget.weakFromData) "dai dati degli ultimi allenamenti" else "indicato dall'atleta") + "): ha la precedenza nei conflitti.")
         }
         appendLine(
             "Sedute dure (soglia, VO2max, gara): al massimo ${budget.maxHardSessions} in tutto e al massimo $MAX_QUALITY_PER_SPORT per sport; " +
-                "mai due giorni duri di fila, qualunque sport; almeno un giorno di riposo; al massimo $MAX_SPORTS_PER_DAY sport nello stesso giorno.",
+                "mai due giorni duri di fila, qualunque sport; almeno un giorno di riposo; al massimo $MAX_SPORTS_PER_DAY sport nello stesso giorno" +
+                (if (budget.fixedMinutes > 0) ", comprese le sedute dell'atleta (${fixedNames(budget)})." else "."),
         )
-        appendLine(
-            if (budget.bricksAllowed) "Fase specifica: puoi mettere un brick (corsa subito dopo la bici), elencando la bici prima della corsa."
-            else "Niente brick (corsa subito dopo la bici): sono solo in fase specifica.",
-        )
+        if (Sport.BIKE in active && Sport.RUN in active) {
+            appendLine(
+                if (budget.bricksAllowed) "Fase specifica: puoi mettere un brick (corsa subito dopo la bici), elencando la bici prima della corsa."
+                else "Niente brick (corsa subito dopo la bici): sono solo in fase specifica.",
+            )
+        }
         availability.restDay?.let { appendLine("Giorno di riposo preferito: ${it.getDisplayName(TextStyle.FULL, italian)}.") }
-        SPORTS.forEach { sport ->
+        active.forEach { sport ->
             val slot = availability.slot(sport) ?: return@forEach
             val parts = mutableListOf<String>()
             parts += if (slot.days.isEmpty()) "tutti i giorni" else "solo ${dayList(slot.days)}"

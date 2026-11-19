@@ -89,14 +89,16 @@ fun SessionDetail(
         ) {
             item {
                 Column(Modifier.padding(horizontal = 4.dp)) {
-                    if (sport != null) {
+                    // The athlete's own sessions say whose they are instead of naming a coach.
+                    val labelSport = if (session.own) session.sport else sport
+                    if (labelSport != null) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Dot(SportColors.of(sport))
+                            Dot(SportColors.of(labelSport))
                             Text(
-                                SportCoachPrompts.coachName(sport),
+                                if (session.own) ownLabel(session) else SportCoachPrompts.coachName(labelSport),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = SportColors.of(sport),
+                                color = SportColors.of(labelSport),
                             )
                         }
                     }

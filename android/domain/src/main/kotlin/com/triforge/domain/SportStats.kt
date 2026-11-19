@@ -68,15 +68,15 @@ data class SportReport(
 
 object SportStats {
 
-    /** Cyclists count hours; swimmers and runners count distance. */
-    fun measuresVolumeByTime(sport: Sport): Boolean = sport == Sport.BIKE || sport == Sport.OTHER
+    /** Cyclists count hours, and so do the gym and the other activities; swimmers and runners count distance. */
+    fun measuresVolumeByTime(sport: Sport): Boolean = sport == Sport.BIKE || sport == Sport.STRENGTH || sport == Sport.OTHER
 
     /** A record for speed only counts over a distance worth racing. */
     fun minimumDistanceForSpeedRecord(sport: Sport): Double = when (sport) {
         Sport.SWIM -> 400.0
         Sport.BIKE -> 20_000.0
         Sport.RUN -> 5_000.0
-        Sport.OTHER -> Double.MAX_VALUE
+        Sport.STRENGTH, Sport.OTHER -> Double.MAX_VALUE
     }
 
     /**

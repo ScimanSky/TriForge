@@ -6,6 +6,7 @@ import com.triforge.domain.CheckIn
 import com.triforge.domain.Formatters
 import com.triforge.domain.FormZone
 import com.triforge.domain.LoadResponsePattern
+import com.triforge.domain.OtherKind
 import com.triforge.domain.RaceGoal
 import com.triforge.domain.RecoveryLight
 import com.triforge.domain.RecoveryPhase
@@ -56,11 +57,12 @@ object AthleteContext {
         appendLine()
         appendLine("## Profilo")
         profile(data.profile, data.today, data.age).forEach { appendLine("- $it") }
+        habits(data.availability).forEach { appendLine("- $it") }
         appendLine()
         appendLine("## Volume settimanale (ultime $TREND_WEEKS settimane, dalla più vecchia)")
         weeks(data).forEach { appendLine("- $it") }
         appendLine()
-        appendLine("## Allenamenti degli ultimi $RECENT_DAYS giorni")
+        appendLine("## Allenamenti degli ultimi $RECENT_DAYS giorni (tutto quello che l'orologio ha registrato: sport, palestra e altre attività)")
         val recent = recent(data)
         if (recent.isEmpty()) appendLine("- nessun allenamento registrato") else recent.forEach { appendLine("- $it") }
         appendLine()
@@ -96,9 +98,32 @@ object AthleteContext {
         }
     }
 
+    /** What the athlete does besides the plan, from board 8: the gym, the sports done with a trainer, the sports on hold. */
+    private fun habits(availability: TrainingAvailability): List<String> = buildList {
+        val gym = availability.gym
+        if (gym.enabled) {
+            val days = availability.gymDays.sorted().joinToString(", ") { TriRegia.dayName(it) }
+            add(
+                "Palestra (forza, programma suo): " + (if (days.isEmpty()) "giorni variabili" else days) +
+                    (gym.time?.let { " alle $it" } ?: "") + ", circa ${gym.minutes} minuti a seduta",
+            )
+        }
+        availability.ownSports.forEach { sport ->
+            val days = availability.ownDays(sport).sorted().joinToString(", ") { TriRegia.dayName(it) }
+            add(
+                "${sportName(sport).replaceFirstChar { c -> c.uppercase() }}: lo fa con il suo allenatore, di persona (" +
+                    (if (days.isEmpty()) "giorni variabili" else days) + (availability.slot(sport)?.time?.let { " alle $it" } ?: "") +
+                    "). Le sedute le decide l'allenatore: nei dati trovi quelle fatte",
+            )
+        }
+        if (availability.paused.isNotEmpty()) {
+            add("Sport che non pratica in questo periodo: ${availability.paused.joinToString(", ") { sportName(it) }}")
+        }
+    }
+
     private fun weeks(data: AthleteData): List<String> =
         TrainingStats.weeklyTrend(data.activities, TREND_WEEKS, data.today, data.zone).map { week ->
-            val parts = (TrainingStats.triathlonSports + Sport.OTHER).mapNotNull { sport ->
+            val parts = TrainingStats.allSports.mapNotNull { sport ->
                 val t = week.of(sport).takeIf { it.sessions > 0 } ?: return@mapNotNull null
                 val distance = if (t.distanceMeters > 0) " ${Formatters.distance(sport, t.distanceMeters)}" else ""
                 "${sportName(sport)} ${t.sessions}× ${Formatters.duration(t.durationSec)}$distance"
@@ -118,9 +143,13 @@ object AthleteContext {
         val date = a.startTime.atZone(data.zone).toLocalDate()
         val parts = mutableListOf(
             "$date ${dayLabel(date)}",
-            sportName(a.sport),
+            activityName(a),
             Formatters.duration(a.durationSec),
         )
+        if (a.sport == Sport.STRENGTH) {
+            a.sets?.let { parts += "$it serie" }
+            a.liftedKg?.let { parts += "${it.roundToInt()} kg sollevati in tutto" }
+        }
         if (a.distanceMeters > 0) parts += Formatters.distance(a.sport, a.distanceMeters)
         Formatters.pace(a.sport, a.distanceMeters, a.paceSec)?.let { parts += it }
         a.avgHr?.let { parts += "FC media $it" }
@@ -212,8 +241,21 @@ object AthleteContext {
         Sport.SWIM -> "nuoto"
         Sport.BIKE -> "bici"
         Sport.RUN -> "corsa"
+        Sport.STRENGTH -> "palestra"
         Sport.OTHER -> "altro"
         null -> "riposo"
+    }
+
+    /** What a recorded session was, in a word: the sport, or the kind of an activity outside the sports. */
+    fun activityName(activity: Activity): String =
+        if (activity.sport == Sport.OTHER) kindName(activity.kind) else sportName(activity.sport)
+
+    fun kindName(kind: OtherKind): String = when (kind) {
+        OtherKind.WALK -> "camminata"
+        OtherKind.HIKE -> "escursione"
+        OtherKind.MOBILITY -> "yoga e mobilità"
+        OtherKind.CARDIO -> "cardio"
+        OtherKind.GENERIC -> "altra attività"
     }
 
     fun dayLabel(date: LocalDate): String = date.dayOfWeek.getDisplayName(TextStyle.FULL, it)

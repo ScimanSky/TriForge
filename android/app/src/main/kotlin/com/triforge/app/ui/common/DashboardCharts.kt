@@ -281,7 +281,7 @@ fun WeekStrip(
     description: String,
     modifier: Modifier = Modifier,
 ) {
-    val sports = TrainingStats.triathlonSports + Sport.OTHER
+    val sports = TrainingStats.allSports
     // A 90-minute day fills the column unless a longer one sets the scale.
     val peak = max(days.maxOf { it.totalSec }, 90 * 60L).toFloat()
 

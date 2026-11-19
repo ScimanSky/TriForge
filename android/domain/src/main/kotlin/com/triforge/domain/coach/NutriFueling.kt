@@ -65,6 +65,8 @@ object NutriFueling {
             val hard = effort.any(::isHard)
             val demanding = hard || minutes >= 90
             val another = position < efforts.lastIndex
+            // After lifting the muscles ask for proteins even when the session was short.
+            val strength = effort.any { it.sport == Sport.STRENGTH }
             EffortFuel(
                 sessions = effort,
                 minutes = minutes,
@@ -72,7 +74,7 @@ object NutriFueling {
                 duringCarbsPerHour = duringCarbs(minutes, hard, effort.all { it.sport == Sport.SWIM }),
                 // With another session later the recovery cannot wait for the next meal.
                 afterCarbsG = if (demanding || another) weightKg.roundToInt() else null,
-                afterProteinG = if (demanding || another) (0.3 * weightKg).roundToInt() else null,
+                afterProteinG = if (demanding || another || strength) (0.3 * weightKg).roundToInt() else null,
                 sodium = minutes >= 90,
             )
         }
@@ -99,7 +101,13 @@ object NutriFueling {
                     ?: "solo acqua.") +
                     if (brick) " Si mangia e si beve in bici, anche per la corsa: di corsa solo piccoli sorsi." else "",
             )
-            appendLine("  Dopo: " + (effort.afterCarbsG?.let { "entro un'ora circa $it g di carboidrati e ${effort.afterProteinG} g di proteine." } ?: "il pasto successivo basta."))
+            appendLine(
+                "  Dopo: " + (
+                    effort.afterCarbsG?.let { "entro un'ora circa $it g di carboidrati e ${effort.afterProteinG} g di proteine." }
+                        ?: effort.afterProteinG?.let { "entro un'ora o due circa $it g di proteine, nel pasto successivo o in uno spuntino." }
+                        ?: "il pasto successivo basta."
+                    ),
+            )
         }
         if (plan.size > 1) appendLine("Più sedute nello stesso giorno: il recupero dopo la prima è la preparazione della seconda, non va saltato.")
         val next = NutriEnergy.dayType(context.tomorrow)

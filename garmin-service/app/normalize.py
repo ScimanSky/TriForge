@@ -22,10 +22,17 @@ BIKE_TYPES = {
     "recumbent_cycling",
 }
 RUN_TYPES = {"running", "virtual_run", "obstacle_run", "ultra_run"}
+# The gym: the app shows it as a sport of its own, beside the three.
+STRENGTH_TYPES = {"strength_training", "weight_training", "weightlifting", "calisthenics"}
 
 
 def sport_for(type_key: str | None) -> str:
-    """Map a Garmin activity typeKey to swim, bike, run or other."""
+    """Map a Garmin activity typeKey to swim, bike, run, strength or other.
+
+    Everything the watch records is synced. What is not one of the three
+    disciplines or the gym is "other": the app reads what it was (a walk, a
+    hike, yoga, cardio) from the ``type`` field, which keeps Garmin's typeKey.
+    """
     key = (type_key or "").lower()
     if key in SWIM_TYPES or "swimming" in key:
         return "swim"
@@ -33,6 +40,8 @@ def sport_for(type_key: str | None) -> str:
         return "bike"
     if key in RUN_TYPES or key.endswith("_running"):
         return "run"
+    if key in STRENGTH_TYPES:
+        return "strength"
     return "other"
 
 
@@ -132,6 +141,9 @@ def normalize_activity(
         "vo2max": _number(raw.get("vO2MaxValue")),
     }
 
+    if sport == "strength":
+        doc.update(_strength_fields(raw))
+
     if sport == "swim":
         doc["openWater"] = type_key == "open_water_swimming"
         doc["poolLengthMeters"] = _pool_length_meters(raw.get("poolLength"))
@@ -145,6 +157,66 @@ def normalize_activity(
             doc["hasLaps"] = bool(laps)
 
     return doc
+
+
+# -- gym --------------------------------------------------------------------
+
+# Garmin gives the weight moved in grams (and times in milliseconds).
+_HEAVIEST_REP_KG = 600.0
+
+
+def _volume_kg(volume: Any, reps: int | None) -> float | None:
+    """The weight moved in an exercise, in kilograms, or None when unknown."""
+    grams = _positive(volume)
+    if grams is None or not reps:
+        return None
+    kilograms = grams / 1000.0
+    # A number nobody lifts is a payload this code does not understand.
+    if kilograms / reps > _HEAVIEST_REP_KG:
+        return None
+    return round(kilograms, 1)
+
+
+def _strength_fields(raw: dict[str, Any]) -> dict[str, Any]:
+    """Sets, repetitions and exercises of a gym session, when the watch counted them.
+
+    They come with the activity summary, so they cost no extra request:
+
+    - ``sets``: the working sets (Garmin ``activeSets``, else ``totalSets``).
+    - ``reps``: all the repetitions.
+    - ``exercises``: one entry per exercise category, in Garmin's order, with
+      ``category`` (lower case, as Garmin names it: "squat", "bench_press"),
+      ``sets``, ``reps`` and ``volumeKg``, the weight moved in all its sets.
+
+    A session recorded without counting sets carries none of them.
+    """
+    fields: dict[str, Any] = {
+        "sets": _rounded(_positive(raw.get("activeSets")) or _positive(raw.get("totalSets"))),
+        "reps": _rounded(_positive(raw.get("totalReps"))),
+    }
+    exercises: list[dict[str, Any]] = []
+    summarized = raw.get("summarizedExerciseSets")
+    for item in summarized if isinstance(summarized, list) else []:
+        if not isinstance(item, dict):
+            continue
+        category = item.get("category")
+        sets = _rounded(_positive(item.get("sets")))
+        if not isinstance(category, str) or not category.strip() or not sets:
+            continue
+        reps = _rounded(_positive(item.get("reps")))
+        exercises.append(
+            _compact(
+                {
+                    "category": category.strip().lower(),
+                    "sets": sets,
+                    "reps": reps,
+                    "volumeKg": _volume_kg(item.get("volume"), reps),
+                }
+            )
+        )
+    if exercises:
+        fields["exercises"] = exercises
+    return fields
 
 
 # -- swim laps --------------------------------------------------------------

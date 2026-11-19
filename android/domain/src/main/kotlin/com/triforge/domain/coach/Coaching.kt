@@ -54,8 +54,9 @@ enum class Intensity(val key: String) {
 }
 
 /**
- * One planned session. [sport] is null for rest, mobility or strength work,
- * which the plan still lists so the athlete sees the whole day.
+ * One planned session. [sport] is null for rest or mobility, which the plan
+ * still lists so the athlete sees the whole day; [Sport.STRENGTH] is the
+ * athlete's own gym day, put there by the regia.
  */
 data class PlannedSession(
     val sport: Sport?,
@@ -70,6 +71,12 @@ data class PlannedSession(
     val steps: List<WorkoutStep> = emptyList(),
     /** Why this session is here, shown under the workout. */
     val why: String = "",
+    /**
+     * The session is the athlete's own: the gym, or a sport they do with
+     * their trainer. The regia puts it on its day; no coach writes, moves or
+     * shortens it.
+     */
+    val own: Boolean = false,
 )
 
 /** Who spoke at the coaches' table: a sport coach, NutriAI or the app's regia. */
@@ -82,7 +89,7 @@ enum class TableVoice(val key: String) {
             Sport.SWIM -> SWIM
             Sport.BIKE -> BIKE
             Sport.RUN -> RUN
-            Sport.OTHER -> null
+            Sport.STRENGTH, Sport.OTHER -> null
         }
     }
 }
@@ -112,6 +119,12 @@ data class WeekPlan(
     /** The regia's numbers the week was built on, for the summary. */
     val availableMin: Int? = null,
     val maxHard: Int? = null,
+    /**
+     * The first day the week was planned for. The days before it hold what
+     * the athlete did, not a programme; null on plans saved before this was
+     * kept.
+     */
+    val plannedFrom: LocalDate? = null,
 ) {
     /** Whether the three sport coaches wrote this plan. */
     val fromTable: Boolean get() = rounds > 0

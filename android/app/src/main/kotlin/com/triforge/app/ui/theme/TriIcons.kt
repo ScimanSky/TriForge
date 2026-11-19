@@ -130,10 +130,14 @@ object TriIcons {
         stroke("Nutrition", "M12 8 c-2.5 -2.5 -8 -1.5 -8 3.5 S8 21 12 21 s8 -4.5 8 -9.5 s-5.5 -6 -8 -3.5 Z M12 8 c0 -2 1 -4 3.5 -5")
     }
 
+    /** The gym: a barbell. */
+    val Strength by lazy { stroke("Strength", "M6.5 6.5 v11 M3.5 9 v6 M17.5 6.5 v11 M20.5 9 v6 M6.5 12 h11") }
+
     fun of(sport: Sport): ImageVector = when (sport) {
         Sport.SWIM -> Swim
         Sport.BIKE -> Bike
         Sport.RUN -> Run
+        Sport.STRENGTH -> Strength
         Sport.OTHER -> Activity
     }
 
