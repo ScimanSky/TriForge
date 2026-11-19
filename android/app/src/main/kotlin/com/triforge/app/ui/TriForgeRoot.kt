@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -258,7 +259,9 @@ private fun SignedIn(uid: String, container: AppContainer) {
         NavHost(
             navController = navController,
             startDestination = Tab.TODAY.route,
-            modifier = Modifier.padding(padding),
+            // The bars are already left out here: a screen's imePadding then adds only what the
+            // keyboard covers beyond them, instead of the whole keyboard on top of the bottom bar.
+            modifier = Modifier.padding(padding).consumeWindowInsets(padding),
         ) {
             composable(Tab.TODAY.route) {
                 TodayScreen(
