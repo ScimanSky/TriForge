@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- The App Distribution SDK, which only debug builds carry, has two
+             screens built on AppCompat that declare no theme of their own.
+             They would inherit the app's, which is not an AppCompat theme,
+             and AppCompat refuses to start without one: the app crashed as
+             soon as an in-app update reached the install step. -->
+        <activity
+            android:name="com.google.firebase.appdistribution.impl.InstallActivity"
+            android:theme="@style/Theme.TriForge.AppDistribution" />
+        <activity
+            android:name="com.google.firebase.appdistribution.impl.SignInResultActivity"
+            android:theme="@style/Theme.TriForge.AppDistribution" />
+    </application>
+</manifest>
