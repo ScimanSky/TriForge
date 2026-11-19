@@ -11,7 +11,7 @@ La configurazione qui sotto è già stata fatta il 19 novembre 2026:
 | Progetto Firebase | `triforge-app` |
 | App Android | `com.triforge.app` |
 | Firestore | database `(default)`, `europe-west1` |
-| Accesso | Email/Password |
+| Accesso | Email/Password e Google |
 | Servizio Garmin | Cloud Run `triforge-garmin`, `europe-west1`, da 0 a 2 istanze |
 | Service account | `triforge-garmin@triforge-app.iam.gserviceaccount.com`, con `Cloud Datastore User` sul progetto e `Secret Manager Secret Accessor` sui due segreti |
 | Sincronizzazione | Cloud Scheduler `triforge-garmin-sync`, ogni giorno alle 05:00 (Europe/Rome) |
@@ -29,7 +29,15 @@ comando `gcloud run deploy` del punto 3. Il controllo di vita è
 1. Apri la [console Firebase](https://console.firebase.google.com) e crea un progetto.
 2. Aggiungi un'app Android con nome pacchetto `com.triforge.app`.
 3. Scarica `google-services.json` e copialo in `android/app/`.
-4. In **Authentication** attiva il metodo Email/Password.
+4. In **Authentication** attiva i metodi Email/Password e Google. Per Google
+   la console chiede solo un'email di assistenza.
+   - Registra nell'app Android l'impronta SHA-1 della chiave con cui firmi
+     l'APK (`keytool -list -v -keystore ~/.android/debug.keystore`, password
+     `android`), dalle impostazioni del progetto oppure con
+     `firebase apps:android:sha:create <id-app> <sha1>`.
+   - Scarica di nuovo `google-services.json` dopo questi due passaggi: ora
+     contiene il client OAuth che l'app usa per l'accesso con Google. Senza,
+     il pulsante "Continua con Google" avvisa che l'accesso non è attivo.
 5. In **Firestore Database** crea il database in modalità produzione, regione `eur3` o `europe-west1`.
 6. Passa al piano Blaze: serve per Cloud Run. Con l'uso di una persona o di
    pochi amici si resta quasi sempre nella fascia gratuita.

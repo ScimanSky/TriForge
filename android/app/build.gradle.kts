@@ -33,8 +33,8 @@ android {
         applicationId = "com.triforge.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
 
         buildConfigField("String", "GARMIN_SERVICE_URL", "\"$garminServiceUrl\"")
     }
@@ -71,6 +71,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.health.connect)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.google.id)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

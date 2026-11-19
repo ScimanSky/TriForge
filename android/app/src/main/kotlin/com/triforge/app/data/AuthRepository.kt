@@ -1,6 +1,7 @@
 package com.triforge.app.data
 
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -39,6 +40,25 @@ class AuthRepository(
         firestore.collection("users").document(user.uid)
             .set(
                 mapOf("displayName" to name, "createdAt" to FieldValue.serverTimestamp()),
+                SetOptions.merge(),
+            )
+            .await()
+    }
+
+    /**
+     * Signs in with a Google ID token, creating the account the first time.
+     * Sign-in and registration are the same step with Google.
+     */
+    suspend fun signInWithGoogle(idToken: String) {
+        val result = auth.signInWithCredential(GoogleAuthProvider.getCredential(idToken, null)).await()
+        val user = result.user ?: return
+        if (result.additionalUserInfo?.isNewUser != true) return
+        firestore.collection("users").document(user.uid)
+            .set(
+                mapOf(
+                    "displayName" to user.displayName.orEmpty(),
+                    "createdAt" to FieldValue.serverTimestamp(),
+                ),
                 SetOptions.merge(),
             )
             .await()

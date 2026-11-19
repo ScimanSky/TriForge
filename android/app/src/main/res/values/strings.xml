@@ -17,6 +17,11 @@
     <string name="auth_register">Crea account</string>
     <string name="auth_switch_to_register">Non hai un account? Registrati</string>
     <string name="auth_switch_to_sign_in">Hai già un account? Accedi</string>
+    <string name="auth_google">Continua con Google</string>
+    <string name="auth_or">oppure</string>
+    <string name="auth_error_google">Accesso con Google non riuscito. Riprova.</string>
+    <string name="auth_error_google_unavailable">Nessun account Google disponibile su questo telefono.</string>
+    <string name="auth_error_google_not_configured">L\'accesso con Google non è ancora attivo in questa versione.</string>
     <string name="auth_error_fields">Inserisci email e password.</string>
     <string name="auth_error_name">Inserisci il tuo nome.</string>
     <string name="auth_error_credentials">Email o password non corretti.</string>
