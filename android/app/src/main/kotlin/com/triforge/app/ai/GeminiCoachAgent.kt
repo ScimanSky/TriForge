@@ -31,7 +31,7 @@ import org.json.JSONObject
  */
 class GeminiCoachAgent<P : Any>(
     override val role: CoachRole,
-    modelName: String,
+    private val modelName: String,
     location: String,
     planSchema: Schema,
     private val parse: (Map<String, Any?>) -> P?,
@@ -46,7 +46,7 @@ class GeminiCoachAgent<P : Any>(
             responseMimeType = "application/json"
             responseSchema = schema
         },
-        systemInstruction = content { text(CoachPrompts.system(role)) },
+        systemInstruction = content { text(CoachPrompts.system(this@GeminiCoachAgent.role)) },
     )
 
     private val planModel = model(planSchema, PLAN_TEMPERATURE)
@@ -72,7 +72,7 @@ class GeminiCoachAgent<P : Any>(
         val contents: List<Content> = history.takeLast(MAX_HISTORY).map { message ->
             content(role = if (message.fromAthlete) "user" else "model") { text(message.text) }
         } + content(role = "user") { text(turn) }
-        val fields = call { chatModel.generateContent(*contents.toTypedArray()).text }
+        val fields = call { chatModel.generateContent(contents.first(), *contents.drop(1).toTypedArray()).text }
         val text = (fields["reply"] as? String)?.trim().orEmpty()
         if (text.isEmpty()) throw CoachException(CoachException.Reason.BAD_ANSWER)
         @Suppress("UNCHECKED_CAST")
