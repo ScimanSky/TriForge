@@ -29,9 +29,9 @@ val garminServiceUrl: String =
 // Vertex AI backend). Overridable in android/local.properties as
 // triforge.aiModel and triforge.aiLocation, so a newer model needs no code change.
 val aiModel: String = localProperties.getProperty("triforge.aiModel")?.trim()?.takeIf { it.isNotEmpty() }
-    ?: "gemini-2.5-flash"
+    ?: "gemini-3.5-flash"
 val aiLocation: String = localProperties.getProperty("triforge.aiLocation")?.trim()?.takeIf { it.isNotEmpty() }
-    ?: "europe-west1"
+    ?: "europe-west3"
 
 // App Check guards Firebase AI Logic. Test builds use the debug provider with
 // a secret registered on the project (Firebase console › App Check › Manage

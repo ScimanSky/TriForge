@@ -40,7 +40,7 @@ Le comunicazioni sono cifrate (TLS). I dati sono conservati su infrastruttura Go
 ## 6. Chi riceve i dati
 
 - **Google** (Google Ireland Limited e Google LLC), come responsabile del trattamento per i servizi Firebase e Google Cloud: autenticazione, database, server del servizio Garmin, custodia delle chiavi, pianificazione della sincronizzazione, registri.
-- **Google, per il coach AI** (modelli Gemini tramite Firebase AI Logic e Vertex AI, con elaborazione in Europa, regione europe-west1), solo se lo attivi: ricevono i dati di allenamento, recupero e profilo alimentare necessari a ogni richiesta, mai nome, email o foto.
+- **Google, per il coach AI** (modelli Gemini tramite Firebase AI Logic e Vertex AI, con elaborazione in Europa, regione europe-west3, Francoforte), solo se lo attivi: ricevono i dati di allenamento, recupero e profilo alimentare necessari a ogni richiesta, mai nome, email o foto.
 - **Garmin**: TriForge si collega a Garmin Connect su tua richiesta per scaricare i tuoi dati. Garmin tratta i dati del tuo account Garmin come titolare autonomo, secondo la propria informativa. Il collegamento usa un'interfaccia non ufficiale, che Garmin potrebbe limitare o interrompere.
 - **Autorità**, se la legge lo impone.
 

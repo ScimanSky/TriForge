@@ -49,7 +49,7 @@ comando `gcloud run deploy` del punto 3. Il controllo di vita è
    gcloud services enable firebasevertexai.googleapis.com aiplatform.googleapis.com --project <id-progetto>
    ```
 
-   L'app usa `gemini-2.5-flash` nella regione `europe-west1`. Per cambiarli
+   L'app usa `gemini-3.5-flash` nella regione `europe-west3` (Francoforte). Per cambiarli
    senza toccare il codice, in `android/local.properties`:
    `triforge.aiModel=<modello>` e `triforge.aiLocation=<regione>`.
 

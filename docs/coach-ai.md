@@ -1,7 +1,7 @@
 # Coach e NutriAI
 
 TriForge ha due coach AI distinti, entrambi su Gemini tramite Firebase AI
-Logic (backend Vertex AI, regione `europe-west1`):
+Logic (backend Vertex AI, regione `europe-west3`, Francoforte):
 
 - **Coach**: l'allenatore. Prepara la settimana (lunedì-domenica), la spiega e
   la adatta in chat.
