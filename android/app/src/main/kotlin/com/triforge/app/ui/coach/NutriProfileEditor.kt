@@ -1,5 +1,7 @@
 package com.triforge.app.ui.coach
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -32,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -40,6 +43,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.triforge.app.R
 import com.triforge.app.ui.common.CollapsibleCard
@@ -217,14 +221,6 @@ fun NutriProfileEditor(
             initiallyExpanded = first || draft.dislikes.isNotEmpty(),
         ) {
             Hint(stringResource(R.string.nutri_dislikes_hint))
-            draft.dislikes.forEachIndexed { index, entry ->
-                ItemRow(
-                    title = entry.food,
-                    subtitle = entry.exceptions.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.nutri_dislike_except, it.joinToString(", ")) },
-                    removeLabel = stringResource(R.string.nutri_remove, entry.food),
-                    onRemove = { draft = draft.copy(dislikes = draft.dislikes.filterIndexed { i, _ -> i != index }) },
-                )
-            }
             var food by rememberSaveable { mutableStateOf("") }
             var except by rememberSaveable { mutableStateOf("") }
             val canAdd = food.isNotBlank() && draft.dislikes.size < NutritionProfile.MAX_ITEMS
@@ -241,6 +237,16 @@ fun NutriProfileEditor(
                 TriTextField(food, { food = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_dislike_food), Modifier.fillMaxWidth().padding(top = 8.dp).focusRequester(firstField), placeholder = stringResource(R.string.nutri_dislike_food_hint), keyboardOptions = NextField)
                 TriTextField(except, { except = it.take(NutritionProfile.TEXT_MAX) }, stringResource(R.string.nutri_dislike_exceptions), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_dislike_exceptions_hint), keyboardOptions = LastField, keyboardActions = KeyboardActions(onDone = { add() }))
                 SecondaryButton(stringResource(R.string.nutri_add), enabled = canAdd, compact = true, onClick = add, modifier = Modifier.padding(top = 10.dp))
+            }
+            ItemsFold(draft.dislikes.map { it.food }) {
+                draft.dislikes.forEachIndexed { index, entry ->
+                    ItemRow(
+                        title = entry.food,
+                        subtitle = entry.exceptions.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.nutri_dislike_except, it.joinToString(", ")) },
+                        removeLabel = stringResource(R.string.nutri_remove, entry.food),
+                        onRemove = { draft = draft.copy(dislikes = draft.dislikes.filterIndexed { i, _ -> i != index }) },
+                    )
+                }
             }
         }
 
@@ -263,14 +269,6 @@ fun NutriProfileEditor(
             initiallyExpanded = first || draft.supplements.isNotEmpty(),
         ) {
             Hint(stringResource(R.string.nutri_supplements_hint))
-            draft.supplements.forEachIndexed { index, item ->
-                ItemRow(
-                    title = item.name,
-                    subtitle = listOf(item.dose, item.timing.label).filter(String::isNotBlank).joinToString(" · "),
-                    removeLabel = stringResource(R.string.nutri_remove, item.name),
-                    onRemove = { draft = draft.copy(supplements = draft.supplements.filterIndexed { i, _ -> i != index }) },
-                )
-            }
             var name by rememberSaveable { mutableStateOf("") }
             var dose by rememberSaveable { mutableStateOf("") }
             var timing by rememberSaveable { mutableStateOf(SupplementTiming.DAILY.key) }
@@ -292,6 +290,16 @@ fun NutriProfileEditor(
                 Chips { SupplementTiming.entries.forEach { TriChip(it.label, selected = timing == it.key, onClick = { timing = it.key }) } }
                 SecondaryButton(stringResource(R.string.nutri_add), enabled = canAdd, compact = true, onClick = add, modifier = Modifier.padding(top = 10.dp))
             }
+            ItemsFold(draft.supplements.map { it.name }) {
+                draft.supplements.forEachIndexed { index, item ->
+                    ItemRow(
+                        title = item.name,
+                        subtitle = listOf(item.dose, item.timing.label).filter(String::isNotBlank).joinToString(" · "),
+                        removeLabel = stringResource(R.string.nutri_remove, item.name),
+                        onRemove = { draft = draft.copy(supplements = draft.supplements.filterIndexed { i, _ -> i != index }) },
+                    )
+                }
+            }
         }
 
         CollapsibleCard(
@@ -299,14 +307,6 @@ fun NutriProfileEditor(
             summary = if (draft.noCaffeine) stringResource(R.string.nutri_no_caffeine_short) else count(draft.drinks.size),
             initiallyExpanded = first,
         ) {
-            draft.drinks.forEachIndexed { index, item ->
-                ItemRow(
-                    title = item.name,
-                    subtitle = item.perDay.takeIf { it.isNotBlank() },
-                    removeLabel = stringResource(R.string.nutri_remove, item.name),
-                    onRemove = { draft = draft.copy(drinks = draft.drinks.filterIndexed { i, _ -> i != index }) },
-                )
-            }
             var name by rememberSaveable { mutableStateOf("") }
             var perDay by rememberSaveable { mutableStateOf("") }
             val canAdd = name.isNotBlank() && draft.drinks.size < NutritionProfile.MAX_DRINKS
@@ -323,6 +323,16 @@ fun NutriProfileEditor(
                 TriTextField(name, { name = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_drink_name), Modifier.fillMaxWidth().padding(top = 8.dp).focusRequester(firstField), placeholder = stringResource(R.string.nutri_drink_name_hint), keyboardOptions = NextField)
                 TriTextField(perDay, { perDay = it.take(NutritionProfile.NAME_MAX) }, stringResource(R.string.nutri_drink_per_day), Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = stringResource(R.string.nutri_drink_per_day_hint), keyboardOptions = LastField, keyboardActions = KeyboardActions(onDone = { add() }))
                 SecondaryButton(stringResource(R.string.nutri_add), enabled = canAdd, compact = true, onClick = add, modifier = Modifier.padding(top = 10.dp))
+            }
+            ItemsFold(draft.drinks.map { it.name }) {
+                draft.drinks.forEachIndexed { index, item ->
+                    ItemRow(
+                        title = item.name,
+                        subtitle = item.perDay.takeIf { it.isNotBlank() },
+                        removeLabel = stringResource(R.string.nutri_remove, item.name),
+                        onRemove = { draft = draft.copy(drinks = draft.drinks.filterIndexed { i, _ -> i != index }) },
+                    )
+                }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -413,8 +423,8 @@ private fun AddGroup(content: @Composable ColumnScope.() -> Unit) {
 }
 
 /**
- * A list of plain names (favourite foods, other allergies): the items with
- * their remove button, then one field with «Aggiungi» beside it. The keyboard's confirm
+ * A list of plain names (favourite foods, other allergies): one field with
+ * «Aggiungi» beside it, then the items folded under it. The keyboard's confirm
  * key adds too and leaves the keyboard open for the next one.
  */
 @Composable
@@ -427,14 +437,6 @@ private fun TextItems(
     placeholder: String,
     fits: (List<String>) -> Boolean = { true },
 ) {
-    items.forEachIndexed { index, item ->
-        ItemRow(
-            title = item,
-            subtitle = null,
-            removeLabel = stringResource(R.string.nutri_remove, item),
-            onRemove = { onChange(items.filterIndexed { i, _ -> i != index }) },
-        )
-    }
     val merged = merge(items, input)
     val canAdd = input.isNotBlank() && items.size < NutritionProfile.MAX_ITEMS && fits(merged)
     val add = {
@@ -458,6 +460,16 @@ private fun TextItems(
             SecondaryButton(stringResource(R.string.nutri_add), enabled = canAdd, compact = true, onClick = add, modifier = Modifier.padding(start = 8.dp, bottom = 6.dp))
         }
     }
+    ItemsFold(items) {
+        items.forEachIndexed { index, item ->
+            ItemRow(
+                title = item,
+                subtitle = null,
+                removeLabel = stringResource(R.string.nutri_remove, item),
+                onRemove = { onChange(items.filterIndexed { i, _ -> i != index }) },
+            )
+        }
+    }
 }
 
 @Composable
@@ -470,6 +482,46 @@ private fun redMeatLabel(n: Int?): String = when (n) {
 @Composable
 private fun Chips(content: @Composable () -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+}
+
+/**
+ * The items of a list, folded under the field that adds them: one line with
+ * the names, newest first, that opens the full list with the remove buttons.
+ * Folded, a long list never pushes the field and «Aggiungi» under the keyboard.
+ */
+@Composable
+private fun ItemsFold(names: List<String>, content: @Composable ColumnScope.() -> Unit) {
+    if (names.isEmpty()) return
+    var open by rememberSaveable { mutableStateOf(false) }
+    val rotation by animateFloatAsState(targetValue = if (open) 180f else 0f, label = "chevron")
+    Column(Modifier.padding(top = 6.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(
+                    onClickLabel = stringResource(if (open) R.string.action_collapse else R.string.action_expand),
+                    role = Role.Button,
+                ) { open = !open },
+        ) {
+            Text(
+                names.asReversed().joinToString(", "),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(names.size.toString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(TriIcons.ChevronDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp).rotate(rotation))
+        }
+        if (open) {
+            HorizontalDivider(color = TriColors.border)
+            content()
+        }
+    }
 }
 
 @Composable
