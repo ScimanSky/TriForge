@@ -414,7 +414,7 @@ private fun AddGroup(content: @Composable ColumnScope.() -> Unit) {
 
 /**
  * A list of plain names (favourite foods, other allergies): the items with
- * their remove button, then one field and «Aggiungi». The keyboard's confirm
+ * their remove button, then one field with «Aggiungi» beside it. The keyboard's confirm
  * key adds too and leaves the keyboard open for the next one.
  */
 @Composable
@@ -444,16 +444,19 @@ private fun TextItems(
         }
     }
     AddGroup {
-        TriTextField(
-            value = input,
-            onValueChange = { onInput(it.take(NutritionProfile.TEXT_MAX)) },
-            label = label,
-            placeholder = placeholder,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            keyboardOptions = LastField,
-            keyboardActions = KeyboardActions(onDone = { add() }),
-        )
-        SecondaryButton(stringResource(R.string.nutri_add), enabled = canAdd, compact = true, onClick = add, modifier = Modifier.padding(top = 10.dp))
+        // The button sits beside the field, so it is on screen whenever the field is.
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            TriTextField(
+                value = input,
+                onValueChange = { onInput(it.take(NutritionProfile.TEXT_MAX)) },
+                label = label,
+                placeholder = placeholder,
+                modifier = Modifier.weight(1f),
+                keyboardOptions = LastField,
+                keyboardActions = KeyboardActions(onDone = { add() }),
+            )
+            SecondaryButton(stringResource(R.string.nutri_add), enabled = canAdd, compact = true, onClick = add, modifier = Modifier.padding(start = 8.dp, bottom = 6.dp))
+        }
     }
 }
 

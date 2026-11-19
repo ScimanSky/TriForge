@@ -168,7 +168,8 @@ fun NutriScreen(
             items(state.chat, key = { it.id }) { entry -> NutriMessage(entry, state, viewModel) }
             if (state.task == CoachTask.REPLYING) item { ThinkingRow(stringResource(R.string.nutri_thinking), palette) }
         }
-        if (profile != null) {
+        // Not while the food profile is open: above the keyboard the chat bar covered its fields and buttons.
+        if (profile != null && !editing) {
             Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
                 Composer(stringResource(R.string.nutri_composer), palette, enabled = state.task == null, onSend = viewModel::send)
             }
