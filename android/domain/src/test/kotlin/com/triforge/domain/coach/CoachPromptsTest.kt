@@ -44,7 +44,7 @@ class CoachPromptsTest {
         assertFalse(brief.summary.contains("lunedì 2026-11-16"), "past days are left out of the brief")
         val request = CoachPrompts.nutritionDayRequest("dati", today, NutritionProfile(intolerances = setOf(Intolerance.LACTOSE)), null, brief, plan, emptyList())
         assertContains(request, "Nota per te: Mercoledì soglia alle 18:30.")
-        assertContains(request, "Sedute di oggi: bici Soglia 4 × 8′ 75′ [threshold]")
+        assertContains(request, "Sedute di mercoledì 2026-11-18: bici Soglia 4 × 8′ 75′ [threshold]")
         assertContains(request, "Intolleranze (divieto assoluto): lattosio")
         assertContains(request, "Manca il peso")
     }

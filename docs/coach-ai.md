@@ -5,9 +5,9 @@ Logic (backend Vertex AI, regione `europe-west3`, Francoforte):
 
 - **Coach**: l'allenatore. Prepara la settimana (lunedì-domenica), la spiega e
   la adatta in chat.
-- **NutriAI**: il nutrizionista. Prepara la giornata (calorie, macro,
-  carburante intorno alle sedute, pasti) sul piano del Coach e sul profilo
-  alimentare dell'atleta.
+- **NutriAI**: il nutrizionista. Spiega i numeri del giorno (calorie e macro,
+  calcolati dall'app) e, quando l'atleta glielo chiede, prepara carburante
+  intorno alle sedute e pasti sul piano dei coach e sul profilo alimentare.
 
 ## Due agenti, non uno diviso in due
 
@@ -36,9 +36,10 @@ Esempi:
 - NutriAI vede che l'atleta vuole perdere peso in una settimana di carico alto
   e scrive al Coach del rischio di bassa disponibilità energetica. Il Coach ne
   tiene conto quando rifà la settimana.
-- Quando il Coach cambia il piano, la giornata di NutriAI diventa "superata"
-  (`basedOnCoachAt` più vecchio del brief del Coach) e NutriAI la rifà alla
-  prossima apertura della sua scheda.
+- Quando i coach cambiano il piano, l'app ricalcola subito i numeri del
+  giorno. I pasti già scritti restano e vengono segnati "da rivedere"
+  (`NutriMeals.outdated`): è l'atleta a scegliere tra «Aggiorna i pasti» e
+  «Tienili così».
 
 ## Che cosa ricevono
 
@@ -61,15 +62,45 @@ Come in SwimForge, i numeri e i divieti non li decide il modello:
   chiede. I numeri del modello vengono sostituiti da quelli dell'app.
 - **Divieti** (`FoodBans`): allergie (i 14 allergeni UE), intolleranze
   (lattosio, glutine), dieta, carne rossa a zero, caffeina e cibi non mangiati
-  con le loro eccezioni. Ogni pasto proposto viene controllato: se uno viola il
-  profilo NutriAI riscrive la giornata una volta, poi l'app toglie quello che
-  ancora non va. Le eccezioni dei cibi non mangiati non sbloccano mai
-  un'allergia.
+  con le loro eccezioni. Ogni piatto proposto viene controllato, ingredienti
+  compresi: se uno viola il profilo NutriAI riscrive la giornata una volta,
+  poi l'app toglie quello che ancora non va. Le eccezioni dei cibi non
+  mangiati non sbloccano mai un'allergia.
 - **Sicurezza** (`NutriSafety`): prima di chiamare il modello, in entrambe le
   chat, l'app cerca segnali di disturbo alimentare (digiuni di giorni, vomito,
   lassativi, abbuffate con senso di colpa, calorie sotto 1000). Se ne trova uno
   il modello non viene chiamato e la risposta è fissa: medico di base e Numero
   Verde SOS Disturbi Alimentari 800 180 969.
+
+### I pasti: solo su richiesta, piatto per piatto
+
+NutriAI non scrive mai i pasti da solo (`NutriMeals`, `NutriViewModel`):
+
+- **Su richiesta.** La scheda mostra la settimana da lunedì a domenica e, per
+  il giorno scelto, i numeri dell'app, sempre aggiornati. I pasti arrivano con
+  «Prepara i pasti di …» (un giorno) o «Prepara tutta la settimana» (da oggi a
+  domenica, solo i giorni senza pasti, salvati uno alla volta). Stanno in
+  `coaching/nutriai`, campo `days`, per data; i giorni delle settimane passate
+  vengono tolti.
+- **Pasti fatti di piatti.** Ogni pasto ha i suoi piatti (`Dish`: quantità,
+  calorie, macro, ingredienti). Il pasto e il giorno sono la somma dei piatti:
+  la calcola l'app, che corregge le calorie incoerenti con i macro e riporta
+  le quantità verso l'obiettivo del giorno (`sanitized`, `settle`).
+- **Cambiare un piatto.** «Cambia» apre le alternative: NutriAI ne propone
+  (`DishAdvisor`), l'app scarta quelle vietate dal profilo o già viste e le
+  porta alle calorie del piatto sostituito (`alternatives`). Oppure l'atleta
+  scrive il piatto: NutriAI ne stima valori e ingredienti, l'app controlla
+  (`typed`). Un'allergia o un'intolleranza blocca sempre, anche nelle parole
+  dell'atleta e prima di chiamare il modello; un cibo "che non mangi" chiede
+  conferma. Se il piatto scritto è molto più leggero, NutriAI consiglia cosa
+  aggiungere per non perdere il carburante della seduta.
+- **Le scelte dell'atleta restano.** Un piatto scelto o scritto dall'atleta è
+  segnato (`DishOrigin`) e ricorda quello che ha sostituito: «Rimetti» e
+  «Annulla» lo riportano indietro, e «Rifai i pasti» lo lascia al suo posto.
+- **Se cambia qualcosa.** Piano cambiato: i numeri si aggiornano e i pasti
+  sono "da rivedere". Profilo cambiato: i piatti ora vietati sono segnati
+  «Da cambiare» (`flags`) e non spariscono da soli. In nessuno dei due casi
+  NutriAI riscrive: decide l'atleta.
 
 ### NutriAI sulla settimana a tre sport
 
@@ -162,8 +193,9 @@ settimana, ma può proporre di cambiare solo le sue sedute: la proposta sono
 tutte le sue sedute da oggi a domenica. Quando l'atleta tocca "Applica",
 `CoachTable.revise` sostituisce le sedute di quel coach, lascia quelle degli
 altri due, ripassa tutto alla regia e scrive nel verbale la modifica e gli
-eventuali interventi dell'app. Il riepilogo per NutriAI viene riscritto, così
-NutriAI rifà i giorni toccati.
+eventuali interventi dell'app. Il riepilogo per NutriAI viene riscritto: i
+numeri dei giorni toccati cambiano subito e i loro pasti, se c'erano, sono
+"da rivedere".
 
 Una domanda che non è del suo sport il coach la passa con un tasto
 (`handoff`): alla chat di un altro coach o a NutriAI.

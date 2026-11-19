@@ -274,7 +274,7 @@ class NutriRulesTest {
         val text = NutriFueling.describe(listOf(swim, bike, run), 72.0, DayContext(daysToRace = 1))
         assertTrue(text.contains("bici e corsa di seguito"))
         assertTrue(text.contains("Più sedute nello stesso giorno"))
-        assertTrue(text.contains("Domani c'è la gara"))
+        assertTrue(text.contains("Il giorno dopo c'è la gara"))
         assertTrue(NutriFueling.describe(emptyList(), 72.0).contains("resta vuoto"))
         assertNull(NutriFueling.plan(listOf(session(Sport.RUN, 40, Intensity.EASY)), 72.0).single().afterCarbsG)
     }

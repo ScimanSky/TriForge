@@ -27,4 +27,10 @@ class CoachSchemasTest {
             assertNotNull(CoachSchemas.chatReply(week, SportCoachPrompts.handoffs(sport)))
         }
     }
+
+    @Test
+    fun `NutriAI's schemas for one dish can be built`() {
+        assertNotNull(CoachSchemas.dishAlternatives)
+        assertNotNull(CoachSchemas.dishEstimate)
+    }
 }

@@ -86,7 +86,7 @@ object NutriFueling {
     fun describe(sessions: List<PlannedSession>, weightKg: Double, context: DayContext = DayContext()): String = buildString {
         val plan = plan(sessions, weightKg)
         if (plan.isEmpty()) {
-            appendLine("Nessuna seduta oggi: \"fueling\" resta vuoto.")
+            appendLine("Nessuna seduta in questo giorno: \"fueling\" resta vuoto.")
         } else {
             appendLine("Numeri calcolati dall'app, da usare nei passi di \"fueling\" (tu scegli i cibi, adatti al profilo alimentare):")
         }
@@ -104,9 +104,9 @@ object NutriFueling {
         if (plan.size > 1) appendLine("Più sedute nello stesso giorno: il recupero dopo la prima è la preparazione della seconda, non va saltato.")
         val next = NutriEnergy.dayType(context.tomorrow)
         when {
-            context.daysToRace == 0 -> appendLine("Oggi è il giorno della gara: colazione collaudata 3 ore prima, niente cibi nuovi, e il rifornimento provato in allenamento.")
-            context.daysToRace == 1 -> appendLine("Domani c'è la gara: cena presto, ricca di carboidrati, povera di fibre e grassi, niente cibi nuovi.")
-            next == DayType.HEAVY -> appendLine("Domani è un giorno pesante: la cena di stasera lo prepara, con più carboidrati.")
+            context.daysToRace == 0 -> appendLine("È il giorno della gara: colazione collaudata 3 ore prima, niente cibi nuovi, e il rifornimento provato in allenamento.")
+            context.daysToRace == 1 -> appendLine("Il giorno dopo c'è la gara: cena presto, ricca di carboidrati, povera di fibre e grassi, niente cibi nuovi.")
+            next == DayType.HEAVY -> appendLine("Il giorno dopo è pesante: la cena di questo giorno lo prepara, con più carboidrati.")
         }
     }.trimEnd()
 }

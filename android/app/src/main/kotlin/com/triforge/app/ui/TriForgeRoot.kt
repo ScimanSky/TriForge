@@ -207,7 +207,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
     )
     val nutriViewModel: NutriViewModel = viewModel(
         key = "nutri-$uid",
-        factory = viewModelFactory { initializer { NutriViewModel(uid, container.nutriAgent, container.coaching, athleteSource) } },
+        factory = viewModelFactory { initializer { NutriViewModel(uid, container.nutriAgent, container.dishAdvisor, container.coaching, athleteSource) } },
     )
     val training by trainingViewModel.state.collectAsStateWithLifecycle()
     val recovery by recoveryViewModel.state.collectAsStateWithLifecycle()

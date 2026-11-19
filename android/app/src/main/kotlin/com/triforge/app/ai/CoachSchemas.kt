@@ -31,6 +31,20 @@ object CoachSchemas {
         )
     }
 
+    /** One dish with the numbers of its quantity. */
+    private val dishProperties: Map<String, Schema> = mapOf(
+        "name" to Schema.string(description = "Il piatto, es. \"Spaghetti al pomodoro\""),
+        "quantity" to Schema.double(description = "Quanto: grammi, millilitri o pezzi (pasta, riso e cereali a crudo)"),
+        "unit" to Schema.enumeration(listOf("g", "ml", "pezzo")),
+        "kcal" to Schema.integer(description = "Calorie di quella quantità"),
+        "carbsG" to Schema.double(description = "Grammi di carboidrati di quella quantità"),
+        "proteinG" to Schema.double(description = "Grammi di proteine di quella quantità"),
+        "fatG" to Schema.double(description = "Grammi di grassi di quella quantità"),
+        "ingredients" to Schema.array(Schema.string(), description = "Gli ingredienti principali, anche quelli in piccola quantità"),
+    )
+
+    private val dish: Schema = Schema.obj(properties = dishProperties, optionalProperties = listOf("ingredients"))
+
     /**
      * What one sport coach writes: its own sessions as structured workouts.
      * No sport, duration or targets: the app knows the first and computes the
@@ -95,13 +109,27 @@ object CoachSchemas {
                 Schema.obj(
                     properties = mapOf(
                         "name" to Schema.string(description = "Es. Colazione, Pranzo, Spuntino pre-bici"),
-                        "description" to Schema.string(),
-                        "kcal" to Schema.integer(),
+                        "dishes" to Schema.array(dish, description = "I piatti del pasto, da 1 a 5: ognuno si può cambiare da solo"),
                     ),
                 ),
             ),
             "rationale" to Schema.string(),
             "noteForCoach" to Schema.string(description = "Cosa deve sapere il Coach, o vuoto"),
         ),
+    )
+
+    /** NutriAI's alternatives to one dish of a meal. */
+    val dishAlternatives: Schema = Schema.obj(
+        properties = mapOf("alternatives" to Schema.array(dish, description = "6 piatti che sostituiscono quello indicato")),
+    )
+
+    /** NutriAI's reading of a dish the athlete wrote: what it is worth, and what to add when it is much lighter. */
+    val dishEstimate: Schema = Schema.obj(
+        properties = dishProperties + mapOf(
+            "understood" to Schema.boolean(description = "false se il testo non è un cibo o un piatto"),
+            "complement" to dish,
+            "complementWhy" to Schema.string(description = "Perché aggiungerlo, una frase in seconda persona"),
+        ),
+        optionalProperties = listOf("ingredients", "complement", "complementWhy"),
     )
 }
