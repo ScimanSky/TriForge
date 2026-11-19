@@ -145,6 +145,38 @@ object FoodBans {
         return (0..words.size - parts.size).any { start -> forms.indices.all { words[start + it] in forms[it] } }
     }
 
+    private val LINKS = setOf("di", "d", "al", "allo", "alla", "con", "e")
+
+    /**
+     * [text] without every mention of [exception], taking along a [food] the
+     * exception is made with («kefir di latte», «cappuccino con latte scremato»).
+     */
+    private fun without(text: String, exception: String, food: String): String {
+        val words = text.split(' ').filter { it.isNotEmpty() }
+        val parts = normalize(exception).split(' ').filter { it.isNotEmpty() }
+        if (parts.isEmpty() || words.size < parts.size) return text
+        val forms = parts.map(::variants)
+        val foodForms = normalize(food).split(' ').filter { it.isNotEmpty() }.map(::variants)
+        val drop = BooleanArray(words.size)
+        var start = 0
+        while (start <= words.size - parts.size) {
+            if (forms.indices.all { words[start + it] in forms[it] }) {
+                var end = start + parts.size
+                val after = if (end < words.size && words[end] in LINKS) end + 1 else end
+                if (after > end && foodForms.isNotEmpty() && after + foodForms.size <= words.size &&
+                    foodForms.indices.all { words[after + it] in foodForms[it] }
+                ) {
+                    end = after + foodForms.size
+                }
+                for (i in start until end) drop[i] = true
+                start = end
+            } else {
+                start++
+            }
+        }
+        return words.filterIndexed { i, _ -> !drop[i] }.joinToString(" ")
+    }
+
     private fun firstTerm(text: String, terms: List<String>): String? = terms.firstOrNull { contains(text, it) }
 
     private fun strip(text: String, patterns: List<Regex>): String =
@@ -178,7 +210,10 @@ object FoodBans {
         for (entry in profile.dislikes) {
             val disliked = normalize(entry.food)
             if (disliked.isEmpty() || !contains(text, disliked)) continue
-            if (entry.exceptions.any { contains(full, normalize(it)) }) continue
+            // A favourite food counts as an exception: «latte» banned and «kefir» liked lets «kefir di latte» pass.
+            // An exception lifts the ban only for itself («kefir», «kefir di latte»): the same
+            // food elsewhere in the meal («porridge nel latte con kefir») is still a ban.
+            if (!contains((entry.exceptions + profile.likes).fold(text) { acc, exception -> without(acc, exception, disliked) }, disliked)) continue
             return BanHit(BanReason.DISLIKE, entry.food, "non lo mangi")
         }
         if (profile.noCaffeine) {

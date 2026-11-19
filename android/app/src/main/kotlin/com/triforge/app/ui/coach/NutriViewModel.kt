@@ -67,6 +67,7 @@ class NutriViewModel(
     private val zone = ZoneId.systemDefault()
     private val task = MutableStateFlow<CoachTask?>(null)
     private val error = MutableStateFlow<CoachException.Reason?>(null)
+    private var profileEdited = false
     private var autoPlannedFor: Pair<LocalDate, java.time.Instant?>? = null
 
     private fun today(): LocalDate = LocalDate.now(zone)
@@ -84,7 +85,8 @@ class NutriViewModel(
         task,
         error,
     ) { nutri, coach, chat, task, error ->
-        val day = nutri.day?.takeIf { it.date == today() }
+        // Checked again on every show: a day written before the profile changed never shows a banned food.
+        val day = nutri.day?.takeIf { it.date == today() }?.let { day -> nutri.profile?.let { FoodBans.clean(day, it) } ?: day }
         NutriUiState(
             loaded = true,
             profile = nutri.profile,
@@ -101,18 +103,20 @@ class NutriViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NutriUiState())
 
     /**
-     * Called when the screen opens: writes today's plan if there is none, or
-     * if the Coach changed the training after it was written. Once per change.
+     * Called when the screen opens: writes today's plan if there is none, if
+     * the Coach changed the training after it was written, or if it holds a
+     * food the profile bans. Once per change.
      */
     fun ensureDay() {
         viewModelScope.launch {
             val nutri = repository.nutriDesk(uid).first()
             val coach = repository.coachDesk(uid).first()
-            if (nutri.profile == null) return@launch
+            val profile = nutri.profile ?: return@launch
             val key = today() to coach.brief?.updatedAt
             if (autoPlannedFor == key) return@launch
             val missing = nutri.day?.date != today()
-            if (missing || isStale(nutri, coach)) {
+            val broken = !missing && nutri.day?.let { FoodBans.violations(it, profile).isNotEmpty() } == true
+            if (missing || broken || isStale(nutri, coach)) {
                 autoPlannedFor = key
                 planDay()
             }
@@ -123,8 +127,34 @@ class NutriViewModel(
 
     /** Saves how the athlete eats; a new profile changes the suggestions, so today is rewritten. */
     fun saveProfile(profile: NutritionProfile) = run(CoachTask.PLANNING) {
+        profileEdited = false
         repository.saveNutritionProfile(uid, profile)
         writeDay(profile)
+    }
+
+    /**
+     * Keeps a change made in the profile editor as soon as it is made, so
+     * closing the editor without «Salva» loses nothing. The meals on screen
+     * are checked against it at once; today is rewritten by [doneEditing].
+     */
+    fun keepProfile(profile: NutritionProfile) {
+        profileEdited = true
+        viewModelScope.launch {
+            try {
+                repository.saveNutritionProfile(uid, profile)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error.value = CoachException.Reason.NETWORK
+            }
+        }
+    }
+
+    /** The editor was closed without «Salva»: today is rewritten if the profile changed meanwhile. */
+    fun doneEditing() {
+        if (!profileEdited || task.value != null) return
+        profileEdited = false
+        planDay()
     }
 
     /** The app's numbers for [date] from the athlete's body and the Coach's sessions; null without a weight. */
@@ -203,7 +233,9 @@ class NutriViewModel(
     }
 
     fun apply(entry: ChatEntry) = run(null) {
-        val day = entry.proposal?.let { CoachMapper.nutritionDayFromFields(it, today()) } ?: return@run
+        val proposed = entry.proposal?.let { CoachMapper.nutritionDayFromFields(it, today()) } ?: return@run
+        // The profile may have changed since NutriAI made the proposal.
+        val day = repository.nutriDesk(uid).first().profile?.let { FoodBans.clean(proposed, it) } ?: proposed
         val coach = repository.coachDesk(uid).first()
         repository.saveNutritionDay(uid, day, CoachBriefs.of(day), coach.brief?.updatedAt)
         repository.setProposalStatus(uid, CoachRole.NUTRI_AI, entry.id, ProposalStatus.APPLIED)

@@ -70,6 +70,26 @@ class NutriRulesTest {
     }
 
     @Test
+    fun `an exception lifts the ban only for itself`() {
+        val profile = NutritionProfile(dislikes = listOf(DislikeEntry("latte", listOf("kefir", "cappuccino"))))
+        assertNotNull(FoodBans.check("Porridge cotto nel latte, con un bicchiere di kefir", profile))
+        assertNotNull(FoodBans.check("Kefir di latte e una tazza di latte caldo", profile))
+        assertNull(FoodBans.check("Cappuccino con latte scremato e fette biscottate", profile))
+        assertNull(FoodBans.check("Kefir con frutti di bosco", profile))
+    }
+
+    @Test
+    fun `milk banned and kefir liked`() {
+        val profile = NutritionProfile(dislikes = listOf(DislikeEntry("latte")), likes = listOf("kefir"))
+        val breakfast = "Colazione Porridge d'avena (80g) cotto in latte parzialmente scremato (250ml), con 25g di proteine del siero del latte"
+        assertEquals(BanReason.DISLIKE, FoodBans.check(breakfast, profile)?.reason)
+        assertNotNull(FoodBans.check("Proteine del siero del latte", profile))
+        assertNull(FoodBans.check("Kefir di latte con avena e banana", profile))
+        assertNull(FoodBans.check("Porridge d'avena con kefir e noci", profile))
+        assertNotNull(FoodBans.check("Kefir e un bicchiere di latte", profile))
+    }
+
+    @Test
     fun `diet, red meat and caffeine`() {
         val veg = NutritionProfile(diet = Diet.VEGETARIAN)
         assertNotNull(FoodBans.check("Petto di pollo alla griglia", veg))
