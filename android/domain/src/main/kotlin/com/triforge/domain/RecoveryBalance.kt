@@ -127,6 +127,8 @@ data class RecoveryReport(
     val hrvBand: List<MarkerBand>,
     /** Resting heart rate in bpm with its normal band. */
     val restingHrBand: List<MarkerBand>,
+    /** Hours asleep with their normal band. */
+    val sleepBand: List<MarkerBand> = emptyList(),
     /** Running load this week is well above the last four: a separate note. */
     val runLoadJump: Boolean,
     val latestWellness: DailyWellness?,
@@ -218,6 +220,7 @@ object RecoveryBalance {
             history = shown,
             hrvBand = inputs.hrvBand(today, historyDays),
             restingHrBand = inputs.restingHrBand(today, historyDays),
+            sleepBand = inputs.sleepBand(today, historyDays),
             runLoadJump = inputs.runLoadJump(today),
             latestWellness = wellness.filter { !it.date.isAfter(today) }.maxByOrNull { it.date },
         )
@@ -621,6 +624,8 @@ object RecoveryBalance {
         fun hrvBand(today: LocalDate, days: Int): List<MarkerBand> = band(today, days, hrv, SIGMA_LN_HRV, ::exp)
 
         fun restingHrBand(today: LocalDate, days: Int): List<MarkerBand> = band(today, days, restingHr, SIGMA_RHR) { it }
+
+        fun sleepBand(today: LocalDate, days: Int): List<MarkerBand> = band(today, days, sleepHours, SIGMA_SLEEP_H) { it }
 
         private fun band(
             today: LocalDate,

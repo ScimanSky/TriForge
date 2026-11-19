@@ -2,6 +2,7 @@ package com.triforge.domain
 
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.time.temporal.IsoFields
 import kotlin.math.roundToInt
 
@@ -35,15 +36,23 @@ data class SportReport(
     /** Seconds the period's pace is measured over, see [Activity.paceSec]. */
     val paceSec: Long,
     val elevationGainMeters: Double,
-    /** Volume of the period before this one; null when it was not loaded. */
+    /**
+     * Volume of the same stretch of the period before: as many days as have
+     * passed in this one, so a Wednesday is not measured against a whole
+     * week. Null when that period was not loaded.
+     */
     val previousDistanceMeters: Double?,
     val previousDurationSec: Long?,
     /** One entry per week, oldest first, weeks without training included. */
     val weekly: List<WeekVolume>,
+    /** Averages weighted by session time, see [SportStats.timeWeighted]. */
     val avgHr: Int?,
     val avgCadence: Int?,
     val avgPowerWatts: Int?,
+    /** SWOLF of the pool length swum most, see [swolfPoolMeters]. */
     val avgSwolf: Int?,
+    /** The pool length [avgSwolf] belongs to: SWOLF in a 50 m pool is not comparable with 25 m. */
+    val swolfPoolMeters: Double? = null,
     val records: List<PersonalRecord>,
 ) {
     val sessionsPerWeek: Double get() = sessions.toDouble() / weeks
@@ -91,8 +100,11 @@ object SportStats {
 
         fun dateOf(activity: Activity) = activity.startTime.atZone(zone).toLocalDate()
         val current = ofSport.filter { !dateOf(it).isBefore(periodStart) }
+        // Days of the current period so far, today included.
+        val elapsedDays = ChronoUnit.DAYS.between(periodStart, today) + 1
+        val previousEnd = previousStart.plusDays(elapsedDays)
         val previous = if (weeks * 2 <= loadedWeeks) {
-            ofSport.filter { val d = dateOf(it); !d.isBefore(previousStart) && d.isBefore(periodStart) }
+            ofSport.filter { val d = dateOf(it); !d.isBefore(previousStart) && d.isBefore(previousEnd) }
         } else {
             null
         }
@@ -110,6 +122,7 @@ object SportStats {
             )
         }
 
+        val swolf = swolf(current)
         return SportReport(
             sport = sport,
             weeks = weeks,
@@ -121,10 +134,11 @@ object SportStats {
             previousDistanceMeters = previous?.sumOf { it.distanceMeters },
             previousDurationSec = previous?.sumOf { it.durationSec },
             weekly = weekly,
-            avgHr = average(current) { it.avgHr },
-            avgCadence = average(current) { it.avgCadence },
-            avgPowerWatts = average(current) { it.avgPowerWatts },
-            avgSwolf = average(current) { it.swolf },
+            avgHr = timeWeighted(current) { it.avgHr },
+            avgCadence = timeWeighted(current) { it.avgCadence },
+            avgPowerWatts = timeWeighted(current) { it.avgPowerWatts },
+            avgSwolf = swolf?.second,
+            swolfPoolMeters = swolf?.first,
             records = records(ofSport, sport),
         )
     }
@@ -144,15 +158,45 @@ object SportStats {
             withDistance.maxByOrNull { it.distanceMeters }?.let { PersonalRecord(RecordKind.LONGEST_DISTANCE, it) },
             activities.filter { it.durationSec > 0 }.maxByOrNull { it.durationSec }
                 ?.let { PersonalRecord(RecordKind.LONGEST_DURATION, it) },
-            withDistance.filter { it.distanceMeters >= minimum && it.paceSec > 0 }
+            withDistance.filter { it.distanceMeters >= minimum && it.paceSec > 0 && comparableForSpeed(it) }
                 .minByOrNull { it.paceSec / it.distanceMeters }
                 ?.let { PersonalRecord(RecordKind.FASTEST, it) },
         )
     }
 
-    private fun average(activities: List<Activity>, value: (Activity) -> Int?): Int? {
-        val values = activities.mapNotNull(value)
-        return if (values.isEmpty()) null else values.average().roundToInt()
+    /**
+     * A pool swim is timed on a known length; open water distance comes from
+     * GPS and the conditions change, so its pace does not race a pool record.
+     * When there are only open water swims they compete among themselves.
+     */
+    private fun comparableForSpeed(activity: Activity): Boolean = activity.sport != Sport.SWIM || activity.openWater != true
+
+    /**
+     * Average of a per-session value weighted by the time it was measured
+     * over. A 3-hour ride and a 20-minute spin do not count the same: the
+     * plain mean of session averages would let short sessions pull it.
+     */
+    fun timeWeighted(activities: List<Activity>, value: (Activity) -> Int?): Int? {
+        var weighted = 0.0
+        var seconds = 0L
+        activities.forEach { activity ->
+            val v = value(activity) ?: return@forEach
+            val time = activity.durationSec.takeIf { it > 0 } ?: return@forEach
+            weighted += v.toDouble() * time
+            seconds += time
+        }
+        return if (seconds == 0L) null else (weighted / seconds).roundToInt()
+    }
+
+    /** Pool length swum most (by distance) and the distance-weighted SWOLF there. */
+    private fun swolf(activities: List<Activity>): Pair<Double, Int>? {
+        val pool = activities.filter { it.swolf != null && it.openWater != true && it.poolLengthMeters != null }
+        val length = pool.groupBy { it.poolLengthMeters!! }
+            .maxByOrNull { (_, list) -> list.sumOf { it.distanceMeters } }?.key ?: return null
+        val same = pool.filter { it.poolLengthMeters == length && it.distanceMeters > 0 }
+        if (same.isEmpty()) return null
+        val value = same.sumOf { it.swolf!! * it.distanceMeters } / same.sumOf { it.distanceMeters }
+        return length to value.roundToInt()
     }
 }
 

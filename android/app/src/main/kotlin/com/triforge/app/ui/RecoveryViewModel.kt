@@ -9,6 +9,8 @@ import com.triforge.domain.AthleteProfile
 import com.triforge.domain.CheckIn
 import com.triforge.domain.RecoveryBalance
 import com.triforge.domain.RecoveryReport
+import com.triforge.domain.SessionLoad
+import com.triforge.domain.SessionLoadModel
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,7 +24,12 @@ import kotlinx.coroutines.launch
 sealed interface RecoveryState {
     data object Loading : RecoveryState
     data object Failed : RecoveryState
-    data class Loaded(val report: RecoveryReport, val todayCheckIn: CheckIn?) : RecoveryState
+    /** [loads] is each activity's load in TSS-equivalents, by activity id. */
+    data class Loaded(
+        val report: RecoveryReport,
+        val todayCheckIn: CheckIn?,
+        val loads: Map<String, SessionLoad> = emptyMap(),
+    ) : RecoveryState
 }
 
 /**
@@ -47,7 +54,8 @@ class RecoveryViewModel(
     ) { activityList, days, checkIns, profile ->
         val today = LocalDate.now(zone)
         val report = RecoveryBalance.compute(activityList, days, checkIns, profile, today, zone)
-        RecoveryState.Loaded(report, checkIns.firstOrNull { it.date == today }) as RecoveryState
+        val loads = SessionLoadModel.estimate(activityList, profile).associateBy { it.activity.id }
+        RecoveryState.Loaded(report, checkIns.firstOrNull { it.date == today }, loads) as RecoveryState
     }
         .catch { emit(RecoveryState.Failed) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecoveryState.Loading)

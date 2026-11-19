@@ -55,6 +55,7 @@ import com.triforge.domain.SportStats
 import com.triforge.domain.WeekVolume
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val PERIODS = listOf(4, 8, 16)
@@ -122,6 +123,8 @@ fun SportTab(activities: List<Activity>, sport: Sport, onOpenActivity: (String) 
     }
 }
 
+private val weekDate = DateTimeFormatter.ofPattern("d/M", Locale.ITALY)
+
 private fun wholeMeters(meters: Double): String = "%,d m".format(Locale.ITALY, meters.toLong())
 
 private fun oneDecimal(value: Double): String = "%.1f".format(Locale.ITALY, value)
@@ -138,10 +141,10 @@ private fun KpiGrid(report: SportReport) {
             KpiCard(
                 label = stringResource(R.string.sport_kpi_volume),
                 value = if (byTime) Formatters.duration(report.durationSec) else Formatters.distance(sport, report.distanceMeters),
+                // Neutral ink: more volume is not "good" in itself.
                 note = change?.let {
-                    stringResource(R.string.sport_kpi_change, if (it > 0) "+$it" else it.toString().replace('-', '−'))
+                    stringResource(R.string.sport_kpi_change, if (it >= 0) "↑ $it" else "↓ ${-it}")
                 },
-                noteColor = if (change != null && change > 0) TriColors.good else null,
                 modifier = Modifier.weight(1f),
             )
             KpiCard(
@@ -169,7 +172,10 @@ private fun KpiGrid(report: SportReport) {
                 KpiCard(
                     label = stringResource(R.string.sport_kpi_elevation),
                     value = wholeMeters(report.elevationGainMeters),
-                    note = if (byTime) Formatters.distance(sport, report.distanceMeters) else Formatters.duration(report.durationSec),
+                    note = stringResource(
+                        R.string.sport_kpi_elevation_note,
+                        if (byTime) Formatters.distance(sport, report.distanceMeters) else Formatters.duration(report.durationSec),
+                    ),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -233,10 +239,10 @@ private fun VolumeCard(report: SportReport) {
             values = weekly.map { if (byTime) it.durationSec.toFloat() else it.distanceMeters.toFloat() },
             topLabels = if (dense) null else weekly.map { if (it.sessions > 0) label(it) else "" },
             bottomLabels = weekly.mapIndexed { index, week ->
-                if (dense && (weekly.lastIndex - index) % 2 != 0) "" else week.weekNumber.toString()
+                if (dense && (weekly.lastIndex - index) % 2 != 0) "" else weekDate.format(week.weekStart)
             },
             color = SportColors.of(sport),
-            dimColor = SportColors.dim(sport),
+            lastInProgress = true,
             description = stringResource(
                 R.string.sport_volume_chart,
                 weekly.size,
@@ -280,6 +286,19 @@ private fun PaceTrendCard(report: SportReport) {
             series = listOf(LineSeries(values, SportColors.of(sport), filled = true)),
             description = stringResource(R.string.sport_trend_chart, from, to),
             invert = !isSpeed,
+            // Spans under which a change is noise, so the chart does not magnify it.
+            minSpan = when (sport) {
+                Sport.SWIM -> 0.15f // 15 s per 100 m
+                Sport.RUN -> 0.06f // 60 s per km
+                else -> 5f // 5 km/h
+            },
+            axisLabel = { value ->
+                when (sport) {
+                    Sport.SWIM -> Formatters.minutesAndSeconds(value * 100.0)
+                    Sport.RUN -> Formatters.minutesAndSeconds(value * 1000.0)
+                    else -> "%.0f".format(Locale.ITALY, value)
+                }
+            },
             modifier = Modifier.padding(top = 14.dp),
         )
         Row(
@@ -289,12 +308,12 @@ private fun PaceTrendCard(report: SportReport) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = stringResource(R.string.sport_trend_from, trained.first().weekNumber, from),
+                text = stringResource(R.string.sport_trend_from, weekDate.format(trained.first().weekStart), from),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = stringResource(R.string.sport_trend_to, trained.last().weekNumber, to),
+                text = stringResource(R.string.sport_trend_to, weekDate.format(trained.last().weekStart), to),
                 style = MaterialTheme.typography.bodySmall,
                 color = TriColors.textDim,
             )
@@ -315,7 +334,12 @@ private fun TechnicalCard(report: SportReport) {
         report.avgHr?.let { it.toString() to stringResource(R.string.metric_avg_hr) },
         report.avgCadence?.let { it.toString() to cadenceLabel },
         report.avgPowerWatts?.let { it.toString() to stringResource(R.string.metric_avg_power) },
-        report.avgSwolf?.let { it.toString() to stringResource(R.string.metric_swolf) },
+        report.avgSwolf?.let { swolf ->
+            swolf.toString() to (
+                report.swolfPoolMeters?.let { stringResource(R.string.metric_swolf_pool, "%.0f".format(Locale.ITALY, it)) }
+                    ?: stringResource(R.string.metric_swolf)
+                )
+        },
     )
 
     CollapsibleCard(

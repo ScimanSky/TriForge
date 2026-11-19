@@ -2,6 +2,7 @@ package com.triforge.app.ui.common
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +27,11 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.triforge.app.ui.theme.SportColors
 import com.triforge.app.ui.theme.TriColors
@@ -101,12 +106,14 @@ fun VolumeBars(
     values: List<Float>,
     bottomLabels: List<String>,
     color: Color,
-    dimColor: Color,
     description: String,
     modifier: Modifier = Modifier,
     topLabels: List<String>? = null,
+    lastInProgress: Boolean = false,
 ) {
     val peak = (values.maxOrNull() ?: 0f).takeIf { it > 0f } ?: 1f
+    // Past weeks at half strength: muted but still above 3:1 on the card.
+    val pastColor = color.copy(alpha = 0.5f)
 
     Column(modifier = modifier.semantics { contentDescription = description }) {
         if (topLabels != null) BarLabels(topLabels, Modifier.padding(bottom = 4.dp), strong = true)
@@ -120,6 +127,7 @@ fun VolumeBars(
             values.forEachIndexed { index, value ->
                 // A week with any training keeps a visible stub of a bar.
                 val fraction = if (value > 0f) (value / peak).coerceIn(0.04f, 1f) else 0f
+                val inProgress = lastInProgress && index == values.lastIndex
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -134,8 +142,17 @@ fun VolumeBars(
                             .background(
                                 when {
                                     fraction == 0f -> TriColors.track
+                                    inProgress -> color.copy(alpha = 0.25f)
                                     index == values.lastIndex -> color
-                                    else -> dimColor
+                                    else -> pastColor
+                                },
+                            )
+                            .then(
+                                // The week still running: an outline, so a short bar does not read as a drop.
+                                if (inProgress && fraction > 0f) {
+                                    Modifier.border(1.5.dp, color, RoundedCornerShape(6.dp))
+                                } else {
+                                    Modifier
                                 },
                             ),
                     )
@@ -181,12 +198,19 @@ fun LineChart(
     description: String,
     modifier: Modifier = Modifier,
     invert: Boolean = false,
+    minSpan: Float = 0f,
+    axisLabel: ((Float) -> String)? = null,
 ) {
     val all = series.flatMap { it.values.filterNotNull() }
     if (all.isEmpty()) return
-    val lowest = all.min()
-    val span = (all.max() - lowest).takeIf { it > 0f } ?: 1f
+    // A minimum span keeps a 3-second change from filling the whole chart.
+    val center = (all.max() + all.min()) / 2
+    val rawSpan = all.max() - all.min()
+    val span = maxOf(rawSpan * 1.2f, minSpan).takeIf { it > 0f } ?: 1f
+    val lowest = center - span / 2
     val gridColor = TriColors.border
+    val measurer = rememberTextMeasurer()
+    val labelStyle = TextStyle(fontSize = 10.sp, color = Color(0xFF9AA3AF))
 
     Canvas(
         modifier = modifier
@@ -195,12 +219,20 @@ fun LineChart(
             .semantics { contentDescription = description },
     ) {
         val inset = 8.dp.toPx()
+        val gutter = if (axisLabel != null) 36.dp.toPx() else 0f
         val plotHeight = size.height - inset * 2
-        val plotWidth = size.width - inset * 2
+        val plotWidth = size.width - inset * 2 - gutter
 
         for (line in 0..2) {
             val y = inset + plotHeight * line / 2f
-            drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+            drawLine(gridColor, Offset(0f, y), Offset(size.width - gutter, y), strokeWidth = 1.dp.toPx())
+            if (axisLabel != null) {
+                // Line 0 is the top: the highest value, or the lowest when inverted.
+                val t = 1f - line / 2f
+                val value = lowest + span * (if (invert) 1f - t else t)
+                val layout = measurer.measure(axisLabel(value), labelStyle)
+                drawText(layout, topLeft = Offset(size.width - gutter + 6.dp.toPx(), y - layout.size.height / 2f))
+            }
         }
 
         for (item in series) {

@@ -50,6 +50,7 @@ object TriColors {
     val alert = Color(0xFFFF8A4C)
     val danger = Color(0xFFFF5C64)
     val iconBox = Color(0xFF1F2A33)
+    val surface = Color(0xFF171A1F)
 }
 
 object SportColors {
