@@ -36,6 +36,49 @@ object CoachSchemas {
         ),
     )
 
+    /**
+     * What one sport coach writes: its own sessions as structured workouts.
+     * No sport, duration or targets: the app knows the first and computes the
+     * others from the steps and the athlete's zones.
+     */
+    fun sportWeek(zones: List<String>): Schema = Schema.obj(
+        properties = mapOf(
+            "days" to Schema.array(
+                Schema.obj(
+                    properties = mapOf(
+                        "date" to Schema.string(description = "AAAA-MM-GG"),
+                        "sessions" to Schema.array(
+                            Schema.obj(
+                                properties = mapOf(
+                                    "title" to Schema.string(description = "Titolo breve, es. \"6 × 800 m a soglia\""),
+                                    "focus" to Schema.string(description = "Una o due parole, es. \"Soglia\", \"Tecnica\", \"Lungo\""),
+                                    "why" to Schema.string(description = "Perché questa seduta, 1-2 frasi"),
+                                    "steps" to Schema.array(
+                                        Schema.obj(
+                                            properties = mapOf(
+                                                "block" to Schema.enumeration(listOf("warmup", "main", "cooldown")),
+                                                "reps" to Schema.integer(description = "Ripetute, 1 per un passo unico"),
+                                                "distanceM" to Schema.integer(description = "Metri di una ripetuta, se a distanza"),
+                                                "durationSec" to Schema.integer(description = "Secondi di una ripetuta, se a tempo"),
+                                                "zone" to Schema.enumeration(zones),
+                                                "recoverySec" to Schema.integer(description = "Secondi di recupero dopo ogni ripetuta"),
+                                                "text" to Schema.string(description = "Cosa fare, es. \"corsa facile\", \"stile libero\""),
+                                            ),
+                                            optionalProperties = listOf("distanceM", "durationSec", "recoverySec", "text"),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            "noteForCoaches" to Schema.string(description = "Cosa hai scelto e cosa chiedi agli altri due coach"),
+            "noteForNutriAi" to Schema.string(description = "Cosa deve sapere NutriAI, o vuoto"),
+            "rationale" to Schema.string(description = "Perché la tua settimana è così, 1-2 frasi"),
+        ),
+    )
+
     val nutritionDay: Schema = Schema.obj(
         properties = mapOf(
             "date" to Schema.string(description = "AAAA-MM-GG"),

@@ -84,11 +84,11 @@ data class WeekBudget(
 
 enum class RegiaRule {
     TOTAL_TIME, SPORT_TIME, HARD_SESSIONS, SPORT_QUALITY, HARD_IN_A_ROW, NO_REST_DAY, REST_DAY,
-    TOO_MANY_SPORTS, BRICK, UNAVAILABLE_DAY, LONGEST_SESSION,
+    TOO_MANY_SPORTS, BRICK, UNAVAILABLE_DAY, LONGEST_SESSION, HIGH_ZONE_TIME,
 }
 
 /** A rule the week breaks, said so the coach can fix it. */
-data class RegiaConflict(val rule: RegiaRule, val date: LocalDate?, val text: String)
+data class RegiaConflict(val rule: RegiaRule, val date: LocalDate?, val text: String, val sport: Sport? = null)
 
 /**
  * The triathlon regia: rules of the app that set the shape of the week (total
@@ -109,6 +109,10 @@ object TriRegia {
 
     /** Weekly volume at most this many times the recent average (running is the most injury prone). */
     fun growth(sport: Sport): Double = if (sport == Sport.RUN) 1.10 else 1.25
+
+    /** Minutes at threshold and above a sport may hold in the week: a fifth of the swim, 15% on land, never under 15. */
+    fun highZoneBudget(sport: Sport, minutes: Int): Int =
+        max(15, (minutes * (if (sport == Sport.SWIM) 0.20 else 0.15)).roundToInt())
 
     /** A sport with less than this a week has no history to grow from. */
     const val HISTORY_MINUTES = 30.0
@@ -231,7 +235,14 @@ object TriRegia {
      * The rules [plan] breaks. Rules about single days look only at [from]
      * on, since the days already gone describe what the athlete did.
      */
-    fun check(plan: WeekPlan, budget: WeekBudget, availability: TrainingAvailability, from: LocalDate = plan.weekStart): List<RegiaConflict> {
+    fun check(
+        plan: WeekPlan,
+        budget: WeekBudget,
+        availability: TrainingAvailability,
+        from: LocalDate = plan.weekStart,
+        /** With the profile, the time at threshold and above of the structured workouts is checked too. */
+        profile: AthleteProfile? = null,
+    ): List<RegiaConflict> {
         val found = mutableListOf<RegiaConflict>()
         val days = plan.days.sortedBy { it.date }
         val sessions = days.flatMap { it.sessions }.filter { it.sport in SPORTS && it.durationMin > 0 }
@@ -245,11 +256,18 @@ object TriRegia {
             val sportBudget = budget.sports.getValue(sport)
             val minutes = sessions.filter { it.sport == sport }.sumOf { it.durationMin }
             if (minutes > sportBudget.minutes + tolerance(sportBudget.minutes)) {
-                found += RegiaConflict(RegiaRule.SPORT_TIME, null, "${sportName(sport)}: $minutes minuti, il budget è ${sportBudget.minutes}.")
+                found += RegiaConflict(RegiaRule.SPORT_TIME, null, "${sportName(sport)}: $minutes minuti, il budget è ${sportBudget.minutes}.", sport)
+            }
+            if (profile != null) {
+                val high = sessions.filter { it.sport == sport }.sumOf { Workouts.highMinutes(it, profile) }
+                val limit = highZoneBudget(sport, sportBudget.minutes)
+                if (high > limit) {
+                    found += RegiaConflict(RegiaRule.HIGH_ZONE_TIME, null, "${sportName(sport)}: $high minuti in zona alta (soglia e oltre), al massimo $limit nella settimana.", sport)
+                }
             }
             val quality = sessions.count { it.sport == sport && isHard(it) }
             if (quality > sportBudget.maxQuality) {
-                found += RegiaConflict(RegiaRule.SPORT_QUALITY, null, "${sportName(sport)}: $quality sedute di qualità, al massimo ${sportBudget.maxQuality}.")
+                found += RegiaConflict(RegiaRule.SPORT_QUALITY, null, "${sportName(sport)}: $quality sedute di qualità, al massimo ${sportBudget.maxQuality}.", sport)
             }
         }
         val hard = sessions.count(::isHard)
@@ -281,11 +299,11 @@ object TriRegia {
             real.forEach { session ->
                 val sport = session.sport!!
                 if (!availability.allows(sport, day.date.dayOfWeek)) {
-                    found += RegiaConflict(RegiaRule.UNAVAILABLE_DAY, day.date, "${label(day.date)}: ${sportName(sport).lowercase()} in un giorno in cui l'atleta non può (${dayList(availability.slot(sport)?.days.orEmpty())}).")
+                    found += RegiaConflict(RegiaRule.UNAVAILABLE_DAY, day.date, "${label(day.date)}: ${sportName(sport).lowercase()} in un giorno in cui l'atleta non può (${dayList(availability.slot(sport)?.days.orEmpty())}).", sport)
                 }
                 val longest = budget.sports[sport]?.longestMin
                 if (longest != null && session.durationMin > longest + tolerance(longest)) {
-                    found += RegiaConflict(RegiaRule.LONGEST_SESSION, day.date, "${label(day.date)}: ${sportName(sport).lowercase()} di ${session.durationMin} minuti, al massimo $longest.")
+                    found += RegiaConflict(RegiaRule.LONGEST_SESSION, day.date, "${label(day.date)}: ${sportName(sport).lowercase()} di ${session.durationMin} minuti, al massimo $longest.", sport)
                 }
             }
         }

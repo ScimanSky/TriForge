@@ -64,7 +64,31 @@ data class PlannedSession(
     val intensity: Intensity = Intensity.EASY,
     /** How to do it: sets, targets in watts, pace or zones. */
     val details: String = "",
+    /** What the session is for, in the sport coach's words: "Soglia", "Tecnica", "Lungo". */
+    val focus: String = "",
+    /** The structured workout; empty for rest and for sessions written as text only. */
+    val steps: List<WorkoutStep> = emptyList(),
+    /** Why this session is here, shown under the workout. */
+    val why: String = "",
 )
+
+/** Who spoke at the coaches' table: a sport coach, NutriAI or the app's regia. */
+enum class TableVoice(val key: String) {
+    SWIM("swim"), BIKE("bike"), RUN("run"), NUTRI("nutri"), REGIA("regia");
+
+    companion object {
+        fun of(key: Any?): TableVoice? = entries.firstOrNull { it.key == key }
+        fun of(sport: Sport): TableVoice? = when (sport) {
+            Sport.SWIM -> SWIM
+            Sport.BIKE -> BIKE
+            Sport.RUN -> RUN
+            Sport.OTHER -> null
+        }
+    }
+}
+
+/** One line of the minutes of how the coaches agreed on the week. */
+data class TableNote(val voice: TableVoice, val text: String)
 
 data class PlannedDay(val date: LocalDate, val sessions: List<PlannedSession>) {
     val isRest: Boolean get() = sessions.all { it.sport == null }
@@ -81,7 +105,17 @@ data class WeekPlan(
     /** What NutriAI should know about this week. */
     val noteForNutriAi: String = "",
     val createdAt: Instant? = null,
+    /** How the sport coaches agreed, in order; empty for a plan one coach wrote alone. */
+    val table: List<TableNote> = emptyList(),
+    /** Rounds the coaches needed, 0 when there was no table. */
+    val rounds: Int = 0,
+    /** The regia's numbers the week was built on, for the summary. */
+    val availableMin: Int? = null,
+    val maxHard: Int? = null,
 ) {
+    /** Whether the three sport coaches wrote this plan. */
+    val fromTable: Boolean get() = rounds > 0
+
     fun day(date: LocalDate): PlannedDay? = days.firstOrNull { it.date == date }
 
     /** Sessions and minutes per sport, for the summary card. */
