@@ -40,6 +40,7 @@ import com.triforge.app.ui.auth.AuthViewModel
 import com.triforge.app.ui.common.CenteredMessage
 import com.triforge.app.ui.common.LoadingBox
 import com.triforge.app.ui.detail.ActivityDetailScreen
+import com.triforge.app.ui.profile.EditProfileScreen
 import com.triforge.app.ui.profile.ProfileScreen
 import com.triforge.app.ui.profile.ProfileViewModel
 import com.triforge.app.ui.recovery.CheckInScreen
@@ -47,6 +48,19 @@ import com.triforge.app.ui.recovery.RecoveryScreen
 import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.TriIcons
 import com.triforge.app.ui.today.TodayScreen
+import com.triforge.app.data.AvatarImage
+import com.triforge.app.ui.account.AccountViewModel
+import com.triforge.app.ui.account.DeviceIo
+import com.triforge.app.ui.legal.LegalDoc
+import com.triforge.app.ui.legal.LegalScreen
+import com.triforge.app.ui.onboarding.OnboardingScreen
+import com.triforge.app.ui.settings.AboutScreen
+import com.triforge.app.ui.settings.PrivacyScreen
+import com.triforge.app.ui.settings.SettingsScreen
+import com.triforge.app.ui.settings.SourcesScreen
+import com.triforge.domain.AccountGate
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 
 private enum class Tab(val route: String, @StringRes val label: Int, val icon: ImageVector) {
     TODAY("today", R.string.nav_today, TriIcons.Home),
@@ -58,9 +72,16 @@ private const val ACTIVITY_ID = "id"
 private const val ACTIVITY_ROUTE = "activity/{$ACTIVITY_ID}"
 private const val RECOVERY_ROUTE = "recovery"
 private const val CHECK_IN_ROUTE = "check-in"
+private const val EDIT_PROFILE_ROUTE = "profile/edit"
+private const val SETTINGS_ROUTE = "settings"
+private const val SOURCES_ROUTE = "settings/sources"
+private const val PRIVACY_ROUTE = "settings/privacy"
+private const val ABOUT_ROUTE = "settings/about"
+private const val LEGAL_DOC = "doc"
+private const val LEGAL_ROUTE = "legal/{$LEGAL_DOC}"
 
-/** Detail pages: no tabs under them. */
-private val DETAIL_ROUTES = setOf(ACTIVITY_ROUTE, RECOVERY_ROUTE, CHECK_IN_ROUTE)
+/** Only the tabs show the bottom bar; every other page is a detail page. */
+private val TAB_ROUTES = Tab.entries.map { it.route }.toSet()
 
 @Composable
 fun TriForgeRoot(
@@ -107,8 +128,31 @@ private fun NavHostController.openTab(tab: Tab) {
     }
 }
 
+/** The phone-side work of the account screens, done with the app's context. */
+private class AppDeviceIo(private val context: Context, private val container: AppContainer) : DeviceIo {
+    override suspend fun avatarFrom(uri: Uri): ByteArray = AvatarImage.fromUri(context.contentResolver, uri)
+
+    override fun openOutput(uri: Uri) = context.contentResolver.openOutputStream(uri)
+
+    override suspend fun afterAccountDeleted() {
+        // Nothing of the deleted account may stay on the phone, not even in the cache.
+        runCatching { container.clearLocalData() }
+        container.auth.signOut()
+        container.restartApp()
+    }
+}
+
 @Composable
 private fun SignedIn(uid: String, container: AppContainer) {
+    val context = LocalContext.current.applicationContext
+    val accountViewModel: AccountViewModel = viewModel(
+        key = "account-$uid",
+        factory = viewModelFactory {
+            initializer {
+                AccountViewModel(uid, container.account, container.auth, container.dataExport, AppDeviceIo(context, container))
+            }
+        },
+    )
     // Keyed by uid, so signing in as someone else never shows the previous
     // athlete's data.
     val trainingViewModel: TrainingViewModel = viewModel(
@@ -132,16 +176,29 @@ private fun SignedIn(uid: String, container: AppContainer) {
     val training by trainingViewModel.state.collectAsStateWithLifecycle()
     val recovery by recoveryViewModel.state.collectAsStateWithLifecycle()
     val profile by profileViewModel.state.collectAsStateWithLifecycle()
+    val account by accountViewModel.state.collectAsStateWithLifecycle()
+
+    // Nothing of the athlete's data is shown before the consents are in place.
+    if (!account.loaded) {
+        LoadingBox()
+        return
+    }
+    val gate = account.gate
+    if (gate != AccountGate.Ready) {
+        OnboardingScreen(gate = gate, account = accountViewModel, profile = profileViewModel)
+        return
+    }
 
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val openActivity: (String) -> Unit = { id -> navController.navigate("activity/${Uri.encode(id)}") }
+    val back: () -> Unit = { navController.popBackStack() }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            if (currentRoute !in DETAIL_ROUTES) {
+            if (currentRoute in TAB_ROUTES) {
                 NavigationBar(containerColor = TriColors.navBar, tonalElevation = 0.dp) {
                     Tab.entries.forEach { tab ->
                         NavigationBarItem(
@@ -171,8 +228,10 @@ private fun SignedIn(uid: String, container: AppContainer) {
                 TodayScreen(
                     state = training,
                     recovery = recovery,
-                    name = profile.name,
+                    name = account.account.displayName.ifBlank { profile.name },
+                    avatar = account.avatar,
                     onOpenProfile = { navController.openTab(Tab.PROFILE) },
+                    onConnectSource = { navController.navigate(SOURCES_ROUTE) },
                     onOpenActivity = openActivity,
                     onOpenStats = { navController.openTab(Tab.ACTIVITIES) },
                     onOpenRecovery = { navController.navigate(RECOVERY_ROUTE) },
@@ -182,7 +241,46 @@ private fun SignedIn(uid: String, container: AppContainer) {
             composable(Tab.ACTIVITIES.route) {
                 ActivitiesScreen(state = training, garmin = profile.garmin, onOpenActivity = openActivity)
             }
-            composable(Tab.PROFILE.route) { ProfileScreen(profileViewModel) }
+            composable(Tab.PROFILE.route) {
+                ProfileScreen(
+                    account = accountViewModel,
+                    profile = profileViewModel,
+                    training = training,
+                    onEdit = { navController.navigate(EDIT_PROFILE_ROUTE) },
+                    onOpenSettings = { navController.navigate(SETTINGS_ROUTE) },
+                    onOpenSources = { navController.navigate(SOURCES_ROUTE) },
+                )
+            }
+            composable(EDIT_PROFILE_ROUTE) {
+                EditProfileScreen(account = accountViewModel, profile = profileViewModel, onBack = back)
+            }
+            composable(SETTINGS_ROUTE) {
+                SettingsScreen(
+                    account = accountViewModel,
+                    profile = profileViewModel,
+                    onBack = back,
+                    onEditProfile = { navController.navigate(EDIT_PROFILE_ROUTE) },
+                    onOpenSources = { navController.navigate(SOURCES_ROUTE) },
+                    onOpenPrivacy = { navController.navigate(PRIVACY_ROUTE) },
+                    onOpenPrivacyPolicy = { navController.navigate("legal/${LegalDoc.PRIVACY.route}") },
+                    onOpenTerms = { navController.navigate("legal/${LegalDoc.TERMS.route}") },
+                    onOpenAbout = { navController.navigate(ABOUT_ROUTE) },
+                )
+            }
+            composable(SOURCES_ROUTE) { SourcesScreen(viewModel = profileViewModel, onBack = back) }
+            composable(PRIVACY_ROUTE) {
+                PrivacyScreen(
+                    account = accountViewModel,
+                    onBack = back,
+                    onOpenPrivacyPolicy = { navController.navigate("legal/${LegalDoc.PRIVACY.route}") },
+                    onOpenTerms = { navController.navigate("legal/${LegalDoc.TERMS.route}") },
+                )
+            }
+            composable(ABOUT_ROUTE) { AboutScreen(onBack = back) }
+            composable(LEGAL_ROUTE) { entry ->
+                val doc = LegalDoc.entries.firstOrNull { it.route == entry.arguments?.getString(LEGAL_DOC) } ?: LegalDoc.PRIVACY
+                LegalScreen(doc = doc, onBack = back)
+            }
             composable(RECOVERY_ROUTE) {
                 RecoveryScreen(
                     state = recovery,

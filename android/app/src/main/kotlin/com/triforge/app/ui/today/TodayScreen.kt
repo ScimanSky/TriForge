@@ -45,6 +45,7 @@ import com.triforge.app.ui.TrainingState
 import com.triforge.app.ui.common.ActivityRow
 import com.triforge.app.ui.common.BulletBar
 import com.triforge.app.ui.common.CardHeader
+import com.triforge.app.ui.common.Avatar
 import com.triforge.app.ui.common.CenteredMessage
 import com.triforge.app.ui.common.CollapsibleCard
 import com.triforge.app.ui.common.DayAxis
@@ -111,6 +112,8 @@ fun TodayScreen(
     onOpenRecovery: () -> Unit,
     onCheckIn: () -> Unit,
     modifier: Modifier = Modifier,
+    avatar: ByteArray? = null,
+    onConnectSource: () -> Unit = onOpenProfile,
 ) {
     when (state) {
         TrainingState.Loading -> LoadingBox(modifier)
@@ -121,7 +124,9 @@ fun TodayScreen(
             activities = state.activities,
             recovery = recovery,
             name = name,
+            avatar = avatar,
             onOpenProfile = onOpenProfile,
+            onConnectSource = onConnectSource,
             onOpenActivity = onOpenActivity,
             onOpenStats = onOpenStats,
             onOpenRecovery = onOpenRecovery,
@@ -141,7 +146,9 @@ private fun Dashboard(
     activities: List<Activity>,
     recovery: RecoveryState,
     name: String,
+    avatar: ByteArray?,
     onOpenProfile: () -> Unit,
+    onConnectSource: () -> Unit,
     onOpenActivity: (String) -> Unit,
     onOpenStats: () -> Unit,
     onOpenRecovery: () -> Unit,
@@ -161,10 +168,10 @@ private fun Dashboard(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item(key = "header") { Header(today, name, onOpenProfile) }
+        item(key = "header") { Header(today, name, avatar, onOpenProfile) }
 
         if (activities.isEmpty()) {
-            item(key = "empty") { EmptyCard(onOpenProfile) }
+            item(key = "empty") { EmptyCard(onConnectSource) }
             return@LazyColumn
         }
 
@@ -211,7 +218,7 @@ private fun Dashboard(
 }
 
 @Composable
-private fun EmptyCard(onOpenProfile: () -> Unit) {
+private fun EmptyCard(onConnectSource: () -> Unit) {
     TriCard {
         Text(
             text = stringResource(R.string.today_empty_title),
@@ -225,7 +232,7 @@ private fun EmptyCard(onOpenProfile: () -> Unit) {
         )
         PrimaryButton(
             text = stringResource(R.string.today_connect_source),
-            onClick = onOpenProfile,
+            onClick = onConnectSource,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -233,9 +240,8 @@ private fun EmptyCard(onOpenProfile: () -> Unit) {
 
 /** Compact: the date and the avatar. The space goes to the data. */
 @Composable
-private fun Header(today: LocalDate, name: String, onOpenProfile: () -> Unit) {
+private fun Header(today: LocalDate, name: String, avatar: ByteArray?, onOpenProfile: () -> Unit) {
     val date = remember(today) { headerDate.format(today).replaceFirstChar { it.titlecase(Locale.ITALY) } }
-    val initials = Formatters.initials(name)
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -253,28 +259,19 @@ private fun Header(today: LocalDate, name: String, onOpenProfile: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Box(
+        Avatar(
+            jpeg = avatar,
+            name = name,
+            size = 40.dp,
+            contentDescription = stringResource(R.string.nav_profile),
             modifier = Modifier
-                .size(40.dp)
                 .clip(CircleShape)
-                .background(TriColors.avatar)
                 .clickable(
                     onClickLabel = stringResource(R.string.nav_profile),
                     role = Role.Button,
                     onClick = onOpenProfile,
                 ),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (initials.isEmpty()) {
-                Icon(
-                    imageVector = TriIcons.Person,
-                    contentDescription = stringResource(R.string.nav_profile),
-                    modifier = Modifier.size(20.dp),
-                )
-            } else {
-                Text(text = initials, style = numberStyle(14.sp))
-            }
-        }
+        )
     }
 }
 

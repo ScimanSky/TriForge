@@ -21,10 +21,14 @@ in un documento che l'app non può leggere.
 | POST | `/garmin/mfa` | Completa il login con `{code}` |
 | POST | `/garmin/sync` | Importa attività, HRV, FC a riposo e sonno recenti. Accetta `{daysBack}` |
 | DELETE | `/garmin/connection` | Dimentica i token Garmin |
+| DELETE | `/account/health-data` | Revoca del consenso salute: scollega Garmin e cancella attività, recupero e check-in |
+| DELETE | `/account` | Elimina tutti i dati dell'atleta e il suo accesso Firebase. Risponde `{dataDeleted, authDeleted}` |
 | POST | `/internal/sync-all` | Sincronizza tutti gli atleti collegati (per Cloud Scheduler) |
 
 Tutti gli endpoint `/garmin/*` richiedono `Authorization: Bearer <ID token Firebase>`.
 `/internal/sync-all` richiede l'header `X-Scheduler-Secret`.
+
+Per cancellare l'accesso Firebase in `DELETE /account`, il service account di Cloud Run deve avere il ruolo `roles/firebaseauth.admin`. Senza, i dati vengono cancellati comunque e l'app chiude l'accesso dal telefono.
 
 ## Dati in Firestore
 

@@ -106,6 +106,21 @@ class GarminService:
     def disconnect(self, uid: str) -> None:
         self._store.disconnect(uid)
 
+    # -- privacy ----------------------------------------------------------
+
+    def withdraw_health_consent(self, uid: str) -> None:
+        """Stop collecting health data and erase what was collected.
+
+        The Garmin tokens go first, so the scheduled sync cannot bring the
+        data back. The account, profile and consent history stay.
+        """
+        self._store.disconnect(uid)
+        self._store.delete_health_data(uid)
+
+    def delete_account_data(self, uid: str) -> None:
+        """Erase everything stored for the athlete, Garmin tokens included."""
+        self._store.delete_user(uid)
+
     # -- sync -------------------------------------------------------------
 
     def sync(self, uid: str, days_back: int | None = None) -> SyncResult:

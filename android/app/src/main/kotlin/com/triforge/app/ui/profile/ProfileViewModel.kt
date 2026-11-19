@@ -5,13 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.triforge.app.R
 import com.triforge.app.data.AuthRepository
-import com.triforge.app.data.GarminException
+import com.triforge.app.data.ServiceException
 import com.triforge.app.data.GarminRepository
 import com.triforge.app.data.GarminStatus
 import com.triforge.app.data.HealthConnectAvailability
 import com.triforge.app.data.HealthConnectRepository
 import com.triforge.app.data.ProfileRepository
 import com.triforge.app.ui.TrainingViewModel
+import com.triforge.domain.AthleteProfile
 import com.triforge.domain.ProfileField
 import com.triforge.domain.ProfileForm
 import com.triforge.domain.ProfileFormResult
@@ -37,6 +38,8 @@ data class ProfileUiState(
     val healthConnectGranted: Boolean = false,
     val healthConnectBusy: Boolean = false,
     val healthConnectNotice: Notice? = null,
+    /** The profile as last stored, for the read-only profile page. */
+    val stored: AthleteProfile = AthleteProfile(),
     val form: ProfileForm = ProfileForm(),
     /** True once the athlete has typed something that is not saved yet. */
     val formDirty: Boolean = false,
@@ -75,7 +78,9 @@ class ProfileViewModel(
                 .catch { }
                 .collect { profile ->
                     // What the athlete is typing wins over what is stored.
-                    _state.update { if (it.formDirty) it else it.copy(form = ProfileForm.of(profile)) }
+                    _state.update {
+                        if (it.formDirty) it.copy(stored = profile) else it.copy(stored = profile, form = ProfileForm.of(profile))
+                    }
                 }
         }
         refreshHealthConnect()
@@ -86,6 +91,13 @@ class ProfileViewModel(
     fun editForm(change: (ProfileForm) -> ProfileForm) {
         _state.update {
             it.copy(form = change(it.form), formDirty = true, formErrors = emptySet(), formNotice = null)
+        }
+    }
+
+    /** Throws away what was typed and not saved, as when leaving the edit page. */
+    fun discardForm() {
+        _state.update {
+            it.copy(form = ProfileForm.of(it.stored), formDirty = false, formErrors = emptySet(), formNotice = null)
         }
     }
 
@@ -156,7 +168,7 @@ class ProfileViewModel(
         viewModelScope.launch {
             try {
                 block()
-            } catch (error: GarminException) {
+            } catch (error: ServiceException) {
                 if (error.code == "mfa_expired") _state.update { it.copy(garminAwaitingCode = false) }
                 _state.update { it.copy(garminNotice = noticeFor(error)) }
             } catch (error: Exception) {
@@ -167,7 +179,7 @@ class ProfileViewModel(
         }
     }
 
-    private fun noticeFor(error: GarminException): Notice = when (error.code) {
+    private fun noticeFor(error: ServiceException): Notice = when (error.code) {
         "garmin_bad_credentials" -> Notice(R.string.garmin_error_credentials, isError = true)
         "garmin_bad_mfa_code" -> Notice(R.string.garmin_error_mfa_code, isError = true)
         "mfa_expired" -> Notice(R.string.garmin_error_mfa_expired, isError = true)

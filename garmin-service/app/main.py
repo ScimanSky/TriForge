@@ -12,6 +12,9 @@ Endpoints:
 - ``POST   /garmin/mfa``         finish a login that asked for a code
 - ``POST   /garmin/sync``        import recent activities
 - ``DELETE /garmin/connection``  forget the Garmin tokens
+- ``DELETE /account/health-data`` withdraw the health consent: disconnect
+  Garmin and erase activities, recovery data and check-ins
+- ``DELETE /account``            erase every stored datum and the login itself
 - ``POST   /internal/sync-all``  scheduled sync for every connected athlete
 """
 
@@ -44,6 +47,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("triforge.garmin")
 
 TokenVerifier = Callable[[str], str]
+UserDeleter = Callable[[str], None]
 
 
 class ConnectRequest(BaseModel):
@@ -72,6 +76,22 @@ def _firebase_verifier() -> TokenVerifier:
     return verify
 
 
+def _firebase_user_deleter() -> UserDeleter:
+    import firebase_admin
+    from firebase_admin import auth
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app()
+
+    def delete(uid: str) -> None:
+        try:
+            auth.delete_user(uid)
+        except auth.UserNotFoundError:
+            pass
+
+    return delete
+
+
 def _firestore_store() -> Store:
     import firebase_admin
     from firebase_admin import firestore
@@ -86,11 +106,13 @@ def create_app(
     store: Store | None = None,
     gateway: GarminGateway | None = None,
     verify_token: TokenVerifier | None = None,
+    delete_user: UserDeleter | None = None,
 ) -> FastAPI:
     """Build the app. Arguments are injected by the tests."""
     settings = settings or load_settings()
     store = store or _firestore_store()
     verify_token = verify_token or _firebase_verifier()
+    delete_user = delete_user or _firebase_user_deleter()
     service = GarminService(
         store=store,
         gateway=gateway or GarminConnectGateway(),
@@ -169,6 +191,25 @@ def create_app(
     def disconnect(uid: Uid) -> dict[str, str]:
         service.disconnect(uid)
         return {"status": "disconnected"}
+
+    @app.delete("/account/health-data")
+    def withdraw_health_consent(uid: Uid) -> dict[str, str]:
+        service.withdraw_health_consent(uid)
+        logger.info("health data erased after consent withdrawal")
+        return {"status": "deleted"}
+
+    @app.delete("/account")
+    def delete_account(uid: Uid) -> dict[str, bool]:
+        # Data first: if deleting the login fails, the app can retry it
+        # itself, but data left behind by a deleted login would be orphaned.
+        service.delete_account_data(uid)
+        try:
+            delete_user(uid)
+            auth_deleted = True
+        except Exception as err:  # noqa: BLE001 - the app falls back to deleting the login itself
+            logger.warning("account data erased, login not deleted: %s", type(err).__name__)
+            auth_deleted = False
+        return {"dataDeleted": True, "authDeleted": auth_deleted}
 
     @app.post("/internal/sync-all")
     def sync_all(

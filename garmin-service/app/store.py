@@ -7,6 +7,9 @@ Firestore layout, all under ``users/{uid}``:
 - ``integrations/garmin``  connection status. Read-only for the app.
 - ``activities/{id}``      normalized activities. Read by the app.
 - ``wellness/{id}``        one document per day: HRV, resting HR, sleep.
+
+Account deletion and the withdrawal of the health consent also go through
+here, because only the server may delete ``private/*`` and the user document.
 """
 
 from __future__ import annotations
@@ -15,6 +18,9 @@ from datetime import datetime
 from typing import Any, Iterable, Protocol
 
 BATCH_LIMIT = 400
+
+# What the athlete's health consent covers: deleted when it is withdrawn.
+HEALTH_COLLECTIONS = ("activities", "wellness", "checkIns")
 
 
 class Store(Protocol):
@@ -40,6 +46,10 @@ class Store(Protocol):
 
     def connected_uids(self) -> Iterable[str]: ...
 
+    def delete_health_data(self, uid: str) -> None: ...
+
+    def delete_user(self, uid: str) -> None: ...
+
 
 class MemoryStore:
     """In-memory store, used by the tests and for local runs without Firebase."""
@@ -50,6 +60,9 @@ class MemoryStore:
         self.status: dict[str, dict[str, Any]] = {}
         self.activities: dict[str, dict[str, dict[str, Any]]] = {}
         self.wellness: dict[str, dict[str, dict[str, Any]]] = {}
+        # Collections the app writes itself (profile, check-ins, consents),
+        # so the tests can check that deletion reaches them too.
+        self.app_data: dict[str, dict[str, Any]] = {}
 
     def get_tokens(self, uid: str) -> str | None:
         return self.tokens.get(uid)
@@ -89,6 +102,15 @@ class MemoryStore:
 
     def connected_uids(self) -> Iterable[str]:
         return [uid for uid, s in self.status.items() if s.get("connected")]
+
+    def delete_health_data(self, uid: str) -> None:
+        self.activities.pop(uid, None)
+        self.wellness.pop(uid, None)
+        self.app_data.get(uid, {}).pop("checkIns", None)
+
+    def delete_user(self, uid: str) -> None:
+        for bucket in (self.tokens, self.mfa, self.status, self.activities, self.wellness, self.app_data):
+            bucket.pop(uid, None)
 
 
 class FirestoreStore:
@@ -151,6 +173,14 @@ class FirestoreStore:
         self._mfa_ref(uid).delete()
         # Replace the whole status so nothing about the old account lingers.
         self._status_ref(uid).set({"connected": False})
+
+    def delete_health_data(self, uid: str) -> None:
+        for name in HEALTH_COLLECTIONS:
+            self._db.recursive_delete(self._user(uid).collection(name))
+
+    def delete_user(self, uid: str) -> None:
+        # The user document and every subcollection under it, tokens included.
+        self._db.recursive_delete(self._user(uid))
 
     def connected_uids(self) -> Iterable[str]:
         from google.cloud.firestore_v1.base_query import FieldFilter

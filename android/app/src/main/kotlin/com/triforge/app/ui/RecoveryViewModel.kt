@@ -29,6 +29,8 @@ sealed interface RecoveryState {
         val report: RecoveryReport,
         val todayCheckIn: CheckIn?,
         val loads: Map<String, SessionLoad> = emptyMap(),
+        /** Check-ins of the last seven days, oldest first, for the "how you feel" trend. */
+        val recentCheckIns: List<CheckIn> = emptyList(),
     ) : RecoveryState
 }
 
@@ -55,7 +57,9 @@ class RecoveryViewModel(
         val today = LocalDate.now(zone)
         val report = RecoveryBalance.compute(activityList, days, checkIns, profile, today, zone)
         val loads = SessionLoadModel.estimate(activityList, profile).associateBy { it.activity.id }
-        RecoveryState.Loaded(report, checkIns.firstOrNull { it.date == today }, loads) as RecoveryState
+        val weekAgo = today.minusDays(6)
+        val recent = checkIns.filter { !it.date.isBefore(weekAgo) && !it.date.isAfter(today) }.sortedBy { it.date }
+        RecoveryState.Loaded(report, checkIns.firstOrNull { it.date == today }, loads, recent) as RecoveryState
     }
         .catch { emit(RecoveryState.Failed) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecoveryState.Loading)
