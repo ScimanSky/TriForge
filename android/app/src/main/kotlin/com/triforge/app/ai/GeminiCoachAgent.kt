@@ -34,6 +34,8 @@ class GeminiCoachAgent<P : Any>(
     private val modelName: String,
     location: String,
     planSchema: Schema,
+    /** The agent's standing instructions; the sport coaches bring their own. */
+    private val system: String = CoachPrompts.system(role),
     private val parse: (Map<String, Any?>) -> P?,
 ) : CoachAgent<P> {
 
@@ -46,7 +48,7 @@ class GeminiCoachAgent<P : Any>(
             responseMimeType = "application/json"
             responseSchema = schema
         },
-        systemInstruction = content { text(CoachPrompts.system(this@GeminiCoachAgent.role)) },
+        systemInstruction = content { text(system) },
     )
 
     private val planModel = model(planSchema, PLAN_TEMPERATURE)

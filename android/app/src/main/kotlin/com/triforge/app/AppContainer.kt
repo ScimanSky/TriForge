@@ -21,7 +21,12 @@ import com.triforge.app.data.WellnessRepository
 import com.triforge.domain.coach.CoachMapper
 import com.triforge.domain.coach.CoachRole
 import com.triforge.domain.coach.NutritionDay
+import com.triforge.domain.coach.SportCoachPrompts
+import com.triforge.domain.coach.SportProposal
+import com.triforge.domain.coach.TriRegia
 import com.triforge.domain.coach.WeekPlan
+import com.triforge.domain.coach.Zones
+import com.triforge.domain.Sport
 import com.triforge.domain.TrainingStats
 import java.time.LocalDate
 import kotlinx.coroutines.tasks.await
@@ -90,6 +95,25 @@ class AppContainer(context: Context) {
         GeminiCoachAgent(CoachRole.COACH, BuildConfig.AI_MODEL, BuildConfig.AI_LOCATION, CoachSchemas.weekPlan) {
             // Always this week: the model's own dates are only trusted inside it.
             CoachMapper.weekPlanFromFields(it, TrainingStats.weekStart(LocalDate.now()))
+        }
+    }
+
+    /**
+     * The three sport coaches that write the week together: one agent per
+     * sport, each with its own instructions. They never call each other: the
+     * app carries their proposals from one to the others.
+     */
+    val sportCoaches: Map<Sport, CoachAgent<SportProposal>> by lazy {
+        TriRegia.SPORTS.associateWith { sport ->
+            GeminiCoachAgent(
+                CoachRole.COACH,
+                BuildConfig.AI_MODEL,
+                BuildConfig.AI_LOCATION,
+                CoachSchemas.sportWeek(Zones.keys(sport)),
+                system = SportCoachPrompts.system(sport),
+            ) { fields ->
+                CoachMapper.sportProposalFromFields(fields, sport, TrainingStats.weekStart(LocalDate.now()))
+            }
         }
     }
 

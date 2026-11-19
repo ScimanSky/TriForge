@@ -95,6 +95,50 @@ Il Coach riceve la regia nella richiesta; `TriRegia.check` controlla la
 settimana, il Coach la riscrive una volta e quello che resta viene scritto
 sotto il piano. Con i tre coach di sport (fase 3) la regia resta la stessa.
 
+## Tre coach, un tavolo
+
+La settimana non la scrive più un coach solo. La scrivono tre agenti, uno
+per sport (`SportCoachPrompts`): Coach Nuoto, Coach Bici e Coach Corsa. Ognuno
+è esperto solo del suo sport, ha le sue istruzioni e scrive solo le sue
+sedute. Nessuno dei tre comanda: comandano le regole della regia.
+
+Come si accordano (`CoachTable`, guidato da `CoachViewModel.planWeek`):
+
+1. **Primo giro.** I tre ricevono, in parallelo, la regia della settimana, i
+   propri minuti e limiti, i dati dell'atleta e la nota di NutriAI. Ognuno
+   propone le sue sedute da oggi a domenica.
+2. **Controllo.** L'app unisce le tre proposte (i giorni già passati sono le
+   attività fatte davvero) e le passa alla regia.
+3. **Secondo giro**, solo se una regola è violata: ogni coach rivede la sua
+   parte leggendo le proposte e le note degli altri due e l'elenco dei
+   conflitti. I giri sono al massimo due.
+4. **Chiusura.** Quello che resta aperto lo sistema l'app, una regola alla
+   volta: cede lo sport meno legato all'obiettivo (prima lo sport debole, poi
+   gli sport per quota della settimana). Ogni intervento finisce nel verbale.
+
+Il verbale ("Come si sono accordati") è salvato con il piano: le note dei tre
+coach, gli interventi della regia e la nota di NutriAI.
+
+### Allenamenti strutturati
+
+Ogni seduta è una lista di passi (`WorkoutStep`): riscaldamento, serie,
+defaticamento, ciascuno con ripetute, distanza o tempo, zona e recupero. Come
+in SwimForge, il modello sceglie e spiega, l'app fa i conti (`Workouts`,
+`Zones`):
+
+- le zone sono A1–C3 per il nuoto (dal passo soglia, CSS) e Z1–Z5 per bici
+  (dall'FTP) e corsa (dal passo soglia); senza soglia, bici e corsa passano
+  ai battiti dalla frequenza massima;
+- una ripetuta troppo lunga per la sua zona viene spezzata;
+- passo, watt o battiti di ogni passo, durata, distanza, tempo per zona e
+  intensità della seduta li calcola l'app: al modello non vengono chiesti;
+- la regia controlla anche il tempo in zona alta (soglia e oltre) per sport.
+
+Il piano resta nel documento `coaching/coach`: non servono regole Firestore
+nuove. La chat è ancora quella del Coach unico; le chat per singolo coach
+(tavola 6d) arrivano con il passo successivo e richiedono una modifica alle
+regole.
+
 ## App Check
 
 Firebase AI Logic applica App Check: senza un token valido Gemini rifiuta la

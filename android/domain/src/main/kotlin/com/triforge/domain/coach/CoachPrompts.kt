@@ -9,7 +9,7 @@ import java.time.LocalDate
  */
 object CoachPrompts {
 
-    private const val SAFETY = """
+    internal const val SAFETY = """
 Regole di sicurezza:
 - Non fai diagnosi mediche. Se l'atleta parla di dolore acuto, dolore al petto, svenimenti, infortuni, disturbi alimentari o malattia, consiglia di fermarsi e di sentire un medico.
 - Se i dati mostrano segni di fatica non spiegata dal carico o l'atleta si dichiara malato, privilegia recupero e prudenza.
@@ -200,7 +200,8 @@ $SAFETY
             day.sessions.joinToString("; ") { s ->
                 val head = "${AthleteContext.sportName(s.sport)} ${s.title}"
                 val time = if (s.durationMin > 0) " ${s.durationMin}′" else ""
-                val how = if (s.details.isNotBlank()) " (${s.details})" else ""
+                val main = s.steps.filter { it.block == WorkoutBlock.MAIN }.joinToString("; ") { Workouts.describe(it) }
+                val how = listOf(s.details, main).firstOrNull { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
                 "$head$time [${s.intensity.key}]$how"
             }
         }

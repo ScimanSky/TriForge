@@ -32,11 +32,68 @@ object CoachMapper {
                         "durationMin" to session.durationMin,
                         "intensity" to session.intensity.key,
                         "details" to session.details,
+                        "focus" to session.focus,
+                        "why" to session.why,
+                        "steps" to session.steps.map(::stepToFields),
                     )
                 },
             )
         },
+        "table" to plan.table.map { mapOf("voice" to it.voice.key, "text" to it.text) },
+        "rounds" to plan.rounds,
+        "availableMin" to plan.availableMin,
+        "maxHard" to plan.maxHard,
     )
+
+    private fun stepToFields(step: WorkoutStep): Map<String, Any?> = mapOf(
+        "block" to step.block.key,
+        "reps" to step.reps,
+        "distanceM" to step.distanceM,
+        "durationSec" to step.durationSec,
+        "zone" to step.zone,
+        "recoverySec" to step.recoverySec,
+        "text" to step.text,
+        "target" to step.target,
+        "note" to step.note,
+    )
+
+    private fun step(fields: Map<*, *>?): WorkoutStep? {
+        fields ?: return null
+        val metres = number(fields["distanceM"])?.toInt()?.takeIf { it in 1..50_000 }
+        val seconds = number(fields["durationSec"])?.toInt()?.takeIf { it in 1..36_000 }
+        if (metres == null && seconds == null) return null
+        return WorkoutStep(
+            block = WorkoutBlock.of(fields["block"]) ?: WorkoutBlock.MAIN,
+            reps = number(fields["reps"])?.toInt()?.coerceIn(1, Workouts.MAX_REPS) ?: 1,
+            // A step is by distance or by time; with both, the distance is what the athlete counts.
+            distanceM = metres,
+            durationSec = seconds.takeIf { metres == null },
+            zone = text(fields["zone"], 20).uppercase(),
+            recoverySec = number(fields["recoverySec"])?.toInt()?.coerceIn(0, 900) ?: 0,
+            text = text(fields["text"], 120),
+            target = text(fields["target"], 60),
+            note = text(fields["note"], 200),
+        )
+    }
+
+    /**
+     * Reads what one sport coach proposes for the week: only sessions of
+     * [sport] inside the week, with the notes for the other coaches.
+     */
+    fun sportProposalFromFields(fields: Map<String, Any?>, sport: Sport, weekStart: LocalDate): SportProposal? {
+        val plan = weekPlanFromFields(fields, weekStart)
+        val days = plan?.days.orEmpty().map { day ->
+            // The coach is not asked for the sport: every session it writes is of its own.
+            day.copy(sessions = day.sessions.filter { it.steps.isNotEmpty() || it.durationMin > 0 }.map { it.copy(sport = sport) })
+        }
+        return SportProposal(
+            sport = sport,
+            days = days.filter { it.sessions.isNotEmpty() },
+            note = text(fields["noteForCoaches"], 400),
+            noteForNutriAi = text(fields["noteForNutriAi"], 400),
+            rationale = text(fields["rationale"], 600),
+        )
+    }
 
     /**
      * Reads a week plan. [weekStart] is the Monday the plan must cover: days
@@ -64,6 +121,14 @@ object CoachMapper {
             rationale = text(fields["rationale"]),
             noteForNutriAi = text(fields["noteForNutriAi"]),
             createdAt = fields["createdAt"] as? Instant,
+            table = list(fields["table"]).mapNotNull { raw ->
+                val note = raw as? Map<*, *> ?: return@mapNotNull null
+                val voice = TableVoice.of(note["voice"]) ?: return@mapNotNull null
+                text(note["text"], 600).takeIf { it.isNotBlank() }?.let { TableNote(voice, it) }
+            },
+            rounds = number(fields["rounds"])?.toInt()?.coerceIn(0, 9) ?: 0,
+            availableMin = number(fields["availableMin"])?.toInt(),
+            maxHard = number(fields["maxHard"])?.toInt(),
         )
     }
 
@@ -77,6 +142,9 @@ object CoachMapper {
             durationMin = minutes,
             intensity = Intensity.of(fields["intensity"] as? String) ?: Intensity.EASY,
             details = text(fields["details"], 400),
+            focus = text(fields["focus"], 40),
+            steps = list(fields["steps"]).mapNotNull { step(it as? Map<*, *>) }.take(Workouts.MAX_STEPS),
+            why = text(fields["why"], 500),
         )
     }
 
