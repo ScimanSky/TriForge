@@ -33,6 +33,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.triforge.app.AppContainer
 import com.triforge.app.R
+import com.triforge.app.data.GoogleSignInResult
 import com.triforge.app.ui.activities.ActivitiesScreen
 import com.triforge.app.ui.auth.AuthScreen
 import com.triforge.app.ui.auth.AuthViewModel
@@ -55,7 +56,10 @@ private const val ACTIVITY_ID = "id"
 private const val ACTIVITY_ROUTE = "activity/{$ACTIVITY_ID}"
 
 @Composable
-fun TriForgeRoot(container: AppContainer) {
+fun TriForgeRoot(
+    container: AppContainer,
+    requestGoogleToken: suspend () -> GoogleSignInResult,
+) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (!container.firebaseConfigured) {
             Box(Modifier.fillMaxSize().safeDrawingPadding(), contentAlignment = Alignment.Center) {
@@ -79,7 +83,7 @@ fun TriForgeRoot(container: AppContainer) {
                 val authViewModel: AuthViewModel = viewModel(
                     factory = viewModelFactory { initializer { AuthViewModel(container.auth) } },
                 )
-                AuthScreen(authViewModel)
+                AuthScreen(authViewModel, requestGoogleToken)
             }
 
             is Session.SignedIn -> SignedIn(current.uid, container)

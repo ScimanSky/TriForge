@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.triforge.app.data.GoogleSignIn
 import com.triforge.app.ui.TriForgeRoot
 import com.triforge.app.ui.theme.TriForgeTheme
 
@@ -13,9 +14,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val container = (application as TriForgeApp).container
+        val googleSignIn = GoogleSignIn()
         setContent {
             TriForgeTheme {
-                TriForgeRoot(container)
+                TriForgeRoot(
+                    container = container,
+                    requestGoogleToken = { googleSignIn.requestIdToken(this@MainActivity) },
+                )
             }
         }
     }
