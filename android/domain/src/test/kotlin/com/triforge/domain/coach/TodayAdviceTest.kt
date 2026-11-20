@@ -89,6 +89,32 @@ class TodayAdviceTest {
     }
 
     @Test
+    fun `a session of today not known as done is not skipped in silence`() {
+        // 16:24, the swim of 13:00 is not recorded: the card is about tomorrow, but says today had one.
+        val card = assertNotNull(card(LocalTime.of(16, 24)))
+        assertTrue(card.tomorrow)
+        assertEquals(
+            "Oggi c'era «Nuoto tecnica e fondo» alle 13:00: non risulta ancora fatta. " +
+                "Se l'hai fatta, comparirà quando l'orologio si sincronizza; se l'hai saltata, puoi chiedere al coach di spostarla.",
+            card.earlier,
+        )
+        // Before its time, and once it is recorded, there is nothing to say.
+        assertNull(assertNotNull(card(LocalTime.of(8, 0))).earlier)
+        val done = Activity(
+            id = "s", source = ActivitySource.GARMIN, sport = Sport.SWIM, name = "",
+            startTime = friday.atTime(13, 0).toInstant(ZoneOffset.UTC), durationSec = 3600, distanceMeters = 2400.0,
+        )
+        assertNull(assertNotNull(card(LocalTime.of(16, 24), listOf(done))).earlier)
+        // The athlete's own session is theirs to move: no coach to ask. Two sessions are told together.
+        assertEquals(
+            "Oggi c'era «Palestra» alle 19:00: non risulta ancora fatta. Se l'hai fatta, comparirà quando l'orologio si sincronizza.",
+            TodayAdvice.earlier(listOf(gym), availability),
+        )
+        assertTrue(TodayAdvice.earlier(listOf(swim, gym), availability)!!.startsWith("Oggi c'erano «Nuoto tecnica e fondo» alle 13:00 e «Palestra» alle 19:00: non risultano ancora fatte."))
+        assertNull(TodayAdvice.earlier(emptyList(), availability))
+    }
+
+    @Test
     fun `a free day with nothing tomorrow still gives the sentence`() {
         val card = assertNotNull(card(LocalTime.of(9, 0), today = monday))
         assertTrue(card.tomorrow)

@@ -55,18 +55,3 @@ class CoachException(val reason: Reason, cause: Throwable? = null) : Exception(r
         val transient: Boolean get() = this == TIMEOUT || this == UNAVAILABLE || this == NETWORK || this == BAD_ANSWER
     }
 }
-
-/**
- * How long the app waits for one answer before giving the athlete the
- * screen back with «Riprova». Firebase AI Logic itself waits three minutes.
- */
-object AiWait {
-    /** One dish: alternatives, or the values of a dish the athlete wrote. */
-    const val DISH_MS = 20_000L
-
-    /** One answer in a chat, with the change it may propose. */
-    const val CHAT_MS = 45_000L
-
-    /** A whole week of sessions, or a day of meals. */
-    const val PLAN_MS = 90_000L
-}

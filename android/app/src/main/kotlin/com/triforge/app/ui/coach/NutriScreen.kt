@@ -186,6 +186,11 @@ fun NutriScreen(
             if (chatSeen >= 0 && arrived in 1..2) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1)
             chatSeen = state.chat.size
         }
+        // An answer of the chat that did not come is said where the athlete is looking: under their message, at the end.
+        val replying = state.task == CoachTask.REPLYING
+        LaunchedEffect(state.errorInChat, replying) {
+            if (state.errorInChat || replying) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1)
+        }
         val busy = state.task != null
         val view = state.day
         val word = view?.let { dayWord(it.date, state.today) }.orEmpty()
@@ -209,7 +214,8 @@ fun NutriScreen(
                 }
                 return@LazyColumn
             }
-            state.error?.let { reason ->
+            // What went wrong with the meals is said here, above them; with a message of the chat, down in the chat.
+            state.error?.takeIf { !state.errorInChat }?.let { reason ->
                 item {
                     ErrorCard(
                         reason,
@@ -285,6 +291,17 @@ fun NutriScreen(
             }
             items(state.chat, key = { it.id }) { entry -> NutriMessage(entry, state, viewModel) }
             if (state.task == CoachTask.REPLYING) item { ThinkingRow(stringResource(R.string.nutri_thinking), palette) }
+            state.error?.takeIf { state.errorInChat }?.let { reason ->
+                item {
+                    ErrorCard(
+                        reason,
+                        who = stringResource(R.string.nav_nutri),
+                        onRetry = if (state.retryable && state.task == null) viewModel::retry else null,
+                        onDismiss = viewModel::clearError,
+                        hint = if (state.unanswered != null) stringResource(R.string.coach_error_retry_message) else null,
+                    )
+                }
+            }
             // A message left without an answer, e.g. the app was closed while NutriAI was writing.
             if (state.unanswered != null && state.error == null && state.task == null) {
                 item { UnansweredCard(stringResource(R.string.nav_nutri), onRetry = viewModel::retry) }

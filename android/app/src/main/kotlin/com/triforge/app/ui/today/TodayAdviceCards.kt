@@ -83,6 +83,10 @@ internal fun TodayAdviceCard(card: TodayCard, profile: AthleteProfile, onOpenCoa
                 )
             }
         }
+        // A session of today whose time is gone comes before tomorrow: the card does not skip it in silence.
+        card.earlier?.let { earlier ->
+            Text(earlier, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFE6E9EE))
+        }
         if (card.sentence.isNotBlank()) {
             Text(card.sentence, style = MaterialTheme.typography.bodyLarge, color = Color(0xFFE6E9EE))
         }

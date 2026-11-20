@@ -76,6 +76,8 @@ data class ProposalView(
     val reasons: List<String>,
     /** What it means for NutriAI, or null when no day changes. */
     val nutri: String?,
+    /** The sessions the coach proposed that cannot enter the week, each with its reason: said before anything else. */
+    val refused: List<String> = emptyList(),
 )
 
 /** What Oggi shows of the coaches' work. */
@@ -242,6 +244,7 @@ class CoachViewModel(
                     also = ProposalPreview.also(revision, sport),
                     reasons = revision.notes,
                     nutri = ProposalPreview.nutri(revision.changes, prepared),
+                    refused = revision.refused,
                 )
             }
         }.toMap()
@@ -477,6 +480,7 @@ class CoachViewModel(
                 nutri = nutri.brief,
                 message = message,
                 review = plan?.let { reviewOf(it, data) }.orEmpty(),
+                availability = data.availability,
             )
             val reply = sportCoaches.getValue(sport).reply(history, turn)
             // Kept as the athlete will see it: only this coach's sessions from today on, with targets and totals.

@@ -21,7 +21,6 @@ import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.UnknownHostException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -62,7 +61,7 @@ class GeminiCoachAgent<P : Any>(
     private val chatModel = model(CoachSchemas.chatReply(planSchema, handoffs), CHAT_TEMPERATURE)
 
     override suspend fun plan(request: String): P {
-        val fields = geminiJson(AiWait.PLAN_MS) { planModel.generateContent(request).text }
+        val fields = geminiJson(AiWait.PLAN) { planModel.generateContent(request).text }
         return parse(fields) ?: throw CoachException(CoachException.Reason.BAD_ANSWER)
     }
 
@@ -70,7 +69,7 @@ class GeminiCoachAgent<P : Any>(
         val contents: List<Content> = history.takeLast(MAX_HISTORY).map { message ->
             content(role = if (message.fromAthlete) "user" else "model") { text(message.text) }
         } + content(role = "user") { text(turn) }
-        val fields = geminiJson(AiWait.CHAT_MS) { chatModel.generateContent(contents.first(), *contents.drop(1).toTypedArray()).text }
+        val fields = geminiJson(AiWait.CHAT) { chatModel.generateContent(contents.first(), *contents.drop(1).toTypedArray()).text }
         val text = (fields["reply"] as? String)?.trim().orEmpty()
         if (text.isEmpty()) throw CoachException(CoachException.Reason.BAD_ANSWER)
         @Suppress("UNCHECKED_CAST")
@@ -89,48 +88,33 @@ class GeminiCoachAgent<P : Any>(
 }
 
 /**
- * One call to Gemini that answers in JSON: its errors become a
- * [CoachException] the screens can explain, its text a map of fields.
+ * One answer of Gemini in JSON: its errors become a [CoachException] the
+ * screens can explain, its text a map of fields.
  *
- * The call is given [timeoutMs] and no more: a request that hangs must give
- * the screen back, not keep a spinner for minutes. With more than one of
- * [attempts], a call that timed out, failed on the way or came back
- * unreadable is made again before the athlete hears about it.
+ * The answer is given [wait] and no more: a request that hangs must give
+ * the screen back, not keep a spinner for minutes. Within that time a call
+ * that is slow, failed on the way or came back unreadable is made again
+ * before the athlete hears about it: see [firstAnswer].
  */
-internal suspend fun geminiJson(timeoutMs: Long, attempts: Int = 1, block: suspend () -> String?): Map<String, Any?> {
-    var failure: CoachException? = null
-    repeat(attempts.coerceAtLeast(1)) {
-        try {
-            return geminiJsonOnce(timeoutMs, block)
-        } catch (e: CoachException) {
-            if (!e.reason.transient) throw e
-            failure = e
-        }
-    }
-    throw failure ?: CoachException(CoachException.Reason.UNAVAILABLE)
-}
+internal suspend fun geminiJson(wait: AiWait, block: suspend () -> String?): Map<String, Any?> =
+    firstAnswer(wait) { geminiJsonOnce(block) }
 
-private class Answer(val text: String?)
-
-private suspend fun geminiJsonOnce(timeoutMs: Long, block: suspend () -> String?): Map<String, Any?> {
-    val answer = withTimeoutOrNull(timeoutMs) {
-        try {
-            Answer(block())
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: ServiceDisabledException) {
-            throw CoachException(CoachException.Reason.NOT_ENABLED, e)
-        } catch (e: QuotaExceededException) {
-            throw CoachException(CoachException.Reason.BUSY, e)
-        } catch (e: PromptBlockedException) {
-            throw CoachException(CoachException.Reason.BLOCKED, e)
-        } catch (e: ResponseStoppedException) {
-            throw CoachException(CoachException.Reason.BLOCKED, e)
-        } catch (e: Exception) {
-            throw CoachException(reasonOf(e), e)
-        }
-    } ?: throw CoachException(CoachException.Reason.TIMEOUT)
-    val text = answer.text ?: throw CoachException(CoachException.Reason.BAD_ANSWER)
+private suspend fun geminiJsonOnce(block: suspend () -> String?): Map<String, Any?> {
+    val text = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: ServiceDisabledException) {
+        throw CoachException(CoachException.Reason.NOT_ENABLED, e)
+    } catch (e: QuotaExceededException) {
+        throw CoachException(CoachException.Reason.BUSY, e)
+    } catch (e: PromptBlockedException) {
+        throw CoachException(CoachException.Reason.BLOCKED, e)
+    } catch (e: ResponseStoppedException) {
+        throw CoachException(CoachException.Reason.BLOCKED, e)
+    } catch (e: Exception) {
+        throw CoachException(reasonOf(e), e)
+    } ?: throw CoachException(CoachException.Reason.BAD_ANSWER)
     return try {
         JSONObject(text).toMap()
     } catch (e: JSONException) {

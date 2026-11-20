@@ -162,10 +162,12 @@ fun CoachChat(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        // A coach in pause, or of a sport done with a trainer, writes no session to make easier or shorter.
+                        val writes = availability.isCoached(sport)
                         SuggestionChips(
-                            listOf(
-                                stringResource(R.string.coach_suggest_tired),
-                                stringResource(R.string.coach_suggest_short),
+                            listOfNotNull(
+                                stringResource(R.string.coach_suggest_tired).takeIf { writes },
+                                stringResource(R.string.coach_suggest_short).takeIf { writes },
                                 stringResource(R.string.coach_suggest_review),
                             ),
                             enabled = state.task == null,

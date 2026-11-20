@@ -5,6 +5,7 @@ import com.triforge.domain.AthleteProfile
 import com.triforge.domain.CheckIn
 import com.triforge.domain.CssCheck
 import com.triforge.domain.CssSource
+import com.triforge.domain.FitnessTrend
 import com.triforge.domain.Formatters
 import com.triforge.domain.FormZone
 import com.triforge.domain.LoadResponsePattern
@@ -239,12 +240,24 @@ object AthleteContext {
         val report = data.recovery
         if (report == null) add("dati di recupero non disponibili") else addAll(report(report))
         data.checkIn?.let { c ->
+            // Every item runs from 1 (very good) to 7 (very bad): told the other way round, a good morning reads as a tired one.
             add(
-                "Check-in di oggi (1 = male, 7 = benissimo): sonno ${c.sleepQuality}, fatica ${c.fatigue}, " +
-                    "dolori ${c.soreness}, stress ${c.stress}, motivazione ${c.motivation}" +
-                    if (c.sick) ". Si sente malato." else "",
+                "Check-in di oggi (ogni voce da 1 = molto bene a 7 = molto male: più il numero è alto, peggio va): " +
+                    "sonno ${c.sleepQuality}, fatica ${c.fatigue}, dolori ${c.soreness}, stress ${c.stress}, " +
+                    "poca voglia di allenarsi ${c.motivation}" + (if (c.sick) ". Si sente malato" else "") +
+                    ". In Oggi l'atleta lo legge in un numero solo, «Come ti senti ${c.feel.roundToInt().coerceIn(1, 5)} su 5» " +
+                    "(5 = benissimo): se parli del check-in usa quel numero e quella scala.",
             )
         } ?: add("Check-in di oggi: non fatto")
+        report?.let { r ->
+            val state = TodayAdvice.state(r.today, FitnessTrend.from(r.history).latest?.zone, loadInDoubt = data.cssCheck != null)
+            if (state.isNotEmpty()) {
+                add(
+                    "Giudizio dell'app, quello che l'atleta legge in Oggi: «$state». Parti da qui quando parli di come sta. " +
+                        "Non dirgli che è stanco se qui risulta recuperato: se un dato ti fa pensare altro, digli quale.",
+                )
+            }
+        }
     }
 
     private fun report(report: RecoveryReport): List<String> {
