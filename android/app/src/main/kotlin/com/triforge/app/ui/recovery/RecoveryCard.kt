@@ -14,7 +14,6 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import com.triforge.domain.CheckIn
 import java.time.LocalDate
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -125,7 +124,7 @@ fun RecoveryCard(
                 Formatters.duration((v * 3600).roundToInt().toLong())
             },
         ).filter { it.band?.value != null }
-        val feel = loaded.recentCheckIns.map { it.date to it.feelScore() }
+        val feel = loaded.recentCheckIns.map { it.date to it.feel }
         if (markers.isNotEmpty() || feel.isNotEmpty()) {
             MarkerRow(markers = markers, feel = feel, modifier = Modifier.padding(top = 16.dp))
         }
@@ -163,9 +162,6 @@ private class Marker(
     val week: List<MarkerBand> = bands.takeLast(7)
     val band: MarkerBand? get() = week.lastOrNull()
 }
-
-/** How the athlete feels from a check-in, 1 (bad) to 5 (great): the total runs from 5 (great) to 35 (bad). */
-private fun CheckIn.feelScore(): Double = 5.0 - (total - 5) / 30.0 * 4.0
 
 /** Where a marker sits against the athlete's normal range. */
 private enum class Position { BELOW, INSIDE, ABOVE, UNKNOWN }

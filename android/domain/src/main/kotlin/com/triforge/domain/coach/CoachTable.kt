@@ -39,7 +39,17 @@ data class PlanChange(
  * (the coach's own and any other the regia has to touch) and the regia's
  * reasons. Nothing changes that is not listed here.
  */
-data class Revision(val plan: WeekPlan, val changes: List<PlanChange>, val notes: List<String>) {
+data class Revision(
+    val plan: WeekPlan,
+    val changes: List<PlanChange>,
+    val notes: List<String>,
+    /**
+     * The sessions the coach proposed that do not enter the week, each with
+     * its reason: a day that is not one of the sport's, or the rest day the
+     * athlete chose. Said first, since it is what the coach's words promised.
+     */
+    val refused: List<String> = emptyList(),
+) {
     /** The changes outside the sessions the coach of [sport] rewrote: what the athlete did not ask for. */
     fun sideEffects(sport: Sport): List<PlanChange> = changes.filter { it.sport != sport || it.session.own }
 }
@@ -62,6 +72,9 @@ object CoachTable {
 
     /** Lines kept in the minutes: the latest are the ones that explain the week as it is. */
     private const val MAX_TABLE = 12
+
+    /** Under these minutes, a session's duration worked out again is the same session: nothing to tell the athlete. */
+    const val RETIMED_MIN = 5
 
     /** The focus of a session of a day already gone: what the athlete did, not a plan. */
     const val DONE = "Fatta"
@@ -261,27 +274,65 @@ object CoachTable {
         val others = TriRegia.SPORTS.filter { it != proposal.sport }.map { sport ->
             SportProposal(sport, upcoming.map { day -> day.copy(sessions = day.sessions.filter { it.sport == sport && !it.own }) }.filter { it.sessions.isNotEmpty() })
         }
-        val mine = proposal.copy(days = proposal.days.filter { !it.date.isBefore(today) })
+        val asked = proposal.days.filter { !it.date.isBefore(today) }
+        // A day the profile does not give to the sport is not the coach's to fill: its session stays out, and the athlete is told why.
+        val refused = asked.filter { it.sessions.isNotEmpty() }.mapNotNull { day -> refusal(proposal.sport, day.date, availability) }
+        val mine = proposal.copy(days = asked.filter { refusal(proposal.sport, it.date, availability) == null })
         val past = done ?: current.days.filter { it.date.isBefore(today) }
         val keptToday = current.day(today)?.sessions.orEmpty().filter { it.own }
         val joined = merge(current.weekStart, today, past, others + mine, budget, profile, availability, now = now, keptToday = keptToday)
         val (checked, fixes) = settle(joined, budget, availability, profile, today)
         val settled = keepPlanned(checked, current.copy(plannedFrom = current.plannedFrom ?: current.weekStart), today)
-        val line = TableVoice.of(proposal.sport)?.let { voice ->
-            TableNote(voice, "Modifica chiesta in chat" + (proposal.note.ifBlank { proposal.rationale }.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "."))
-        }
         val changes = changes(current, settled, today)
+        // The coach's own words hold while its sessions are in the week. One the regia makes easier or shorter is
+        // explained by the regia's line that follows; one that is not there makes «l'ho spostata» a thing that did not happen.
+        val intact = refused.isEmpty() &&
+            changes(joined, checked, today).none { it.sport == proposal.sport && !it.session.own && it.kind == PlanChange.Kind.REMOVED }
+        val said = proposal.note.ifBlank { proposal.rationale }.takeIf { it.isNotBlank() }
+        val line = TableVoice.of(proposal.sport)?.let { voice ->
+            TableNote(voice, "Modifica chiesta in chat" + if (intact) said?.let { ": $it" } ?: "." else ": " + happened(changes, proposal.sport))
+        }
         // What changed without the regia settling anything follows from the profile: say that too.
         val profileNotes = profileNotes(changes.filter { it.sport != proposal.sport || it.session.own }, availability)
         val plan = settled.copy(
             plannedFrom = current.plannedFrom,
             phase = current.phase,
             rationale = current.rationale,
-            noteForNutriAi = proposal.noteForNutriAi.ifBlank { current.noteForNutriAi },
-            table = (current.table + listOfNotNull(line) + profileNotes.map { TableNote(TableVoice.REGIA, it) } + fixes).takeLast(MAX_TABLE),
+            // A note written for sessions that did not go in would tell NutriAI of a week that is not there.
+            noteForNutriAi = proposal.noteForNutriAi.takeIf { intact && it.isNotBlank() } ?: current.noteForNutriAi,
+            table = (current.table + listOfNotNull(line) + (refused + profileNotes).map { TableNote(TableVoice.REGIA, it) } + fixes).takeLast(MAX_TABLE),
             rounds = current.rounds.coerceAtLeast(1),
         )
-        return Revision(plan, changes, profileNotes + fixes.map { it.text })
+        return Revision(plan, changes, profileNotes + fixes.map { it.text }, refused)
+    }
+
+    /**
+     * Why a session of [sport] proposed for [date] cannot enter the week, in
+     * the athlete's words and with where to change it; null when it can.
+     * The days of each sport and the rest day are the athlete's choices in
+     * the profile: no coach overrides them, not even when asked in chat.
+     */
+    fun refusal(sport: Sport, date: LocalDate, availability: TrainingAvailability): String? {
+        val day = date.dayOfWeek
+        val name = TriRegia.sportName(sport).lowercase()
+        val dayName = AthleteContext.dayLabel(date)
+        val head = "La seduta di $name di $dayName non entra nel piano: "
+        return when {
+            day == availability.restDay -> head + "$dayName è il giorno di riposo che hai scelto. Puoi cambiarlo in Profilo › Giorni, orari e gara."
+            !availability.allows(sport, day) ->
+                head + "$dayName non è tra i tuoi giorni di $name (${TriRegia.daysText(sport, availability)}). Puoi aggiungere il giorno in Profilo › Giorni, orari e gara."
+            else -> null
+        }
+    }
+
+    /**
+     * What really changed for the sessions of [sport], for the minutes when
+     * the coach's own note can no longer be trusted: «ven 20, tolta «Aerobico», 45′».
+     */
+    private fun happened(changes: List<PlanChange>, sport: Sport): String {
+        val mine = changes.filter { it.sport == sport && !it.session.own }
+        if (mine.isEmpty()) return "le sedute di ${TriRegia.sportName(sport).lowercase()} restano come erano."
+        return mine.joinToString("; ") { "${ProposalPreview.day(it.date)}, ${ProposalPreview.describe(it).replaceFirstChar { c -> c.lowercase() }}" } + "."
     }
 
     /**
@@ -362,7 +413,8 @@ object CoachTable {
         val keptToday = current.day(today)?.sessions.orEmpty().filter { it.own }
         val joined = merge(current.weekStart, today, current.days.filter { it.date.isBefore(today) }, kept, budget, profile, availability, now = now, keptToday = keptToday)
         val changes = changes(current, joined, today)
-        if (changes.isEmpty()) return null
+        // A coach's session that only comes out a few minutes longer or shorter is not news: the week stays as written.
+        if (changes.none(::matters)) return null
         val notes = profileNotes(changes, availability)
         val (settled, fixes) = settle(joined, budget, availability, profile, today)
         val plan = settled.copy(
@@ -376,7 +428,19 @@ object CoachTable {
             availableMin = budget.availableMinutes,
             maxHard = budget.maxHardSessions,
         )
-        return Revision(plan, changes(current, plan, today), notes + fixes.map { it.text })
+        return Revision(plan, changes(current, plan, today).filter(::matters), notes + fixes.map { it.text })
+    }
+
+    /**
+     * Whether a change of [realign] is worth telling: not a coach's session
+     * that is the same but for a duration worked out again a few minutes
+     * apart ([RETIMED_MIN]), as happens when a threshold moves a little.
+     */
+    private fun matters(change: PlanChange): Boolean {
+        val before = change.before ?: return true
+        val after = change.after ?: return true
+        if (change.kind != PlanChange.Kind.CHANGED || after.own) return true
+        return !same(before, after.copy(durationMin = before.durationMin)) || kotlin.math.abs(after.durationMin - before.durationMin) >= RETIMED_MIN
     }
 
     /** By the athlete's usual time when every sport of the day has one, else swim, bike, run, and the gym last. */

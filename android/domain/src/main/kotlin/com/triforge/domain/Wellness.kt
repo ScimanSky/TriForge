@@ -39,6 +39,13 @@ data class CheckIn(
     /** From 5 (everything great) to 35 (everything bad). */
     val total: Int get() = sleepQuality + fatigue + soreness + stress + motivation
 
+    /**
+     * How the athlete feels in one number, as Oggi shows it: from 1 (bad)
+     * to 5 (great), the other way round from the items. Coaches are told
+     * this one too, so they speak of the check-in on the scale the athlete sees.
+     */
+    val feel: Double get() = 5.0 - (total - 5) / 30.0 * 4.0
+
     companion object {
         const val MIN = 1
         const val MAX = 7

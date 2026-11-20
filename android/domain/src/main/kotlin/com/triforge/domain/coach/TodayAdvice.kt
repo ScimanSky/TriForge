@@ -32,6 +32,11 @@ data class TodayCard(
     val meal: KeyMeal?,
     /** Tomorrow in a line, when the card is about today and the week reaches tomorrow. */
     val next: String?,
+    /**
+     * Today's sessions whose time is gone and that are not known as done,
+     * in a line: the card moves on, but does not pretend they were not there.
+     */
+    val earlier: String? = null,
 )
 
 /**
@@ -63,6 +68,7 @@ object TodayAdvice {
 
         val over = CoachTable.planningDay(today, now) != today
         val todays = if (over) emptyList() else open(today).filter { stillAhead(it, availability, now) }
+        val gone = open(today).filter { it !in todays }
         val nextDay = today.plusDays(1)
         val tomorrows = open(nextDay)
         val aboutTomorrow = todays.isEmpty()
@@ -78,7 +84,30 @@ object TodayAdvice {
             time = sessions.firstOrNull()?.let { time(it, availability) },
             meal = nutrition[date]?.let(::keyMeal),
             next = if (aboutTomorrow || plan.day(nextDay) == null) null else line(tomorrows, availability),
+            earlier = earlier(gone, availability),
         )
+    }
+
+    /**
+     * «Oggi c'era «Nuoto aerobico» alle 13:20: non risulta ancora fatta…».
+     * The app cannot tell a session skipped from one the watch has not sent
+     * yet, so it says both, and what to do in each case.
+     */
+    fun earlier(gone: List<PlannedSession>, availability: TrainingAvailability): String? {
+        if (gone.isEmpty()) return null
+        val one = gone.size == 1
+        val names = gone.map { session ->
+            "«${session.title}»" + time(session, availability)?.let { " alle %d:%02d".format(it.hour, it.minute) }.orEmpty()
+        }
+        val list = if (one) names.first() else names.dropLast(1).joinToString(", ") + " e " + names.last()
+        // Only a coach's session can be moved by asking: the athlete's own are theirs to move.
+        val coached = gone.any { !it.own }
+        return buildString {
+            append(if (one) "Oggi c'era $list: non risulta ancora fatta. " else "Oggi c'erano $list: non risultano ancora fatte. ")
+            append(if (one) "Se l'hai fatta, comparirà quando l'orologio si sincronizza" else "Se le hai fatte, compariranno quando l'orologio si sincronizza")
+            if (coached) append(if (one) "; se l'hai saltata, puoi chiedere al coach di spostarla" else "; se le hai saltate, puoi chiedere al coach di spostarle")
+            append(".")
+        }
     }
 
     private fun time(session: PlannedSession, availability: TrainingAvailability): LocalTime? =
@@ -138,6 +167,14 @@ object TodayAdvice {
         val text = if (meal.dishes.isNotEmpty()) meal.dishes.joinToString(", ") { it.name } else meal.description
         return KeyMeal(meal.name, text).takeIf { text.isNotBlank() }
     }
+
+    /**
+     * How the athlete is, as Oggi says it and without what to do about it:
+     * «Hai recuperato bene e il carico è leggero». The coaches are given
+     * these words, so the chat and Oggi do not tell two different stories.
+     */
+    fun state(recovery: RecoveryDay?, form: FormZone?, loadInDoubt: Boolean = false): String =
+        sentence(recovery, form, hasSession = false, loadInDoubt = loadInDoubt).substringBefore(':').trim().trimEnd('.')
 
     /**
      * Recovery and form in one sentence, with what follows for today. The

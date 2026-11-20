@@ -529,6 +529,10 @@ object TriRegia {
 
     private fun dayList(days: Set<DayOfWeek>): String = days.sorted().joinToString(", ") { dayName(it) }
 
+    /** The days the athlete gave to [sport] in the profile: «lun, mer, ven», or «tutti i giorni» when none was chosen. */
+    fun daysText(sport: Sport, availability: TrainingAvailability): String =
+        availability.slot(sport)?.days.orEmpty().takeIf { it.isNotEmpty() }?.let(::dayList) ?: "tutti i giorni"
+
     private fun hoursText(minutes: Int): String {
         val hours = minutes / 60.0
         return if (hours % 1.0 == 0.0) hours.toInt().toString() else "%.1f".format(Locale.ITALY, hours)

@@ -128,6 +128,8 @@ data class NutriUiState(
     val error: CoachException.Reason? = null,
     /** What failed can be asked again as it was, with «Riprova». */
     val retryable: Boolean = false,
+    /** The answer that did not come was one of the chat: the error is shown there, under the athlete's message. */
+    val errorInChat: Boolean = false,
     val change: ChangeDishUi? = null,
     val undo: NutriUndo? = null,
 ) {
@@ -164,6 +166,8 @@ class NutriViewModel(
         val preparing: LocalDate? = null,
         val error: CoachException.Reason? = null,
         val retryable: Boolean = false,
+        /** What was running when [error] came. */
+        val failed: CoachTask? = null,
         val change: ChangeDishUi? = null,
         val undo: NutriUndo? = null,
     )
@@ -217,6 +221,7 @@ class NutriViewModel(
             preparing = ui.preparing,
             error = ui.error,
             retryable = ui.retryable,
+            errorInChat = ui.error != null && ui.failed == CoachTask.REPLYING,
             change = ui.change,
             undo = ui.undo,
         )
@@ -649,7 +654,7 @@ class NutriViewModel(
 
     fun clearError() {
         again = null
-        local.update { it.copy(error = null, retryable = false) }
+        local.update { it.copy(error = null, retryable = false, failed = null) }
     }
 
     /**
@@ -660,12 +665,12 @@ class NutriViewModel(
         if (kind != null && local.value.task != null) return
         if (kind != null) local.update { it.copy(task = kind) }
         viewModelScope.launch {
-            local.update { it.copy(error = null, retryable = false) }
+            local.update { it.copy(error = null, retryable = false, failed = null) }
             fun failed(reason: CoachException.Reason) {
                 // Asking again helps when the answer did not come, not when the weight is missing.
                 val retry = again?.takeIf { reason != CoachException.Reason.NEEDS_WEIGHT }
                 this@NutriViewModel.again = retry
-                local.update { it.copy(error = reason, retryable = retry != null) }
+                local.update { it.copy(error = reason, retryable = retry != null, failed = kind) }
             }
             try {
                 block()

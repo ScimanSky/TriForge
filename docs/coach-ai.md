@@ -329,16 +329,34 @@ frase sola che legge insieme recupero e forma (la risposta del corpo viene
 prima, il carico la spiega), e il pasto che conta per NutriAI. Nessun modello
 viene chiamato: è tutto calcolato dalla settimana e dai dati già caricati. Una
 seduta di oggi non ancora registrata resta «di oggi» fino a un'ora dopo la sua
-fine all'orario abituale.
+fine all'orario abituale. Dopo, la scheda passa a domani ma non la salta in
+silenzio: «Oggi c'era … : non risulta ancora fatta» (`TodayCard.earlier`),
+perché l'app non distingue una seduta saltata da una che l'orologio non ha
+ancora mandato.
+
+I coach ricevono lo stesso giudizio che l'atleta legge in Oggi
+(`TodayAdvice.state`) e il check-in sulla sua scala vera (ogni voce da 1,
+molto bene, a 7, molto male) insieme al numero che Oggi mostra («Come ti
+senti 3 su 5»): così chat e Oggi non raccontano due stati diversi.
 
 ### Quando un modello non risponde
 
-Ogni chiamata ha un'attesa massima (`AiWait`: 20 secondi per un piatto, 45 per
-una risposta in chat, 90 per una settimana o una giornata di pasti) e un
-numero di tentativi (`geminiJson`). Se non arriva una risposta valida, l'app lo dice con il motivo
-(rete, attesa scaduta, servizio occupato, risposta non leggibile) e un tasto
+Ogni risposta ha un'attesa massima (`AiWait`: 25 secondi per un piatto, 45 per
+una risposta in chat, 90 per una settimana o una giornata di pasti). Dentro
+quell'attesa l'app non si fida di una sola chiamata (`firstAnswer`): ogni tanto
+una richiesta resta appesa, e la stessa domanda rifatta riceve risposta in
+pochi secondi. Quindi, se la prima chiamata tace ancora dopo 8, 15 o 30
+secondi, l'app ne fa partire un'altra accanto e usa la prima che risponde; una
+chiamata fallita per un motivo passeggero (rete, servizio, risposta non
+leggibile) viene rifatta subito. L'atleta vede una sola attesa. Un motivo che
+riprovare non risolve (servizio occupato, AI non attiva, risposta bloccata)
+chiude l'attesa subito.
+
+Se non arriva una risposta valida, l'app lo dice con il motivo e un tasto
 «Riprova» che rifà la stessa richiesta: in chat il messaggio dell'atleta
-resta, e nessuna schermata rimane ferma su un caricamento.
+resta, e nessuna schermata rimane ferma su un caricamento. L'errore compare
+dove l'atleta sta guardando: nelle chat sotto il suo ultimo messaggio (anche
+in NutriAI, dove la chat è in fondo alla pagina), per i pasti in cima.
 
 ### Una chat per coach
 
@@ -362,6 +380,22 @@ resta il riepilogo con «Annulla»: la settimana di prima è salvata nel campo
 `undo` di `coaching/coach` e torna com'era con un tocco, finché non si applica
 un'altra modifica o si rifà la settimana. Una proposta annullata ha stato
 `undone` e si può applicare di nuovo.
+
+I giorni di ogni sport e il giorno di riposo sono dell'atleta: nessun coach li
+scavalca, nemmeno se glielo si chiede in chat («spostamela a domenica»). Il
+coach li riceve tra i suoi limiti (`SportCoachPrompts.days`) con la regola di
+non promettere un giorno che non c'è. Se li scrive lo stesso, la seduta in
+quel giorno non entra (`CoachTable.refusal`): la scheda lo dice per prima
+cosa, con il motivo e dove si cambiano i giorni, e nel verbale la riga del
+coach non riporta più le sue parole («ho spostato a domenica») ma quello che
+è cambiato davvero. Le parole del coach restano quando le sue sedute sono
+tutte nella settimana, anche se la regia le ha accorciate o rese facili: in
+quel caso lo spiega la riga della regia che segue.
+
+Quando il profilo cambia, la settimana si riallinea da sola
+(`CoachTable.realign`) e lo dice una volta. Una seduta di un coach che esce
+solo ricalcolata di qualche minuto (meno di `RETIMED_MIN`) non è una notizia:
+la settimana resta com'è e non compare nessun avviso.
 
 Con la tastiera aperta la schermata sopra la chat si riduce a una riga (tavola
 6g): il nome del coach, che apre i tre coach, e «Settimana». Le domande già

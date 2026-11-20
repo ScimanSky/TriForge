@@ -129,6 +129,13 @@ private fun Preview(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp),
         )
+        // What the coach wrote and the week cannot take comes first: it is what its words promised.
+        view.refused.forEach { reason ->
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Dot(TriColors.alert, Modifier.padding(top = 5.dp))
+                Text(reason, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFE6E9EE), modifier = Modifier.weight(1f))
+            }
+        }
         if (view.lines.isEmpty()) {
             Text(
                 stringResource(R.string.coach_proposal_empty, TriRegia.sportName(sport).lowercase()),

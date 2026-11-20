@@ -2,6 +2,8 @@ package com.triforge.domain.coach
 
 import com.triforge.domain.Sport
 import java.time.LocalDate
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
  * The words of the three sport coaches. Each is an expert of one sport only
@@ -55,6 +57,8 @@ Come parli con l'atleta:
 - Sei un allenatore, non un assistente che asseconda. Se l'atleta contesta una tua scelta, prima spiega perché l'avevi fatta, con i suoi dati. Cambi idea solo se porta un fatto nuovo o se i dati gli danno ragione, e in quel caso dici quale. Non scrivere «hai ragione» per cortesia, e non cedere su ciò che lo espone a infortuni o a un carico che non regge.
 - Una modifica alle sedute è sempre una proposta: l'atleta la vede sotto la tua risposta e decide lui se applicarla. Scrivi «ti propongo», mai «ho aggiornato», «ho modificato» o «ho inserito».
 - Proponi una modifica solo quando l'atleta la chiede. Se pensi che ne servirebbe un'altra, dillo a parole e chiedigli se la vuole.
+- I giorni di ogni sport e il giorno di riposo li ha scelti l'atleta nel profilo, e li trovi nella regia. Una tua seduta va solo in quei giorni: in un altro giorno l'app non la fa entrare nel piano. Se l'atleta ti chiede un giorno che non è tra i suoi, non prometterlo e non scrivere che sposti lì la seduta: digli che quel giorno non è tra quelli che ha indicato per il tuo sport, proponigli il giorno possibile più vicino, e ricordagli che può aggiungere il giorno in Profilo › Giorni, orari e gara.
+- Quello che scrivi in "reply" deve corrispondere a quello che metti in "proposal": stessi giorni, stesse sedute. Non annunciare a parole uno spostamento che la proposta non contiene.
 - Le soglie (CSS, FTP, passo soglia) non le cambi tu e non si cambiano per una sensazione. Se l'atleta pensa che una soglia sia sbagliata, guarda le sedute fatte, digli cosa vedi e proponigli un test (nuoto: 400 m e 200 m al massimo; bici: 20 minuti al massimo; corsa: 30 minuti al massimo o una gara di 5-10 km), poi di aggiornarla nel profilo.
 - La CSS è il passo che l'atleta tiene per circa mezz'ora di fila, non il suo passo sui 100 m. È normale che sia più lenta delle ripetute da 25, 50 e 100 m con recupero, in certi nuotatori anche di 15 secondi ogni 100 m: non leggerlo come una soglia sbagliata. Per giudicarla guarda solo le nuotate continue da 200 m in su.
 - Attrezzatura in vasca: pinne, pull buoy e palette fanno nuotare più veloce del proprio passo, e l'orologio non le registra. Le segna l'atleta nella nuotata, e nei dati le trovi scritte («con pinne»). Quei tratti non dicono niente della soglia né dei progressi: per il passo dell'atleta guarda quello «senza attrezzatura». Se una nuotata o una serie è molto più veloce del suo solito e l'attrezzatura non è segnata, prima di parlare di miglioramento chiedigli se l'ha usata, e ricordagli che può segnarla nel dettaglio della nuotata.
@@ -180,6 +184,24 @@ ${CoachPrompts.SAFETY}
         appendLine(nutri?.summary ?: "NutriAI non ha ancora pubblicato nulla.")
     }.trimEnd()
 
+    /**
+     * Where a session of [sport] can go, said as a limit of the coach and
+     * not only among the regia's lines: asked «spostamela a domenica», a
+     * coach that reads the days only there promises a day the app then
+     * refuses ([CoachTable.refusal]).
+     */
+    fun days(sport: Sport, availability: TrainingAvailability): String {
+        val name = TriRegia.sportName(sport).lowercase()
+        val rest = availability.restDay?.getDisplayName(TextStyle.FULL, Locale.ITALIAN)
+        val chosen = availability.slot(sport)?.days.orEmpty().isNotEmpty()
+        return buildString {
+            append("Giorni in cui l'atleta può fare $name: ${TriRegia.daysText(sport, availability)}")
+            rest?.let { append(if (chosen) "; $it è il suo giorno di riposo" else ", tranne $it, il suo giorno di riposo") }
+            append(". Metti le tue sedute solo in questi giorni: in un altro giorno l'app non le fa entrare nel piano. ")
+            append("Se l'atleta chiede un giorno diverso, non proporlo: diglielo, proponi il giorno possibile più vicino e ricordagli che i giorni si cambiano in Profilo › Giorni, orari e gara.")
+        }
+    }
+
     /** Where a coach sends a question that is not its own: another coach's chat or NutriAI. */
     const val HANDOFF_NUTRI = "nutriai"
 
@@ -202,6 +224,8 @@ ${CoachPrompts.SAFETY}
         message: String,
         /** What was planned and what was done so far this week ([WeekReview.describe]), or blank. */
         review: String = "",
+        /** The athlete's days and times: with them the coach is told, in its own limits, where a session can go. */
+        availability: TrainingAvailability? = null,
     ): String = buildString {
         val mine = budget.sports.getValue(sport)
         val name = TriRegia.sportName(sport).lowercase()
@@ -220,6 +244,7 @@ ${CoachPrompts.SAFETY}
         if (sport in budget.coached) {
             appendLine("Minuti di $name nella settimana: ${mine.minutes}. Sedute di qualità tue: al massimo ${mine.maxQuality}. Minuti in zona alta: al massimo ${TriRegia.highZoneBudget(sport, mine.minutes)}.")
             mine.longestMin?.let { appendLine("Seduta più lunga: al massimo $it minuti.") }
+            availability?.let { appendLine(days(sport, it)) }
         }
         appendLine()
         appendLine("## Regia della settimana")
