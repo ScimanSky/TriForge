@@ -75,7 +75,11 @@ ripetizioni e chili sollevati per esercizio).
 (`free`, `back`, `breast`, `fly`, `drill`, `mixed`) e `lengths`, le vasche con gli
 stessi campi. Un recupero a bordo vasca è un giro senza distanza. Il servizio le
 legge con una richiesta in più per nuotata (al massimo 25 per sincronizzazione,
-le più recenti prima) e non le rilegge quando `hasLaps` è vero. Dalle ripetute
+le più recenti prima) e non le rilegge quando `hasLaps` è vero. Le nuotate
+degli ultimi quattro mesi salvate senza `hasLaps`, perché sincronizzate prima
+che il servizio leggesse le ripetute o perché uscite dai giorni che una
+sincronizzazione riguarda, le riprende con quello che resta delle 25: per
+quelle scrive solo `laps` e `hasLaps`. Dalle ripetute
 l'app ricava passo per ripetuta, zone di passo sulla CSS, tenuta del passo e
 della bracciata, carico vasca per vasca e la CSS stimata (`SwimAnalysis`, idee
 riprese da SwimForge). Health Connect non dà le ripetute.

@@ -17,7 +17,12 @@ from .gateway import (
     MfaChallenge,
     Session,
 )
-from .normalize import document_id, normalize_activity, normalize_health
+from .normalize import (
+    document_id,
+    normalize_activity,
+    normalize_health,
+    normalize_swim_laps,
+)
 from .store import Store
 
 logger = logging.getLogger(__name__)
@@ -149,6 +154,14 @@ class GarminService:
                 start.date(),
                 now.date(),
                 frozenset(self._store.swims_with_laps(uid)),
+                # Swims stored before laps were read, or that have fallen out
+                # of the dates of the syncs since: their laps come a few at
+                # a time, so that an old swim shows its repeats too.
+                tuple(
+                    self._store.swims_without_laps(
+                        uid, now - timedelta(days=self._settings.initial_sync_days)
+                    )
+                ),
             )
         except GarminAuthError:
             # Tokens were revoked or expired beyond refresh.
@@ -171,6 +184,14 @@ class GarminService:
                 continue
             doc["syncedAt"] = now
             docs[document_id(item["activityId"])] = doc
+        synced = len(docs)
+        # Laps of older swims: only the laps are written, the rest of the
+        # document stays as it was stored.
+        recent = {str(item.get("activityId")) for item in data.activities}
+        for activity_id, splits in data.swim_splits.items():
+            if activity_id not in recent:
+                laps = normalize_swim_laps(splits)
+                docs[document_id(activity_id)] = {"laps": laps, "hasLaps": bool(laps)}
 
         health = normalize_health(
             data.health.hrv, data.health.resting_hr, data.health.sleep
@@ -188,11 +209,11 @@ class GarminService:
                 "lastSyncAt": now,
                 "lastSyncAttemptAt": now,
                 "lastSyncStatus": "ok",
-                "lastSyncCount": len(docs),
+                "lastSyncCount": synced,
                 "lastSyncHealthDays": len(health),
             },
         )
-        return SyncResult(synced=len(docs), skipped=skipped)
+        return SyncResult(synced=synced, skipped=skipped)
 
     def sync_all(self) -> dict[str, int]:
         """Sync every connected athlete. One failure does not stop the rest."""

@@ -239,3 +239,56 @@ def test_swim_laps_are_stored_once_and_kept_on_later_syncs(service, gateway, sto
     assert gateway.swims_with_laps_seen[-1] == frozenset({"7"})
     assert store.activities[UID]["garmin_7"]["hasLaps"] is True
     assert len(store.activities[UID]["garmin_7"]["laps"]) == 1
+
+
+def test_an_older_swim_stored_without_laps_gets_them_on_the_next_sync(
+    service, gateway, store
+):
+    service.connect(UID, "ada@example.com", "hunter2")
+    # Stored when the service did not read laps yet, five days before: the
+    # dates of the next syncs no longer reach it.
+    old = activity(5, "lap_swimming", start="2026-11-13 12:31:00")
+    gateway.activities = [old]
+    service.sync(UID)
+    assert "hasLaps" not in store.activities[UID]["garmin_5"]
+
+    gateway.activities = [activity(8)]
+    gateway.swim_splits = {"5": {"lapDTOs": [{"distance": 100.0, "duration": 110.0}]}}
+    result = service.sync(UID)
+
+    assert gateway.swims_without_laps_seen[-1] == ("5",)
+    stored = store.activities[UID]["garmin_5"]
+    assert stored["laps"] == [{"distanceMeters": 100.0, "durationSec": 110.0}]
+    assert stored["hasLaps"] is True
+    # Only the laps were written: the rest is as it was stored.
+    assert stored["name"] == "Activity 5"
+    assert stored["distanceMeters"] == 5000.0
+    # And it does not count among the activities of this sync.
+    assert result.synced == 1
+
+    service.sync(UID)
+    assert gateway.swims_without_laps_seen[-1] == ()
+
+
+def test_older_swims_are_asked_newest_first_and_only_swims_never_read(
+    service, gateway, store, clock
+):
+    service.connect(UID, "ada@example.com", "hunter2")
+    gateway.activities = [
+        activity(1, "lap_swimming", start="2026-09-01 07:00:00"),
+        activity(2, "lap_swimming", start="2026-11-10 07:00:00"),
+        activity(3, "open_water_swimming", start="2026-10-01 07:00:00"),
+        activity(4, "running", start="2026-11-09 07:00:00"),
+        # Before the first sync's own reach: left alone.
+        activity(6, "lap_swimming", start="2026-05-01 07:00:00"),
+    ]
+    # Garmin has no laps for the open water swim: it is read once, not again.
+    gateway.swim_splits = {"3": {"lapDTOs": []}}
+    service.sync(UID, days_back=400)
+    assert store.activities[UID]["garmin_3"]["hasLaps"] is False
+
+    gateway.activities = []
+    service.sync(UID)
+
+    assert gateway.swims_without_laps_seen[-1] == ("2", "1")
+

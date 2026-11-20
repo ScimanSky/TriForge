@@ -47,6 +47,66 @@ class SwimAnalysisTest {
         ),
     )
 
+    /** A repeat with the time of each of its lengths, as the watch counted them. */
+    private fun counted(meters: Double, strokes: Int, vararg lengths: Double) =
+        SwimLap(meters, lengths.sum(), strokes = strokes, stroke = "free", lengths = lengths.map { SwimLength(25.0, it, strokes = 9) })
+
+    @Test
+    fun `a length the watch counted twice is taken away`() {
+        // 100 m in 2:02. The watch felt a turn in the middle of the third length and of the fourth: 150 m at 1:21.
+        val repeat = SwimAnalysis.repeats(swim(listOf(counted(150.0, 54, 29.3, 27.5, 12.6, 19.3, 20.1, 13.2)))).single()
+
+        assertEquals(100.0, repeat.distanceMeters, 1e-9)
+        assertEquals(122.0, repeat.paceSecPer100, 1e-6)
+        assertContentEquals(listOf(29.3, 27.5, 31.9, 33.3), repeat.lengths.map { Math.round(it.durationSec * 10) / 10.0 })
+        assertEquals(listOf(9, 9, 18, 18), repeat.lengths.map { it.strokes })
+        assertEquals(2, repeat.recounted)
+        assertEquals(150.0, repeat.recordedMeters, 1e-9)
+        // The time and the strokes are the repeat's own, over the lengths swum.
+        assertEquals(54, repeat.strokes)
+        assertEquals(44, repeat.swolf)
+
+        // Split in two even pieces.
+        val even = SwimAnalysis.repeats(swim(listOf(counted(100.0, 40, 28.0, 14.0, 15.0, 29.0)))).single()
+        assertEquals(75.0, even.distanceMeters, 1e-9)
+        assertEquals(1, even.recounted)
+    }
+
+    @Test
+    fun `lengths that are only uneven are left as the watch counted them`() {
+        fun kept(meters: Double, vararg lengths: Double) {
+            val repeat = SwimAnalysis.repeats(swim(listOf(counted(meters, 40, *lengths)))).single()
+            assertEquals(meters, repeat.distanceMeters, 1e-9, lengths.toList().toString())
+            assertEquals(0, repeat.recounted)
+            assertEquals(meters, repeat.recordedMeters, 1e-9)
+        }
+        // A turn felt late: one length short, the next long, and the count is right.
+        kept(100.0, 27.4, 31.8, 20.4, 34.7)
+        // A fast last length.
+        kept(100.0, 25.5, 28.8, 32.5, 20.8)
+        // A short length that makes no whole one with the length beside it.
+        kept(125.0, 18.8, 20.5, 25.3, 20.1, 12.8)
+        // A turn the watch missed: two lengths in one.
+        kept(75.0, 25.3, 23.3, 69.9)
+        // Half with a kickboard, half swum.
+        kept(100.0, 40.0, 40.0, 24.0, 24.0)
+        // Two lengths are too few to tell.
+        kept(50.0, 12.0, 27.0)
+    }
+
+    @Test
+    fun `a length counted twice no longer makes the fastest repeat or the usual pace`() {
+        val activity = swim(
+            listOf(counted(150.0, 54, 29.3, 27.5, 12.6, 19.3, 20.1, 13.2), rest(20.0)) +
+                (1..5).flatMap { listOf(lap(100.0, 110.0, strokes = 52), rest(20.0)) },
+        )
+        val repeats = SwimAnalysis.repeats(activity)
+
+        assertEquals(110.0, repeats.filter { it.own }.minOf { it.paceSecPer100 }, 1e-6)
+        assertEquals(110.0, SwimAnalysis.usualPace(repeats)!!, 1e-6)
+        assertEquals(0, repeats.count { it.doubtful })
+    }
+
     @Test
     fun `repeats carry the rest that follows them`() {
         val repeats = SwimAnalysis.repeats(session)

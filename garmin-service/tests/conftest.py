@@ -28,6 +28,7 @@ class FakeGateway:
         self.fetch_calls: list[tuple[str, date, date]] = []
         self.swim_splits: dict[str, dict[str, Any]] = {}
         self.swims_with_laps_seen: list[frozenset[str]] = []
+        self.swims_without_laps_seen: list[tuple[str, ...]] = []
 
     def login(self, email: str, password: str) -> Session | MfaChallenge:
         self.login_calls.append((email, password))
@@ -47,12 +48,22 @@ class FakeGateway:
         start: date,
         end: date,
         swims_with_laps: frozenset[str] = frozenset(),
+        swims_without_laps: tuple[str, ...] = (),
     ) -> GarminData:
         self.fetch_calls.append((tokens, start, end))
         self.swims_with_laps_seen.append(swims_with_laps)
+        self.swims_without_laps_seen.append(swims_without_laps)
         if self.fetch_error:
             raise self.fetch_error
-        splits = {k: v for k, v in self.swim_splits.items() if k not in swims_with_laps}
+        # Like the real gateway: the swims between the dates and the older
+        # ones asked for, never one whose laps are already stored.
+        wanted = {str(raw.get("activityId")) for raw in self.activities}
+        wanted |= set(swims_without_laps)
+        splits = {
+            k: v
+            for k, v in self.swim_splits.items()
+            if k in wanted and k not in swims_with_laps
+        }
         return GarminData(
             self.activities, self.health, Session(tokens=self.refreshed_tokens), splits
         )

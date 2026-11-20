@@ -539,6 +539,19 @@ private fun RepeatsCard(repeats: List<SwimRepeat>, gearHint: Boolean = false) {
                         .padding(12.dp),
                 )
             }
+            if (repeat.recounted > 0) {
+                // The distance is not the one in Garmin: say why, where the athlete sees it.
+                Text(
+                    text = if (repeat.recounted == 1) {
+                        stringResource(R.string.swim_recount_one, repeat.recordedMeters.roundToInt())
+                    } else {
+                        stringResource(R.string.swim_recount, repeat.recordedMeters.roundToInt(), repeat.recounted)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
             if (showLengths) {
                 repeat.lengths.forEachIndexed { index, length ->
                     TableRow(
