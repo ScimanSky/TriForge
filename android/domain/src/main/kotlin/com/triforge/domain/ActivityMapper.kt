@@ -94,6 +94,28 @@ object ActivityMapper {
     }
 
     /**
+     * The equipment the athlete marked on one swim, from its stored fields:
+     * `session` (a list of keys) and `repeats` (interval number to keys).
+     * Null when nothing is stored: an empty entry is the answer "none".
+     */
+    fun gearFromFields(value: Any?): SwimGearMarks? {
+        val fields = value as? Map<*, *> ?: return null
+        fun gear(list: Any?): Set<SwimGear> = (list as? List<*>).orEmpty().mapNotNull { SwimGear.of(it) }.toSet()
+        val repeats = (fields["repeats"] as? Map<*, *>).orEmpty().mapNotNull { (key, list) ->
+            val number = key?.toString()?.toIntOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+            gear(list).takeIf { it.isNotEmpty() }?.let { number to it }
+        }.toMap()
+        return SwimGearMarks(gear(fields["session"]), repeats)
+    }
+
+    /** [marks] as stored fields, see [gearFromFields]. */
+    fun gearToFields(marks: SwimGearMarks): Map<String, Any> = mapOf(
+        "session" to marks.session.sortedBy { it.ordinal }.map { it.key },
+        "repeats" to marks.repeats.filterValues { it.isNotEmpty() }.toSortedMap()
+            .map { (number, gear) -> number.toString() to gear.sortedBy { it.ordinal }.map { it.key } }.toMap(),
+    )
+
+    /**
      * The sport of a document. Gym sessions synced before the service knew
      * them were stored as "other" with their type: the type still tells.
      */

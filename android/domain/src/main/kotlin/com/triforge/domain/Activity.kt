@@ -56,6 +56,11 @@ data class Activity(
     val reps: Int? = null,
     /** A gym session's exercises, most work first, when the watch recognised them. */
     val exercises: List<ExerciseSummary> = emptyList(),
+    /**
+     * What the athlete said about the equipment of a swim: no watch records
+     * it. Null while nobody has answered; empty marks mean "none".
+     */
+    val gear: SwimGearMarks? = null,
 ) {
     /** Kilograms lifted over the gym session (weight x repetitions), or null when no weights were recorded. */
     val liftedKg: Double? get() = exercises.mapNotNull { it.volumeKg }.takeIf { it.isNotEmpty() }?.sum()
@@ -80,6 +85,43 @@ data class Activity(
 
     /** Seconds stopped inside the session, or null when the source did not measure them. */
     val restSec: Long? get() = movingDurationSec?.let { (durationSec - movingSec).coerceAtLeast(0) }
+}
+
+/**
+ * Equipment that makes a swimmer faster than their own stroke does: what
+ * is swum with it says nothing about the threshold or about progress.
+ */
+enum class SwimGear(val key: String) {
+    FINS("fins"), PULL_BUOY("pull_buoy"), PADDLES("paddles");
+
+    companion object {
+        fun of(key: Any?): SwimGear? = entries.firstOrNull { it.key == key }
+    }
+}
+
+/**
+ * The equipment of one swim, as the athlete marked it: over the whole swim
+ * ([session]) or interval by interval ([repeats], by [SwimRepeat.number]).
+ */
+data class SwimGearMarks(
+    val session: Set<SwimGear> = emptySet(),
+    val repeats: Map<Int, Set<SwimGear>> = emptyMap(),
+) {
+    /** The equipment of the swum interval [number], counted from 1. */
+    fun of(number: Int): Set<SwimGear> = session + repeats[number].orEmpty()
+
+    /** True when some equipment was marked: false is the athlete saying "none". */
+    val any: Boolean get() = session.isNotEmpty() || repeats.values.any { it.isNotEmpty() }
+
+    companion object {
+        /** The athlete's answer "no equipment". */
+        val NONE = SwimGearMarks()
+    }
+}
+
+/** Metres and seconds a pace is worked out from. */
+data class PaceBase(val meters: Double, val seconds: Double) {
+    val secondsPerMeter: Double get() = seconds / meters
 }
 
 /**

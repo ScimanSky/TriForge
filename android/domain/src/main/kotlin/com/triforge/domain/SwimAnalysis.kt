@@ -25,8 +25,20 @@ data class SwimRepeat(
      * but kept out of zones, load, records and the threshold estimate.
      */
     val doubtful: Boolean = false,
+    /**
+     * Equipment the athlete marked on it. With it the pace is not that of
+     * the stroke alone: shown, but kept out of zones, records, comparisons
+     * and the threshold, like a doubtful repeat.
+     */
+    val gear: Set<SwimGear> = emptySet(),
 ) {
     val paceSecPer100: Double get() = durationSec / distanceMeters * 100.0
+
+    /** Swum with equipment. */
+    val assisted: Boolean get() = gear.isNotEmpty()
+
+    /** The pace is the athlete's own: one the watch can be trusted on, swum without equipment. */
+    val own: Boolean get() = !doubtful && !assisted
 
     /** Metres per stroke, when the watch counted the strokes. */
     val metersPerStroke: Double? get() = strokes?.takeIf { it > 0 }?.let { distanceMeters / it }
@@ -78,6 +90,31 @@ data class SwimEfficiency(
     val strokeRate: Int?,
     val swolf: Int?,
 )
+
+/**
+ * How much of a swim was swum with equipment, and what is left without.
+ * The two parts are read apart: with fins, a pull buoy or paddles the pace
+ * is faster than the athlete's own.
+ */
+data class SwimGearUse(
+    /** Every piece of equipment marked on the swim. */
+    val gear: Set<SwimGear>,
+    val meters: Double,
+    val seconds: Double,
+    /** The swimming without equipment that can be read; zero metres when all of it was with. */
+    val ownMeters: Double,
+    val ownSeconds: Double,
+    /** The intervals swum with equipment, by number; empty for a swim without laps. */
+    val repeats: List<Int> = emptyList(),
+) {
+    /** True when nothing of the swim is left to read without equipment. */
+    val whole: Boolean get() = ownMeters <= 0 || ownSeconds <= 0
+
+    val paceSecPer100: Double? get() = if (meters > 0 && seconds > 0) seconds / meters * 100.0 else null
+
+    /** The athlete's own pace in the swim, s/100 m; null when [whole]. */
+    val ownPaceSecPer100: Double? get() = if (whole) null else ownSeconds / ownMeters * 100.0
+}
 
 /** A critical swim speed worked out from the athlete's own best efforts. */
 data class CssEstimate(
@@ -153,6 +190,7 @@ object SwimAnalysis {
                 stroke = lap.stroke,
                 lengths = lap.lengths,
                 restAfterSec = restAfter,
+                gear = activity.gear?.of(result.size + 1).orEmpty(),
             )
         }
         for (lap in activity.laps) {
@@ -185,22 +223,27 @@ object SwimAnalysis {
         else -> 0.55
     }
 
-    /** [repeats] with the ones whose pace cannot be right marked [SwimRepeat.doubtful]. */
+    /**
+     * [repeats] with the ones whose pace cannot be right marked
+     * [SwimRepeat.doubtful]. A repeat with equipment is never one: the
+     * athlete said why it is fast, and it is left out of the usual pace the
+     * others are measured against.
+     */
     private fun flagged(repeats: List<SwimRepeat>): List<SwimRepeat> {
-        val paces = repeats.filter { it.distanceMeters > 0 && it.durationSec > 0 }.map { it.paceSecPer100 }
+        val paces = repeats.filter { !it.assisted && it.distanceMeters > 0 && it.durationSec > 0 }.map { it.paceSecPer100 }
         if (paces.isEmpty()) return repeats
         val usual = Stats.median(paces)
         return repeats.map { repeat ->
-            if (repeat.distanceMeters <= 0 || repeat.durationSec <= 0) return@map repeat
+            if (repeat.assisted || repeat.distanceMeters <= 0 || repeat.durationSec <= 0) return@map repeat
             val pace = repeat.paceSecPer100
             val outlier = paces.size >= MIN_FOR_DOUBT && pace < usual * plausibleShare(repeat.distanceMeters)
             if (pace < FASTEST_PACE || outlier) repeat.copy(doubtful = true) else repeat
         }
     }
 
-    /** The usual pace of a session, s/100 m: the median of the repeats that can be trusted. Null without any. */
+    /** The usual pace of a session, s/100 m: the median of the repeats that are the athlete's own. Null without any. */
     fun usualPace(repeats: List<SwimRepeat>): Double? =
-        repeats.filter { !it.doubtful && it.distanceMeters > 0 && it.durationSec > 0 }.map { it.paceSecPer100 }.takeIf { it.isNotEmpty() }?.let(Stats::median)
+        repeats.filter { it.own && it.distanceMeters > 0 && it.durationSec > 0 }.map { it.paceSecPer100 }.takeIf { it.isNotEmpty() }?.let(Stats::median)
 
     /** The zone of a pace against the CSS, counted from 1 (A1) to 7 (C3): its place in [ZONE_CODES]. */
     fun zoneOf(paceSecPer100: Double, cssSecPer100: Int): Int {
@@ -212,10 +255,14 @@ object SwimAnalysis {
     /** The code of the zone of a pace against the CSS: «B1». */
     fun zoneCode(paceSecPer100: Double, cssSecPer100: Int): String = ZONE_CODES[zoneOf(paceSecPer100, cssSecPer100) - 1]
 
-    /** Metres swum in each zone (index 0 is A1, as in [ZONE_CODES]), doubtful repeats left out. Null without laps or CSS. */
+    /**
+     * Metres swum in each zone (index 0 is A1, as in [ZONE_CODES]). Doubtful
+     * repeats and those with equipment are left out: their pace is not one
+     * to put in a zone. Null without laps or CSS, or with nothing left.
+     */
     fun zoneMeters(activity: Activity, cssSecPer100: Int?): DoubleArray? {
         val css = cssSecPer100?.takeIf { it > 0 } ?: return null
-        val repeats = repeats(activity).filter { !it.doubtful }
+        val repeats = repeats(activity).filter { it.own }
         if (repeats.isEmpty()) return null
         val meters = DoubleArray(ZONE_CODES.size)
         repeats.forEach { meters[zoneOf(it.paceSecPer100, css) - 1] += it.distanceMeters }
@@ -227,7 +274,10 @@ object SwimAnalysis {
      * IF being its speed over the CSS speed. Summing laps keeps a hard set
      * hard, where one average over warm-up, set and drills flattens it. A
      * doubtful repeat counts for its time at the session's usual pace: the
-     * time was swum, the pace the watch gave it was not.
+     * time was swum, the pace the watch gave it was not. So does a repeat
+     * with equipment, whose speed says more of the fins than of the effort;
+     * when the whole swim was with equipment it counts as an ordinary swim
+     * ([SessionLoadModel.typicalIntensity]).
      */
     fun lapTss(activity: Activity, cssSecPer100: Int?): Double? {
         val css = cssSecPer100?.takeIf { it > 0 } ?: return null
@@ -235,15 +285,19 @@ object SwimAnalysis {
         if (repeats.isEmpty()) return null
         val usual = usualPace(repeats)
         return repeats.sumOf {
-            val pace = if (it.doubtful) usual ?: return@sumOf 0.0 else it.paceSecPer100
-            val intensity = (css / pace).coerceAtMost(MAX_IF)
+            val intensity = when {
+                it.own -> css / it.paceSecPer100
+                usual != null -> css / usual
+                it.assisted -> SessionLoadModel.typicalIntensity(Sport.SWIM)
+                else -> return@sumOf 0.0
+            }.coerceAtMost(MAX_IF)
             it.durationSec / 3600.0 * intensity.pow(3) * 100.0
         }
     }
 
     /** The main set and how it held up, or null when there is none. */
     fun setHold(activity: Activity): SwimSetHold? {
-        val repeats = repeats(activity).filter { it.isFreestyle && !it.doubtful }
+        val repeats = repeats(activity).filter { it.isFreestyle && it.own }
         val set = repeats
             .groupBy { it.distanceMeters.toInt() }
             .filter { (distance, group) -> distance >= 50 && group.size >= MIN_SET_REPEATS }
@@ -275,16 +329,80 @@ object SwimAnalysis {
     fun efficiency(activity: Activity): SwimEfficiency? {
         if (activity.sport != Sport.SWIM || activity.openWater == true) return null
         val dps = metersPerStroke(activity)
-        val result = SwimEfficiency(dps, activity.avgCadence?.takeIf { it > 0 }, activity.swolf?.takeIf { it > 0 })
+        // Stroke rate and SWOLF are the watch's averages over the whole swim: with equipment in it they are not the stroke's.
+        val whole = activity.gear?.any != true
+        val result = SwimEfficiency(
+            dps,
+            activity.avgCadence?.takeIf { whole && it > 0 },
+            activity.swolf?.takeIf { whole && it > 0 },
+        )
         return if (result.metersPerStroke == null && result.strokeRate == null && result.swolf == null) null else result
     }
 
-    /** Metres per stroke of a pool swim, freestyle only when laps say so. */
+    /** Metres per stroke of a pool swim, freestyle only when laps say so, and never with equipment. */
     fun metersPerStroke(activity: Activity): Double? {
-        val counted = repeats(activity).filter { it.isFreestyle && !it.doubtful && it.strokes != null }
+        val counted = repeats(activity).filter { it.isFreestyle && it.own && it.strokes != null }
         val strokes = counted.sumOf { it.strokes ?: 0 }
         if (strokes > 0) return counted.sumOf { it.distanceMeters } / strokes
-        return activity.strokeDistanceMeters
+        // Garmin's average is over the whole swim, paddles and fins included.
+        return activity.strokeDistanceMeters.takeIf { activity.gear?.any != true }
+    }
+
+    /**
+     * What of a swim was swum with equipment, as the athlete marked it. Null
+     * when nothing was marked, or the marks fit no interval of the swim.
+     */
+    fun gearUse(activity: Activity): SwimGearUse? {
+        val marks = activity.gear?.takeIf { it.any } ?: return null
+        val repeats = repeats(activity).filter { it.distanceMeters > 0 && it.durationSec > 0 }
+        if (repeats.isEmpty()) {
+            // Without laps only the whole swim can be marked.
+            if (marks.session.isEmpty() || activity.distanceMeters <= 0) return null
+            return SwimGearUse(marks.session, activity.distanceMeters, activity.movingSec.toDouble(), 0.0, 0.0)
+        }
+        val with = repeats.filter { it.assisted }
+        if (with.isEmpty()) return null
+        val own = repeats.filter { it.own }
+        return SwimGearUse(
+            gear = with.flatMap { it.gear }.toSet(),
+            meters = with.sumOf { it.distanceMeters },
+            seconds = with.sumOf { it.durationSec },
+            ownMeters = own.sumOf { it.distanceMeters },
+            ownSeconds = own.sumOf { it.durationSec },
+            repeats = with.map { it.number },
+        )
+    }
+
+    /** Days after a pool swim in which the app still asks what it was swum with. */
+    const val GEAR_ASK_DAYS = 2L
+
+    /**
+     * The pool swim to ask the athlete about: the latest of the last
+     * [GEAR_ASK_DAYS] days, when nobody has said yet whether it was swum
+     * with equipment. Null when the latest one has its answer.
+     */
+    fun gearToAsk(activities: List<Activity>, today: LocalDate, zone: ZoneId): Activity? {
+        val from = today.minusDays(GEAR_ASK_DAYS)
+        return activities
+            .filter { it.sport == Sport.SWIM && it.openWater != true && it.distanceMeters > 0 }
+            .filter { val day = it.startTime.atZone(zone).toLocalDate(); !day.isBefore(from) && !day.isAfter(today) }
+            .maxByOrNull { it.startTime }
+            ?.takeIf { it.gear == null }
+    }
+
+    /**
+     * The metres and seconds the athlete's own pace is read on: the session
+     * itself, or for a swim with equipment what was swum without. Null when
+     * there is no pace to read, as when the whole swim was with equipment.
+     * Records, trends and comparisons between sessions go by this.
+     */
+    fun ownPace(activity: Activity): PaceBase? {
+        val use = if (activity.sport == Sport.SWIM) gearUse(activity) else null
+        return when {
+            use == null -> PaceBase(activity.distanceMeters, activity.paceSec.toDouble()).takeIf { it.meters > 0 && it.seconds > 0 }
+            use.whole -> null
+            else -> PaceBase(use.ownMeters, use.ownSeconds)
+        }
     }
 
     /**
@@ -352,12 +470,13 @@ object SwimAnalysis {
      * [CONTINUOUS_METERS] and more went farther in its time than the model
      * allows: then the efforts were not the athlete's best and the estimate
      * is too slow. Short repeats are not compared with it: they are faster
-     * than the threshold for everybody.
+     * than the threshold for everybody. Intervals swum with equipment are
+     * read nowhere here.
      */
     fun estimateCss(activities: List<Activity>, since: Instant): CssEstimate? {
         val continuous = activities
             .filter { it.sport == Sport.SWIM && it.openWater != true && it.startTime >= since }
-            .flatMap { activity -> repeats(activity).filter { it.isFreestyle && !it.doubtful }.map { activity to it } }
+            .flatMap { activity -> repeats(activity).filter { it.isFreestyle && it.own }.map { activity to it } }
         val efforts = continuous
             .mapNotNull { (activity, repeat) ->
                 val distance = CSS_DISTANCES.firstOrNull { kotlin.math.abs(repeat.distanceMeters - it) <= it * 0.02 }

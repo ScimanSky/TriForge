@@ -1,6 +1,7 @@
 package com.triforge.app.ui.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -86,12 +88,13 @@ private fun signedPercent(value: Double): String {
  */
 @Composable
 fun SwimSections(activity: Activity, history: List<Activity>, cssSecPer100: Int?) {
-    val repeats = remember(activity.id, activity.laps) { SwimAnalysis.repeats(activity) }
+    val repeats = remember(activity.id, activity.laps, activity.gear) { SwimAnalysis.repeats(activity) }
     if (repeats.isNotEmpty()) RepeatPaceCard(repeats, cssSecPer100)
     SetHoldCards(activity, doubtful = repeats.any { it.doubtful })
     EfficiencyCard(activity, history)
-    if (repeats.isNotEmpty()) ZonesCard(activity, cssSecPer100)
-    if (repeats.isNotEmpty()) RepeatsCard(repeats)
+    if (repeats.isNotEmpty()) ZonesCard(activity, cssSecPer100, gearMeters = repeats.filter { it.assisted }.sumOf { it.distanceMeters })
+    // A repeat far too fast may have been swum with fins: say so while nobody has answered.
+    if (repeats.isNotEmpty()) RepeatsCard(repeats, gearHint = activity.gear == null)
 }
 
 private fun zoneColor(repeat: SwimRepeat, css: Int?): Color =
@@ -115,12 +118,14 @@ private fun RepeatPaceCard(repeats: List<SwimRepeat>, css: Int?) {
         1 -> stringResource(R.string.swim_doubt_chart_one, doubtful.single().number)
         else -> stringResource(R.string.swim_doubt_chart_many, doubtful.joinToString(", ") { it.number.toString() })
     }
+    val assisted = repeats.count { it.assisted }
     val description = stringResource(
         R.string.swim_repeats_chart,
         sound.size,
         pace(sound.minOf { it.paceSecPer100 }),
         pace(sound.maxOf { it.paceSecPer100 }),
-    ) + doubtNote?.takeIf { apart }?.let { " $it" }.orEmpty()
+    ) + doubtNote?.takeIf { apart }?.let { " $it" }.orEmpty() +
+        if (assisted > 0) " " + stringResource(R.string.swim_gear_chart_description, assisted) else ""
 
     TriCard {
         CardHeader(
@@ -168,6 +173,17 @@ private fun RepeatPaceCard(repeats: List<SwimRepeat>, css: Int?) {
                     ) {
                         Text("?", style = numberStyle(13.sp), color = DoubtColor, modifier = Modifier.padding(top = 4.dp))
                     }
+                } else if (repeat.assisted) {
+                    // Board 5e: its height is the speed it was swum at, but it has no zone. An outline, lightly filled.
+                    val shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 1.dp, bottomEnd = 1.dp)
+                    Box(
+                        Modifier
+                            .weight(repeat.distanceMeters.toFloat())
+                            .fillMaxHeight(barHeight(repeat.paceSecPer100))
+                            .clip(shape)
+                            .background(SportColors.swim.copy(alpha = 0.10f))
+                            .border(1.5.dp, GearColor, shape),
+                    )
                 } else {
                     Box(
                         Modifier
@@ -198,6 +214,12 @@ private fun RepeatPaceCard(repeats: List<SwimRepeat>, css: Int?) {
         if (doubtNote != null && apart) {
             Text(doubtNote, style = MaterialTheme.typography.bodySmall, color = DoubtColor, modifier = Modifier.padding(top = 4.dp))
         }
+        if (assisted > 0) {
+            Row(modifier = Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(10.dp).border(1.5.dp, GearColor, RoundedCornerShape(3.dp)))
+                Text(stringResource(R.string.swim_gear_chart), style = MaterialTheme.typography.bodySmall, color = GearColor)
+            }
+        }
     }
 }
 
@@ -207,7 +229,7 @@ private val DoubtColor = Color(0xFFFFB59C)
 /** Two tiles: does the pace hold in the main set, and does the stroke. */
 @Composable
 private fun SetHoldCards(activity: Activity, doubtful: Boolean = false) {
-    val hold = remember(activity.id, activity.laps) { SwimAnalysis.setHold(activity) } ?: return
+    val hold = remember(activity.id, activity.laps, activity.gear) { SwimAnalysis.setHold(activity) } ?: return
     val setName = "${hold.repeats} × ${hold.distanceMeters.roundToInt()}"
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         HoldTile(
@@ -283,7 +305,7 @@ private fun HoldTile(
 /** Metres per stroke, stroke rate and SWOLF against the athlete's own average. */
 @Composable
 private fun EfficiencyCard(activity: Activity, history: List<Activity>) {
-    val now = remember(activity.id, activity.laps) { SwimAnalysis.efficiency(activity) } ?: return
+    val now = remember(activity.id, activity.laps, activity.gear) { SwimAnalysis.efficiency(activity) } ?: return
     val usual = remember(activity.id, history) { SwimAnalysis.usualEfficiency(history, activity.startTime) }
 
     TriCard {
@@ -379,8 +401,8 @@ private fun EfficiencyCell(value: String?, label: String, comparison: Comparison
 
 /** Metres in each pace zone, on the CSS of the profile. */
 @Composable
-private fun ZonesCard(activity: Activity, css: Int?) {
-    val meters = remember(activity.id, activity.laps, css) { SwimAnalysis.zoneMeters(activity, css) } ?: return
+private fun ZonesCard(activity: Activity, css: Int?, gearMeters: Double = 0.0) {
+    val meters = remember(activity.id, activity.laps, activity.gear, css) { SwimAnalysis.zoneMeters(activity, css) } ?: return
     val total = meters.sum().takeIf { it > 0 } ?: return
     val top = meters.indices.maxBy { meters[it] }
     CollapsibleCard(
@@ -430,6 +452,14 @@ private fun ZonesCard(activity: Activity, css: Int?) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 10.dp),
         )
+        if (gearMeters > 0) {
+            Text(
+                text = stringResource(R.string.swim_gear_zones, wholeMeters(gearMeters)),
+                style = MaterialTheme.typography.bodySmall,
+                color = GearColor,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
     }
 }
 
@@ -440,11 +470,12 @@ private const val REPEATS_SHOWN = 12
 
 /** The repeats one by one, and on demand every pool length. */
 @Composable
-private fun RepeatsCard(repeats: List<SwimRepeat>) {
+private fun RepeatsCard(repeats: List<SwimRepeat>, gearHint: Boolean = false) {
     var showAll by rememberSaveable { mutableStateOf(false) }
     var showLengths by rememberSaveable { mutableStateOf(false) }
     val lengthsCount = repeats.sumOf { it.lengths.size }
     val doubtful = repeats.count { it.doubtful }
+    val assisted = repeats.count { it.assisted }
     val usual = remember(repeats) { SwimAnalysis.usualPace(repeats) }
     val summary = if (lengthsCount > 0) {
         stringResource(R.string.swim_table_summary_lengths, repeats.size, lengthsCount)
@@ -454,6 +485,10 @@ private fun RepeatsCard(repeats: List<SwimRepeat>) {
         0 -> ""
         1 -> " · " + stringResource(R.string.swim_doubt_count_one)
         else -> " · " + stringResource(R.string.swim_doubt_count, doubtful)
+    } + when (assisted) {
+        0 -> ""
+        1 -> " · " + stringResource(R.string.swim_gear_count_one)
+        else -> " · " + stringResource(R.string.swim_gear_count, assisted)
     }
 
     CollapsibleCard(title = stringResource(R.string.swim_table_title), summary = summary, initiallyExpanded = true) {
@@ -478,7 +513,12 @@ private fun RepeatsCard(repeats: List<SwimRepeat>) {
                     repeat.restAfterSec?.takeIf { it >= 1 }?.let { pace(it) } ?: "",
                 ),
                 dim = repeat.doubtful,
-                tag = if (repeat.doubtful) stringResource(R.string.swim_doubt_tag) else null,
+                tag = when {
+                    repeat.doubtful -> stringResource(R.string.swim_doubt_tag)
+                    repeat.assisted -> gearTag(repeat.gear)
+                    else -> null
+                },
+                gear = repeat.assisted,
             )
             if (repeat.doubtful) {
                 // Board 5d: why it is doubtful, and what it is kept out of.
@@ -487,6 +527,7 @@ private fun RepeatsCard(repeats: List<SwimRepeat>) {
                     text = listOfNotNull(
                         faster?.let { stringResource(R.string.swim_doubt_faster, it) },
                         stringResource(R.string.swim_doubt_why),
+                        stringResource(R.string.swim_doubt_gear).takeIf { gearHint },
                     ).joinToString(" "),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFE6D5CD),
@@ -538,7 +579,7 @@ private val COLUMN_WEIGHTS = listOf(1.6f, 1f, 1f, 0.9f, 0.8f)
 private const val TAG_FROM = 3
 
 @Composable
-private fun TableRow(cells: List<String>, header: Boolean = false, dim: Boolean = false, tag: String? = null) {
+private fun TableRow(cells: List<String>, header: Boolean = false, dim: Boolean = false, tag: String? = null, gear: Boolean = false) {
     Column {
         if (!header) {
             Box(
@@ -569,9 +610,10 @@ private fun TableRow(cells: List<String>, header: Boolean = false, dim: Boolean 
                         tag,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = DoubtColor,
+                        color = if (gear) GearColor else DoubtColor,
                         maxLines = 1,
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF3A1D14)).padding(horizontal = 9.dp, vertical = 3.dp),
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (gear) GearContainer else Color(0xFF3A1D14)).padding(horizontal = 9.dp, vertical = 3.dp),
                     )
                 }
             }

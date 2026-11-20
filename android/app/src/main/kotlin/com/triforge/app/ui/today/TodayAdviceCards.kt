@@ -31,13 +31,18 @@ import com.triforge.app.R
 import com.triforge.app.ui.coach.CoachPalette
 import com.triforge.app.ui.common.IconBox
 import com.triforge.app.ui.common.PrimaryButton
+import com.triforge.app.ui.common.SecondaryButton
 import com.triforge.app.ui.common.SportIconBox
 import com.triforge.app.ui.common.TriCard
+import com.triforge.app.ui.detail.GearColor
+import com.triforge.app.ui.detail.QuietButton
 import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.TriIcons
+import com.triforge.domain.Activity
 import com.triforge.domain.AthleteProfile
 import com.triforge.domain.CssCheck
 import com.triforge.domain.Formatters
+import com.triforge.domain.Sport
 import com.triforge.domain.SwimThreshold
 import com.triforge.domain.coach.KeyMeal
 import com.triforge.domain.coach.PlannedSession
@@ -170,6 +175,58 @@ internal fun CssNoticeCard(check: CssCheck, onVerify: () -> Unit) {
             }
         }
         PrimaryButton(stringResource(R.string.css_verify), onVerify, compact = true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+    }
+}
+
+/**
+ * Board 5e: the question about the latest pool swim, [daysAgo] days ago. No
+ * watch records fins, pull buoy and paddles: asked once, while the athlete
+ * remembers, with «no» one touch away.
+ */
+@Composable
+internal fun SwimGearQuestionCard(swim: Activity, daysAgo: Long, onYes: () -> Unit, onNo: () -> Unit) {
+    val kicker = when (daysAgo) {
+        0L -> R.string.gear_question_kicker_today
+        1L -> R.string.gear_question_kicker_yesterday
+        else -> R.string.gear_question_kicker_before
+    }
+    TriCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                stringResource(kicker).uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = GearColor,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                listOfNotNull(
+                    Formatters.distance(Sport.SWIM, swim.distanceMeters),
+                    Formatters.pace(Sport.SWIM, swim.distanceMeters, swim.paceSec),
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        Text(
+            stringResource(R.string.gear_question_title),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 8.dp).semantics { heading() },
+        )
+        Text(
+            stringResource(R.string.gear_question_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Row(
+            modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SecondaryButton(stringResource(R.string.gear_question_yes), onYes, modifier = Modifier.weight(1f), compact = true)
+            QuietButton(stringResource(R.string.gear_question_no), onNo)
+        }
     }
 }
 

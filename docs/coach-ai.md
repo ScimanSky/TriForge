@@ -277,6 +277,37 @@ tempi (`SwimThreshold.fromTest`: la differenza dei due tempi diviso due, ogni
 tre settimane (`cssSnoozedUntil` in `coaching/coach`). Finché la soglia è in
 dubbio, «Forma fisica» dice «Affidabilità bassa».
 
+### Pinne, pull buoy e palette
+
+Con l'attrezzatura si nuota più veloce del proprio passo, e nessun orologio
+la registra (il Garmin sa solo se una vasca era un «drill»). La segna
+l'atleta (tavola 5e): nel dettaglio della nuotata la card «Attrezzatura», e
+in Oggi una domanda sull'ultima nuotata in piscina degli ultimi due giorni,
+finché non ha una risposta (`SwimAnalysis.gearToAsk`). Nella pagina si
+sceglie che cosa si è usato e si toccano le ripetute; una nuotata senza
+vasche registrate si segna tutta intera. «Niente» è una risposta anche lei.
+
+I segni stanno in `coaching/swim`, campo `gear`, per id dell'attività
+(`session`: elenco di chiavi; `repeats`: numero della ripetuta → chiavi;
+chiavi `fins`, `pull_buoy`, `paddles`): le attività del Garmin l'app non le
+può scrivere, e il documento del Coach Nuoto viene già esportato e
+cancellato con i dati sulla salute. `ActivityRepository.activities` li
+unisce alle attività (`Activity.gear`), così tutti i conti li vedono.
+
+Una ripetuta con attrezzatura (`SwimRepeat.assisted`) si vede, con il solo
+contorno nel grafico e un'etichetta in elenco, ma non è «il passo
+dell'atleta» (`SwimRepeat.own`): resta fuori da zone, tenuta del passo,
+metri per bracciata, stima della CSS, controllo della soglia, record di
+velocità e confronti tra nuotate (`SwimAnalysis.ownPace`: i metri e i
+secondi senza attrezzatura, usati anche per il passo delle settimane in
+`SportStats`). Non è mai «dubbia», perché si sa perché è veloce. Nel carico
+conta per il tempo nuotato al passo abituale del resto della nuotata; una
+nuotata tutta con attrezzatura conta come una nuotata qualunque
+(`SessionLoadModel.typicalIntensity`). I coach leggono in ogni nuotata
+quale parte era con attrezzatura e qual è il passo senza
+(`AthleteContext.gear`), e se un passo molto più veloce del solito non ha
+attrezzatura segnata lo chiedono prima di parlare di progressi.
+
 ### La regia non scrive nel passato
 
 Il giorno da cui si pianifica è `CoachTable.planningDay`: oggi, oppure domani

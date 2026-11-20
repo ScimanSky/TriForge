@@ -1,5 +1,6 @@
 package com.triforge.app.ui.detail
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,7 +13,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -36,10 +41,12 @@ import com.triforge.domain.Activity
 import com.triforge.domain.Formatters
 import com.triforge.domain.Sport
 import com.triforge.domain.SwimAnalysis
+import com.triforge.domain.SwimGearMarks
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 /** How many earlier sessions of the same sport the comparison chart shows. */
 private const val HISTORY_COUNT = 10
@@ -61,7 +68,24 @@ fun ActivityDetailScreen(
     load: Int? = null,
     /** The athlete's weight, for what the session adds to the day's energy. */
     weightKg: Double? = null,
+    /** What the athlete says a swim was swum with: fins, pull buoy, paddles, or nothing. */
+    onSwimGear: (SwimGearMarks) -> Unit = {},
 ) {
+    // Board 5e: the page of the equipment opens over the detail.
+    var editingGear by rememberSaveable { mutableStateOf(false) }
+    if (editingGear && activity != null && activity.sport == Sport.SWIM) {
+        BackHandler { editingGear = false }
+        SwimGearPage(
+            activity = activity,
+            onSave = {
+                onSwimGear(it)
+                editingGear = false
+            },
+            onBack = { editingGear = false },
+            modifier = modifier,
+        )
+        return
+    }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -83,7 +107,10 @@ fun ActivityDetailScreen(
             return@Column
         }
         HeadlineCard(activity, cssSecPer100)
-        if (activity.sport == Sport.SWIM) SwimSections(activity, history, cssSecPer100)
+        if (activity.sport == Sport.SWIM) {
+            SwimGearCard(activity, onEdit = { editingGear = true }, onNone = { onSwimGear(SwimGearMarks.NONE) })
+            SwimSections(activity, history, cssSecPer100)
+        }
         TimingCard(activity)
         ComparisonCard(activity, history)
         HeartRateCard(activity)
@@ -224,27 +251,25 @@ private const val MIN_REST_SEC = 60L
 @Composable
 private fun ComparisonCard(activity: Activity, history: List<Activity>) {
     val sport = activity.sport
-    if (sport == Sport.OTHER || activity.distanceMeters <= 0 || activity.paceSec <= 0) return
+    if (sport == Sport.OTHER) return
+    // A swim with equipment is compared on what was swum without it, and not at all when nothing was.
+    val own = remember(activity.id, activity.laps, activity.gear) { SwimAnalysis.ownPace(activity) } ?: return
     val isSpeed = sport == Sport.BIKE
 
     val sessions = remember(activity.id, history) {
         history
-            .filter {
-                it.sport == sport && it.distanceMeters > 0 && it.paceSec > 0 &&
-                    !it.startTime.isAfter(activity.startTime)
-            }
+            .filter { it.sport == sport && !it.startTime.isAfter(activity.startTime) }
+            .mapNotNull { SwimAnalysis.ownPace(it) }
             .take(HISTORY_COUNT)
             .reversed()
     }
     if (sessions.size < 3) return
 
-    val values = sessions.map {
-        val secondsPerMeter = it.paceSec / it.distanceMeters
-        (if (isSpeed) 3.6 / secondsPerMeter else secondsPerMeter).toFloat()
-    }
-    val best = sessions.minBy { it.paceSec / it.distanceMeters }
-    val thisPace = Formatters.pace(sport, activity.distanceMeters, activity.paceSec).orEmpty()
-    val bestPace = Formatters.pace(sport, best.distanceMeters, best.paceSec).orEmpty()
+    val values = sessions.map { (if (isSpeed) 3.6 / it.secondsPerMeter else it.secondsPerMeter).toFloat() }
+    val best = sessions.minBy { it.secondsPerMeter }
+    val thisPace = Formatters.pace(sport, own.meters, own.seconds.roundToLong()).orEmpty()
+    val bestPace = Formatters.pace(sport, best.meters, best.seconds.roundToLong()).orEmpty()
+    val withGear = sport == Sport.SWIM && activity.gear?.any == true
 
     TriCard {
         CardHeader(
@@ -264,6 +289,14 @@ private fun ComparisonCard(activity: Activity, history: List<Activity>) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),
         )
+        if (withGear) {
+            Text(
+                text = stringResource(R.string.detail_compare_gear),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.triforge.app.data.ActivityRepository
 import com.triforge.domain.Activity
+import com.triforge.domain.SwimGearMarks
 import com.triforge.domain.TrainingStats
 import java.time.LocalDate
 import java.time.ZoneId
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 sealed interface TrainingState {
     data object Loading : TrainingState
@@ -20,13 +22,23 @@ sealed interface TrainingState {
 }
 
 /** The athlete's recent activities, shared by the Today and Activities tabs. */
-class TrainingViewModel(uid: String, repository: ActivityRepository) : ViewModel() {
+class TrainingViewModel(private val uid: String, private val repository: ActivityRepository) : ViewModel() {
 
     val state: StateFlow<TrainingState> = repository
         .activities(uid, since = windowStart())
         .map<List<Activity>, TrainingState> { TrainingState.Loaded(it) }
         .catch { emit(TrainingState.Failed) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrainingState.Loading)
+
+    /**
+     * Stores what the athlete said about the equipment of a swim. The
+     * activities come back with it by themselves, also offline: Firestore
+     * applies the write to its cache first. A write that fails leaves
+     * things as they were, and the question stays open.
+     */
+    fun markSwimGear(activityId: String, marks: SwimGearMarks) {
+        viewModelScope.launch { runCatching { repository.setSwimGear(uid, activityId, marks) } }
+    }
 
     companion object {
         const val WINDOW_WEEKS = 16L
