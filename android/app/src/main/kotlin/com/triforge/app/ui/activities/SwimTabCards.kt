@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.sp
 import com.triforge.app.R
 import com.triforge.app.ui.common.CardHeader
 import com.triforge.app.ui.common.KeyValueRow
-import com.triforge.app.ui.common.PrimaryButton
+import com.triforge.app.ui.common.SecondaryButton
 import com.triforge.app.ui.common.StatCell
 import com.triforge.app.ui.common.TriCard
 import com.triforge.app.ui.common.VolumeBars
@@ -42,7 +42,9 @@ private fun twoDecimals(value: Double): String = "%.2f".format(Locale.ITALY, val
 
 /**
  * The CSS the app reads from the athlete's best repeats, next to the one in
- * the profile, with a button to adopt it. Hidden when the two agree.
+ * the profile, with what the difference means and a button to adopt it.
+ * Hidden when the two agree. It is an estimate: the button is a quiet one,
+ * and there is none when a longer swim contradicts it.
  */
 @Composable
 internal fun CssEstimateCard(estimate: CssEstimate, profileCss: Int?, onUse: (Int) -> Unit) {
@@ -53,7 +55,7 @@ internal fun CssEstimateCard(estimate: CssEstimate, profileCss: Int?, onUse: (In
         CardHeader(
             title = stringResource(R.string.swim_css_title),
             trailing = stringResource(
-                if (estimate.confidence == CssConfidence.HIGH) R.string.swim_css_confidence_high else R.string.swim_css_confidence_medium,
+                if (estimate.confidence == CssConfidence.LOW) R.string.swim_css_confidence_low else R.string.swim_css_confidence_medium,
             ),
         )
         Row(
@@ -91,12 +93,32 @@ internal fun CssEstimateCard(estimate: CssEstimate, profileCss: Int?, onUse: (In
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 10.dp),
         )
-        PrimaryButton(
-            text = stringResource(R.string.swim_css_use, css),
-            onClick = { onUse(estimate.paceSecPer100) },
-            modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
-        )
+        cssDifference(estimate, profileCss)?.let { note ->
+            Text(
+                text = note,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        // An estimate, not a test: the athlete chooses, and the button does not push.
+        if (estimate.confidence != CssConfidence.LOW) {
+            SecondaryButton(
+                text = stringResource(R.string.swim_css_use, css),
+                onClick = { onUse(estimate.paceSecPer100) },
+                modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
+            )
+        }
     }
+}
+
+/** What the estimate means next to the threshold of the profile, in a sentence or two. Null without a profile value. */
+@Composable
+private fun cssDifference(estimate: CssEstimate, profileCss: Int?): String? = when {
+    estimate.confidence == CssConfidence.LOW -> stringResource(R.string.swim_css_low)
+    profileCss == null -> null
+    estimate.paceSecPer100 > profileCss -> stringResource(R.string.swim_css_slower, pace(profileCss.toDouble()))
+    else -> stringResource(R.string.swim_css_faster, pace(profileCss.toDouble()))
 }
 
 /** Metres per stroke week by week, freestyle in the pool. */

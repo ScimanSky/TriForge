@@ -25,14 +25,15 @@ data class CssCheck(
     val currentSecPer100: Int,
     /** Pool swims looked at. */
     val sessions: Int,
+    /** Metres swum in them without stopping: intervals of [SwimAnalysis.CONTINUOUS_METERS] and more. */
     val meters: Int,
     /** Share of those metres swum at threshold pace or faster (Z4 and Z5). */
     val highShare: Double,
     /** Share of those metres faster than the threshold zone (Z5 alone). */
     val topShare: Double = 0.0,
-    /** Swims whose whole swimming time, half an hour and more, was faster than the threshold. */
+    /** Swims whose continuous intervals, half an hour and more of them, were faster than the threshold. */
     val fasterSessions: Int,
-    /** The pace the athlete usually swims at, s/100 m: the median of the swims. */
+    /** The pace the athlete usually swims at without stopping, s/100 m: the median of the swims. */
     val usualPaceSecPer100: Int,
     /** Mean heart rate over those swims, when the watch gave it. */
     val avgHr: Int?,
@@ -43,12 +44,18 @@ data class CssCheck(
  * Checks the swim threshold (CSS) against what the athlete swims.
  *
  * The threshold is the pace one can hold for about half an hour flat out.
- * So a threshold is too slow when most of the metres of ordinary sessions
- * come out at threshold pace and above, or when a whole long swim was faster
- * than it: zones, load and form are then inflated. The app says so and
- * proposes a value, from the athlete's best efforts when there are two
- * distances to read it from, otherwise from the usual pace, on the cautious
- * side. A proper test (400 m and 200 m flat out) stays the better answer.
+ * So a threshold is too slow when most of the metres swum without stopping
+ * in ordinary sessions come out at threshold pace and above, or when half
+ * an hour of them in one swim was faster than it: zones, load and form are
+ * then inflated. The app says so and proposes a value, from the athlete's
+ * best efforts when there are two distances to read it from, otherwise from
+ * the usual pace, on the cautious side. A proper test (400 m and 200 m flat
+ * out) stays the better answer.
+ *
+ * Only intervals of [SwimAnalysis.CONTINUOUS_METERS] and more are read.
+ * Repeats of 25, 50 or 100 m with rest are swum faster than the threshold,
+ * and by how much depends on the swimmer: one who holds 1:49 over 100 m may
+ * have a threshold of 2:05. Their pace says nothing about it.
  *
  * Only a threshold that is too slow is looked for: swimming mostly easy,
  * well under the threshold, is what a triathlete's week looks like.
@@ -64,8 +71,11 @@ object SwimThreshold {
     const val MIN_SESSIONS = 2
     const val MIN_METERS = 3000
 
-    /** A swim shorter than this says little about the threshold. */
+    /** A swim with fewer continuous metres than this says little about the threshold. */
     const val MIN_SESSION_METERS = 800
+
+    /** A swim without laps counts when it was swum nearly without stopping: this share of its time moving. */
+    private const val CONTINUOUS_SHARE = 0.9
 
     /** More than this share of the metres at threshold and above is not a training week. */
     const val HIGH_SHARE = 0.5
@@ -89,16 +99,28 @@ object SwimThreshold {
         val pace: Double get() = seconds / meters * 100.0
     }
 
-    /** One pool swim read against [css]: from its repeats when it has laps, as one block otherwise. */
+    /** The intervals of a swim that say something about the threshold: trusted, and swum without stopping for long enough. */
+    private fun continuous(activity: Activity): List<SwimRepeat> = SwimAnalysis.repeats(activity)
+        .filter { !it.doubtful && it.durationSec > 0 && it.distanceMeters >= SwimAnalysis.CONTINUOUS_METERS }
+
+    /** A swim without laps that was one block, or close to it. */
+    private fun oneBlock(activity: Activity): Boolean = activity.laps.isEmpty() && activity.distanceMeters > 0 &&
+        activity.movingSec > 0 && activity.movingSec >= activity.durationSec * CONTINUOUS_SHARE
+
+    /**
+     * One pool swim read against [css]: from its continuous intervals when it
+     * has laps, as one block when it has none and was swum without stopping.
+     * Null when it has neither.
+     */
     private fun read(activity: Activity, css: Int): Swim? {
-        val repeats = SwimAnalysis.repeats(activity).filter { !it.doubtful && it.distanceMeters > 0 && it.durationSec > 0 }
+        val repeats = continuous(activity)
         if (repeats.isNotEmpty()) {
             val meters = repeats.sumOf { it.distanceMeters }
             val high = repeats.filter { SwimAnalysis.zoneOf(it.paceSecPer100, css) >= 4 }.sumOf { it.distanceMeters }
             val top = repeats.filter { SwimAnalysis.zoneOf(it.paceSecPer100, css) >= 5 }.sumOf { it.distanceMeters }
             return Swim(meters, repeats.sumOf { it.durationSec }, high, top, activity.avgHr)
         }
-        if (activity.distanceMeters <= 0 || activity.movingSec <= 0) return null
+        if (!oneBlock(activity)) return null
         val pace = activity.movingSec / activity.distanceMeters * 100.0
         val high = if (SwimAnalysis.zoneOf(pace, css) >= 4) activity.distanceMeters else 0.0
         val top = if (SwimAnalysis.zoneOf(pace, css) >= 5) activity.distanceMeters else 0.0
@@ -162,17 +184,22 @@ object SwimThreshold {
 
     /**
      * The threshold the app would propose: from the best efforts of the last
-     * weeks when two distances allow it, otherwise from the usual pace of the
+     * weeks when two distances allow it and nothing contradicts them,
+     * otherwise from the usual pace of the continuous swimming of the
      * sessions. Null with fewer than [MIN_SESSIONS] swims to read.
      */
     fun suggest(activities: List<Activity>, today: LocalDate, zone: ZoneId): CssSuggestion? {
         val from = today.minusDays(ESTIMATE_DAYS)
         val since: Instant = from.atStartOfDay(zone).toInstant()
-        SwimAnalysis.estimateCss(activities, since)?.let { return CssSuggestion(it.paceSecPer100, CssSource.BEST_EFFORTS) }
+        SwimAnalysis.estimateCss(activities, since)?.takeIf { it.confidence != CssConfidence.LOW }
+            ?.let { return CssSuggestion(it.paceSecPer100, CssSource.BEST_EFFORTS) }
         val paces = poolSwims(activities, from, today, zone).mapNotNull { activity ->
-            val repeats = SwimAnalysis.repeats(activity).filter { !it.doubtful && it.distanceMeters > 0 && it.durationSec > 0 }
-            val (meters, seconds) = if (repeats.isNotEmpty()) repeats.sumOf { it.distanceMeters } to repeats.sumOf { it.durationSec }
-            else activity.distanceMeters to activity.movingSec.toDouble()
+            val repeats = continuous(activity)
+            val (meters, seconds) = when {
+                repeats.isNotEmpty() -> repeats.sumOf { it.distanceMeters } to repeats.sumOf { it.durationSec }
+                oneBlock(activity) -> activity.distanceMeters to activity.movingSec.toDouble()
+                else -> return@mapNotNull null
+            }
             if (meters < MIN_SESSION_METERS || seconds <= 0) null else seconds / meters * 100.0
         }
         if (paces.size < MIN_SESSIONS) return null

@@ -89,7 +89,11 @@ data class CssEstimate(
 
 data class CssEffort(val distanceMeters: Int, val seconds: Double, val date: Instant)
 
-enum class CssConfidence { HIGH, MEDIUM }
+/**
+ * How far a [CssEstimate] can be trusted. Never high: the app cannot know
+ * that the intervals were swum flat out, only a test says so.
+ */
+enum class CssConfidence { MEDIUM, LOW }
 
 /**
  * Swim metrics read from the laps of a session, chosen for a triathlete:
@@ -311,16 +315,35 @@ object SwimAnalysis {
     private val CSS_DISTANCES = listOf(200, 300, 400, 500, 800, 1000, 1500)
 
     /**
+     * From this length on an interval says something about the threshold.
+     * Shorter repeats with rest are swum faster than it, by a little or by a
+     * lot depending on the swimmer: a pace over 100 m is not a threshold.
+     */
+    const val CONTINUOUS_METERS = 200.0
+
+    /** How much farther than the model allows a swim may go before it contradicts the estimate. */
+    private const val MODEL_SLACK = 1.03
+
+    /**
      * Critical swim speed from the best freestyle intervals of the pool swims
      * since [since]: for each distance the fastest interval, then the slope of
      * distance over time (distance = CS x time + D'). An effort slower per
      * 100 m than a longer one was not swum hard and is left out. Needs two
      * distances, one of them at least 400 m.
+     *
+     * The estimate is right when the intervals were swum flat out, which the
+     * app cannot know: it is never more than of medium confidence, a test
+     * says more. It is of low confidence when another continuous swim of
+     * [CONTINUOUS_METERS] and more went farther in its time than the model
+     * allows: then the efforts were not the athlete's best and the estimate
+     * is too slow. Short repeats are not compared with it: they are faster
+     * than the threshold for everybody.
      */
     fun estimateCss(activities: List<Activity>, since: Instant): CssEstimate? {
-        val efforts = activities
+        val continuous = activities
             .filter { it.sport == Sport.SWIM && it.openWater != true && it.startTime >= since }
             .flatMap { activity -> repeats(activity).filter { it.isFreestyle && !it.doubtful }.map { activity to it } }
+        val efforts = continuous
             .mapNotNull { (activity, repeat) ->
                 val distance = CSS_DISTANCES.firstOrNull { kotlin.math.abs(repeat.distanceMeters - it) <= it * 0.02 }
                 distance?.let { CssEffort(it, repeat.durationSec, activity.startTime) }
@@ -341,8 +364,11 @@ object SwimAnalysis {
         // D' (metres of anaerobic reserve) must be positive for the model to hold.
         val meanT = points.sumOf { it.first } / points.size
         val meanD = points.sumOf { it.second } / points.size
-        if (meanD - speed * meanT <= 0) return null
-        val confidence = if (hard.size >= 3) CssConfidence.HIGH else CssConfidence.MEDIUM
-        return CssEstimate(pace, hard, confidence)
+        val reserve = meanD - speed * meanT
+        if (reserve <= 0) return null
+        val beaten = continuous.any { (_, repeat) ->
+            repeat.distanceMeters >= CONTINUOUS_METERS && repeat.distanceMeters > (speed * repeat.durationSec + reserve) * MODEL_SLACK
+        }
+        return CssEstimate(pace, hard, if (beaten) CssConfidence.LOW else CssConfidence.MEDIUM)
     }
 }

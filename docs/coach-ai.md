@@ -233,17 +233,31 @@ Il piano resta nel documento `coaching/coach`.
 ### La soglia del nuoto sotto controllo
 
 `SwimThreshold.check` confronta la soglia del profilo con le nuotate in vasca
-delle ultime tre settimane: se più di metà dei metri esce a ritmo di soglia e
-oltre, o se una nuotata intera di mezz'ora e più è stata più veloce della
-soglia, la soglia è troppo lenta e zone, carico e forma sono gonfiati. L'app
+delle ultime tre settimane: se più di metà dei metri nuotati senza fermarsi
+esce a ritmo di soglia e oltre, o se mezz'ora di ripetute lunghe in una
+nuotata è stata più veloce della soglia, la soglia è troppo lenta e zone,
+carico e forma sono gonfiati. Contano solo le ripetute da 200 m in su (e le
+nuotate senza vasche registrate, se fatte quasi senza soste): le ripetute da
+25, 50 e 100 m con recupero si nuotano più forte della soglia, e di quanto
+dipende dal nuotatore. Chi tiene 1:49 sui 100 m può avere una soglia di 2:05:
+il passo dei 100 non dice niente sulla CSS. L'app
 propone un valore: dai migliori tempi su due distanze quando ci sono,
-altrimenti dal passo abituale delle sedute, dal lato prudente (× 0,95). La
+altrimenti dal passo abituale delle ripetute lunghe, dal lato prudente (× 0,95). La
 soglia del profilo non viene mai cambiata di nascosto: i coach lo leggono nei
 dati dell'atleta («Soglia del nuoto da verificare») e propongono il test
 400 + 200. Le ripetute con un passo impossibile (vasche contate male
 dall'orologio) sono marcate «dubbie» e restano fuori da migliori tempi, zone e
 stima; nel dettaglio della nuotata sono tratteggiate nel grafico e spiegate
 nella tabella.
+
+La stima dai migliori tempi (`SwimAnalysis.estimateCss`, card «CSS stimata
+dalle tue nuotate» in Attività, Nuoto) è giusta solo se quelle ripetute erano
+a tutta, e l'app non può saperlo: l'affidabilità è al più «media», mai «alta».
+Diventa «bassa», e non viene proposta, quando un'altra nuotata continua da
+200 m in su è andata più lontano nel suo tempo di quanto il modello permette.
+La card spiega la differenza dalla soglia del profilo nei due versi, ricorda
+che la CSS è più lenta del passo sui 100 m, e lascia la scelta all'atleta con
+un pulsante non in evidenza.
 
 In Oggi l'avviso «La soglia del nuoto sembra troppo lenta» apre la pagina
 «Soglia del nuoto» (tavola 4f): perché, che cosa falsa, e le due strade. Il

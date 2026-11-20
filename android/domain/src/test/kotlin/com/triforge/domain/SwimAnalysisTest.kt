@@ -172,7 +172,51 @@ class SwimAnalysisTest {
 
         assertEquals(listOf(200, 400, 800), css.efforts.map { it.distanceMeters })
         assertEquals(198.0, css.efforts.first().seconds)
-        assertEquals(CssConfidence.HIGH, css.confidence)
+        // Three distances on a line, and still an estimate: only a test is sure.
+        assertEquals(CssConfidence.MEDIUM, css.confidence)
+    }
+
+    /** Twenty 100s at [pace] seconds each, with rests: a session of short repeats. */
+    private fun hundreds(start: String, pace: Double) =
+        swim((1..20).flatMap { listOf(lap(100.0, pace), rest(20.0)) }, start = start)
+
+    @Test
+    fun `the pace of the 100s does not speak against a slower threshold`() {
+        val since = Instant.parse("2026-08-20T00:00:00Z")
+        // 1:49 over 100 m, up to 1:55 as the repeats go on, and much slower beyond
+        // 100 m: 200, 300 and 400 m at 1:57 to 2:02. The threshold is about 2:06,
+        // slower than every 100, and that is how this swimmer is made.
+        val swims = listOf(
+            hundreds("2026-11-03T06:00:00Z", 109.0),
+            hundreds("2026-11-08T06:00:00Z", 112.0),
+            hundreds("2026-11-12T06:00:00Z", 115.0),
+            swim(
+                (1..8).flatMap { listOf(lap(100.0, 110.0), rest(20.0)) } +
+                    listOf(lap(200.0, 235.0), rest(30.0), lap(300.0, 362.0), rest(30.0), lap(400.0, 487.0)),
+                start = "2026-11-18T06:00:00Z",
+            ),
+        )
+
+        val css = assertNotNull(SwimAnalysis.estimateCss(swims, since))
+
+        assertEquals(126, css.paceSecPer100)
+        assertEquals(listOf(200, 300, 400), css.efforts.map { it.distanceMeters })
+        assertEquals(CssConfidence.MEDIUM, css.confidence)
+    }
+
+    @Test
+    fun `a longer swim that beats the model makes the estimate of low confidence`() {
+        val since = Instant.parse("2026-08-20T00:00:00Z")
+        val set = swim(listOf(lap(200.0, 235.0), rest(30.0), lap(400.0, 487.0)), start = "2026-11-18T06:00:00Z")
+        // 600 m without stopping at 1:57: nobody swims that far faster than their 400.
+        val long = swim(listOf(lap(600.0, 700.0)), start = "2026-11-10T06:00:00Z")
+        // 250 m is not one of the test's distances, and it is slower than the model: no contradiction.
+        val easy = swim(listOf(lap(250.0, 330.0)), start = "2026-11-11T06:00:00Z")
+
+        assertEquals(CssConfidence.MEDIUM, assertNotNull(SwimAnalysis.estimateCss(listOf(set, easy), since)).confidence)
+        val doubted = assertNotNull(SwimAnalysis.estimateCss(listOf(set, easy, long), since))
+        assertEquals(126, doubted.paceSecPer100)
+        assertEquals(CssConfidence.LOW, doubted.confidence)
     }
 
     @Test
