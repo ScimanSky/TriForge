@@ -63,7 +63,7 @@ class TodayAdviceTest {
         assertEquals(friday, card.date)
         assertEquals(listOf(swim), card.sessions)
         assertEquals(LocalTime.of(13, 0), card.time)
-        assertEquals("Sei recuperato, ma il carico delle ultime settimane è alto: fai la seduta prevista e non aggiungere altro.", card.sentence)
+        assertEquals("Hai recuperato bene, ma il carico delle ultime settimane è alto: fai la seduta prevista e non aggiungere altro.", card.sentence)
         assertEquals("Domani: Palestra, 1 h 30′ alle 19:00 (seduta tua).", card.next)
     }
 

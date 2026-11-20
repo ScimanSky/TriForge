@@ -170,8 +170,8 @@
     <string name="week_delta_same">≈ solito</string>
     <string name="week_delta_new">nuovo</string>
     <string name="recovery_score_of_short">/100</string>
-    <string name="recovery_scale_low">recuperato</string>
-    <string name="recovery_scale_high">affaticato</string>
+    <string name="recovery_scale_low">pieno recupero</string>
+    <string name="recovery_scale_high">molta fatica</string>
     <string name="recovery_checkin_row">Check-in del mattino, 30 secondi</string>
     <string name="marker_below">sotto il solito</string>
     <string name="marker_above">sopra il solito</string>
