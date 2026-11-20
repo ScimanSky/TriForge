@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,19 +14,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -37,19 +47,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.triforge.app.R
 import com.triforge.app.data.ChatEntry
-import com.triforge.app.data.ProposalStatus
 import com.triforge.app.ui.common.PrimaryButton
 import com.triforge.app.ui.common.TriCard
 import com.triforge.app.ui.theme.SportColors
 import com.triforge.app.ui.theme.TriColors
-import com.triforge.domain.Formatters
+import com.triforge.app.ui.theme.TriIcons
+import com.triforge.domain.AthleteProfile
 import com.triforge.domain.Sport
 import com.triforge.domain.coach.CoachMapper
+import com.triforge.domain.coach.PlanUndo
 import com.triforge.domain.coach.SportCoachPrompts
+import com.triforge.domain.coach.SportMode
+import com.triforge.domain.coach.TrainingAvailability
 import com.triforge.domain.coach.TriRegia
-import java.time.LocalDate
-import java.time.format.TextStyle
-import java.util.Locale
 
 private val palette = CoachPalette.Coach
 
@@ -57,9 +67,12 @@ private val palette = CoachPalette.Coach
 private val chatSports = listOf(Sport.SWIM, Sport.RUN, Sport.BIKE)
 
 /**
- * Board 6d: one chat per sport coach. The athlete picks the coach; a question
- * for someone else is handed over with one button.
+ * Boards 6d and 6g: one chat per sport coach. The athlete picks the coach; a
+ * question for someone else is handed over with one button. With the
+ * keyboard open ([typing]) the screen above is one line, so the messages
+ * stay in view.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CoachChat(
     state: CoachUiState,
@@ -67,25 +80,24 @@ fun CoachChat(
     sport: Sport,
     onSelect: (Sport) -> Unit,
     onOpenNutri: () -> Unit,
+    profile: AthleteProfile = AthleteProfile(),
+    availability: TrainingAvailability = TrainingAvailability(),
+    typing: Boolean = false,
+    onShowWeek: () -> Unit = {},
 ) {
     val chat = state.chats[sport].orEmpty()
     val coach = SportCoachPrompts.coachName(sport)
     val writing = state.task == CoachTask.REPLYING && state.replying == sport
     val listState = rememberLazyListState()
-    LaunchedEffect(sport, chat.size, writing) {
-        // An empty chat stays at the top, on its introduction.
+    val keyboard = WindowInsets.isImeVisible
+    LaunchedEffect(sport, chat.size, writing, keyboard) {
+        // An empty chat stays at the top, on its introduction. The last answer stays in view when the keyboard opens.
         val last = listState.layoutInfo.totalItemsCount - 1
         if (chat.isNotEmpty() && last >= 0) listState.animateScrollToItem(last)
     }
     KeyboardBack()
     Column(Modifier.fillMaxSize().imePadding()) {
-        CoachSelector(sport, onSelect)
-        Text(
-            stringResource(R.string.coach_chat_hint),
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 20.dp),
-        )
+        if (!typing) CoachSelector(sport, onSelect, availability)
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f),
@@ -94,20 +106,32 @@ fun CoachChat(
         ) {
             if (chat.isEmpty()) {
                 item {
-                    Text(
-                        stringResource(R.string.coach_chat_empty, coach),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            stringResource(R.string.coach_chat_hint),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            stringResource(R.string.coach_chat_empty, coach),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             items(chat, key = { "${sport.name}-${it.id}" }) { entry ->
                 CoachMessage(
                     entry = entry,
                     sport = sport,
+                    view = state.previews[entry.id],
+                    undo = state.undo?.takeIf { it.messageId == entry.id && it.sport == sport },
+                    profile = profile,
                     enabled = state.task == null,
                     onApply = { viewModel.apply(sport, entry) },
                     onDismiss = { viewModel.dismiss(sport, entry) },
+                    onUndo = { viewModel.undo(sport, entry) },
+                    onShowWeek = onShowWeek,
                     onSelect = onSelect,
                     onOpenNutri = onOpenNutri,
                 )
@@ -129,22 +153,80 @@ fun CoachChat(
             } else if (unanswered != null && state.task == null) {
                 item { UnansweredCard(coach, onRetry = { viewModel.retry(sport) }) }
             }
-            // The ready-made questions scroll with the chat: with the keyboard open
-            // they would otherwise cover the messages, or the first lines of an empty chat.
-            item {
-                SuggestionChips(
-                    listOf(
-                        stringResource(R.string.coach_suggest_tired),
-                        stringResource(R.string.coach_suggest_short),
-                        stringResource(R.string.coach_suggest_review),
-                    ),
-                    enabled = state.task == null,
-                    onPick = { viewModel.send(sport, it) },
-                )
+            // The ready-made questions are a way in: once the chat has started they would only push the answers up.
+            if (chat.isEmpty() && !writing) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            stringResource(R.string.coach_suggest_title).uppercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        SuggestionChips(
+                            listOf(
+                                stringResource(R.string.coach_suggest_tired),
+                                stringResource(R.string.coach_suggest_short),
+                                stringResource(R.string.coach_suggest_review),
+                            ),
+                            enabled = state.task == null,
+                            onPick = { viewModel.send(sport, it) },
+                        )
+                    }
+                }
             }
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Composer(stringResource(R.string.coach_composer, coach), palette, enabled = state.task == null, onSend = { viewModel.send(sport, it) })
+        }
+    }
+}
+
+/**
+ * Board 6g, «Mentre scrivi»: all that stays above the chat while the
+ * keyboard is open. The coach's name opens the three coaches; «Settimana»
+ * goes back to the week.
+ */
+@Composable
+fun ChatBar(sport: Sport, onSelect: (Sport) -> Unit, availability: TrainingAvailability, onShowWeek: () -> Unit) {
+    var choosing by rememberSaveable { mutableStateOf(false) }
+    val change = stringResource(R.string.coach_chat_who)
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(role = Role.Button, onClickLabel = change) { choosing = !choosing }
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Dot(SportColors.of(sport))
+                Text(SportCoachPrompts.coachName(sport), style = MaterialTheme.typography.titleMedium)
+                Icon(
+                    TriIcons.ChevronDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp).rotate(if (choosing) 180f else 0f),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Box(
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(role = Role.Button, onClick = onShowWeek)
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(stringResource(R.string.coach_tab_week), style = MaterialTheme.typography.labelLarge, color = TriColors.accentText)
+            }
+        }
+        if (choosing) {
+            CoachSelector(sport, onSelect = { choosing = false; onSelect(it) }, availability = availability)
         }
     }
 }
@@ -159,7 +241,7 @@ internal fun UnansweredCard(who: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun CoachSelector(selected: Sport, onSelect: (Sport) -> Unit) {
+private fun CoachSelector(selected: Sport, onSelect: (Sport) -> Unit, availability: TrainingAvailability) {
     val group = stringResource(R.string.coach_chat_who)
     Row(
         modifier = Modifier
@@ -172,10 +254,12 @@ private fun CoachSelector(selected: Sport, onSelect: (Sport) -> Unit) {
             val on = sport == selected
             val color = SportColors.of(sport)
             val shape = RoundedCornerShape(22.dp)
+            // A sport in pause still has its coach: it says where to turn the sport back on.
+            val paused = availability.mode(sport) == SportMode.PAUSED
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 44.dp)
+                    .heightIn(min = 48.dp)
                     .clip(shape)
                     .background(if (on) color.copy(alpha = 0.16f) else Color.Transparent)
                     .border(1.dp, if (on) color else TriColors.borderStrong, shape)
@@ -184,12 +268,17 @@ private fun CoachSelector(selected: Sport, onSelect: (Sport) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             ) {
-                Dot(color)
-                Text(
-                    TriRegia.sportName(sport),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Dot(if (paused) color.copy(alpha = 0.45f) else color)
+                Column {
+                    Text(
+                        TriRegia.sportName(sport),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (paused) {
+                        Text(stringResource(R.string.coach_chat_paused), fontSize = 11.sp, color = TriColors.textDim)
+                    }
+                }
             }
         }
     }
@@ -199,9 +288,14 @@ private fun CoachSelector(selected: Sport, onSelect: (Sport) -> Unit) {
 private fun CoachMessage(
     entry: ChatEntry,
     sport: Sport,
+    view: ProposalView?,
+    undo: PlanUndo?,
+    profile: AthleteProfile,
     enabled: Boolean,
     onApply: () -> Unit,
     onDismiss: () -> Unit,
+    onUndo: () -> Unit,
+    onShowWeek: () -> Unit,
     onSelect: (Sport) -> Unit,
     onOpenNutri: () -> Unit,
 ) {
@@ -218,54 +312,7 @@ private fun CoachMessage(
         }
         ChatBubble(entry.message, palette)
         entry.handoff?.let { Handoff(it, onSelect, onOpenNutri) }
-        val proposal = entry.proposal?.let { CoachMapper.weekPlanFromFields(it) } ?: return@Column
-        TriCard(Modifier.fillMaxWidth(0.88f), padding = 14.dp) {
-            Text(
-                stringResource(R.string.coach_proposal_title, TriRegia.sportName(sport).lowercase()),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
-            val today = LocalDate.now()
-            proposal.days.filter { !it.date.isBefore(today) }.forEach { day ->
-                day.sessions.forEach { session ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(vertical = 3.dp),
-                    ) {
-                        Dot(session.sport?.let(SportColors::of) ?: Color(0xFF5E6672))
-                        Text(
-                            "${day.date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALIAN).replaceFirstChar { it.uppercase() }} · ${sessionHeading(session)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (TriRegia.isHard(session)) HardPill()
-                        if (session.durationMin > 0) {
-                            Text(
-                                Formatters.duration(session.durationMin * 60L),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
-            when (entry.status) {
-                ProposalStatus.PENDING -> {
-                    Text(
-                        stringResource(R.string.coach_proposal_note),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                    ProposalActions(palette, onApply, onDismiss, enabled = enabled)
-                }
-                ProposalStatus.APPLIED -> StatusLine(stringResource(R.string.coach_applied))
-                ProposalStatus.DISMISSED -> StatusLine(stringResource(R.string.coach_dismissed))
-                ProposalStatus.NONE -> Spacer(Modifier)
-            }
-        }
+        ProposalCard(entry, sport, view, undo, profile, enabled, onApply, onDismiss, onUndo, onShowWeek)
     }
 }
 

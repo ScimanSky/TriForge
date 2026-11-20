@@ -68,6 +68,7 @@ import com.triforge.app.ui.settings.PrivacyScreen
 import com.triforge.app.ui.settings.SettingsScreen
 import com.triforge.app.ui.settings.SourcesScreen
 import com.triforge.domain.AccountGate
+import com.triforge.domain.Sport
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import kotlin.math.roundToInt
@@ -269,6 +270,8 @@ private fun SignedIn(uid: String, container: AppContainer) {
             modifier = Modifier.padding(padding).consumeWindowInsets(padding),
         ) {
             composable(Tab.TODAY.route) {
+                val coach by coachViewModel.state.collectAsStateWithLifecycle()
+                val aiAllowed = account.account.aiCoachAllowed
                 TodayScreen(
                     state = training,
                     recovery = recovery,
@@ -280,6 +283,19 @@ private fun SignedIn(uid: String, container: AppContainer) {
                     onOpenStats = { navController.openTab(Tab.ACTIVITIES) },
                     onOpenRecovery = { navController.navigate(RECOVERY_ROUTE) },
                     onCheckIn = { navController.navigate(CHECK_IN_ROUTE) },
+                    // The coaches' session of the day is theirs to show: without the AI consent only the app's own check stays.
+                    advice = if (aiAllowed) coach.today else coach.today.copy(card = null),
+                    profile = profile.stored,
+                    swimMode = weekSetup.availability.mode(Sport.SWIM),
+                    onOpenCoach = { navController.openTab(Tab.COACH) },
+                    onOpenNutri = { navController.openTab(Tab.NUTRI) },
+                    onUseCss = profileViewModel::useCss,
+                    onAskSwimTest = { message ->
+                        // Without the consent the Coach tab asks for it first, and nothing is sent.
+                        if (aiAllowed) coachViewModel.askSwimTest(message)
+                        navController.openTab(Tab.COACH)
+                    },
+                    onSnoozeCss = coachViewModel::snoozeCssCheck,
                 )
             }
             composable(Tab.ACTIVITIES.route) {

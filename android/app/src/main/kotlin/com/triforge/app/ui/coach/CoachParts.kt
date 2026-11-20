@@ -287,7 +287,13 @@ fun Composer(placeholder: String, palette: CoachPalette, enabled: Boolean, onSen
 
 /** Apply / Ignore under a plan the coach proposed in the chat. */
 @Composable
-fun ProposalActions(palette: CoachPalette, onApply: () -> Unit, onDismiss: () -> Unit, enabled: Boolean) {
+fun ProposalActions(
+    palette: CoachPalette,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit,
+    enabled: Boolean,
+    dismiss: String = stringResource(R.string.coach_ignore),
+) {
     Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         androidx.compose.material3.Button(
             onClick = onApply,
@@ -296,7 +302,7 @@ fun ProposalActions(palette: CoachPalette, onApply: () -> Unit, onDismiss: () ->
             shape = CircleShape,
             colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = palette.accent, contentColor = palette.onAccent),
         ) { Text(stringResource(R.string.coach_apply)) }
-        SecondaryButton(stringResource(R.string.coach_ignore), onDismiss, modifier = Modifier.weight(1f), enabled = enabled, compact = true)
+        SecondaryButton(dismiss, onDismiss, modifier = Modifier.weight(1f), enabled = enabled, compact = true)
     }
 }
 

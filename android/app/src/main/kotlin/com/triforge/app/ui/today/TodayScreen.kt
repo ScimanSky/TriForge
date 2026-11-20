@@ -1,5 +1,6 @@
 package com.triforge.app.ui.today
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +46,8 @@ import androidx.compose.ui.unit.sp
 import com.triforge.app.R
 import com.triforge.app.ui.RecoveryState
 import com.triforge.app.ui.TrainingState
+import com.triforge.app.ui.coach.KeyboardBack
+import com.triforge.app.ui.coach.TodayUi
 import com.triforge.app.ui.common.ActivityRow
 import com.triforge.app.ui.common.BulletBar
 import com.triforge.app.ui.common.CardHeader
@@ -71,6 +75,7 @@ import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.TriIcons
 import com.triforge.app.ui.theme.numberStyle
 import com.triforge.domain.Activity
+import com.triforge.domain.AthleteProfile
 import com.triforge.domain.FitnessTrend
 import com.triforge.domain.FormZone
 import com.triforge.domain.Formatters
@@ -81,6 +86,7 @@ import com.triforge.domain.SportWeekGlance
 import com.triforge.domain.TrainingStats
 import com.triforge.domain.WeekGlance
 import com.triforge.domain.WeekGlanceModel
+import com.triforge.domain.coach.SportMode
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -116,7 +122,38 @@ fun TodayScreen(
     modifier: Modifier = Modifier,
     avatar: ByteArray? = null,
     onConnectSource: () -> Unit = onOpenProfile,
+    /** What the coaches have for today: «Oggi tocca a» and the swim threshold to check. */
+    advice: TodayUi = TodayUi(),
+    profile: AthleteProfile = AthleteProfile(),
+    swimMode: SportMode = SportMode.AI,
+    onOpenCoach: () -> Unit = {},
+    onOpenNutri: () -> Unit = {},
+    onUseCss: (Int) -> Unit = {},
+    onAskSwimTest: (String) -> Unit = {},
+    onSnoozeCss: () -> Unit = {},
 ) {
+    // Board 4f: the page of the swim threshold opens over Oggi and closes by itself once the threshold fits.
+    var threshold by rememberSaveable { mutableStateOf(false) }
+    val check = advice.cssCheck
+    // Once the threshold fits there is no page to come back to, now or when a check comes up again.
+    LaunchedEffect(check == null) { if (check == null) threshold = false }
+    if (threshold && check != null) {
+        BackHandler { threshold = false }
+        KeyboardBack()
+        SwimThresholdPage(
+            check = check,
+            swimMode = swimMode,
+            onBack = { threshold = false },
+            onAskTest = {
+                threshold = false
+                onAskSwimTest(it)
+            },
+            onUse = onUseCss,
+            onSnooze = onSnoozeCss,
+            modifier = modifier,
+        )
+        return
+    }
     when (state) {
         TrainingState.Loading -> LoadingBox(modifier)
 
@@ -134,6 +171,11 @@ fun TodayScreen(
             onOpenRecovery = onOpenRecovery,
             onCheckIn = onCheckIn,
             modifier = modifier,
+            advice = advice,
+            profile = profile,
+            onOpenCoach = onOpenCoach,
+            onOpenNutri = onOpenNutri,
+            onVerifyCss = { threshold = true },
         )
     }
 }
@@ -157,6 +199,11 @@ private fun Dashboard(
     onCheckIn: () -> Unit,
     modifier: Modifier = Modifier,
     today: LocalDate = LocalDate.now(),
+    advice: TodayUi = TodayUi(),
+    profile: AthleteProfile = AthleteProfile(),
+    onOpenCoach: () -> Unit = {},
+    onOpenNutri: () -> Unit = {},
+    onVerifyCss: () -> Unit = {},
 ) {
     val zone = ZoneId.systemDefault()
     val glance = remember(activities, today) { WeekGlanceModel.compute(activities, today, zone) }
@@ -177,6 +224,15 @@ private fun Dashboard(
             return@LazyColumn
         }
 
+        // What to do comes first: the numbers below are its reasons.
+        advice.card?.let { card ->
+            item(key = "advice") { TodayAdviceCard(card, profile, onOpenCoach, onOpenNutri) }
+        }
+        val check = advice.cssCheck
+        if (check != null && !advice.cssSnoozed) {
+            item(key = "css") { CssNoticeCard(check, onVerifyCss) }
+        }
+
         if (recovery is RecoveryState.Loading) {
             // The two cards take a couple of seconds to compute: their place is held, so the week does not jump down when they arrive.
             item(key = "recovery") { PendingCard(stringResource(R.string.recovery_title), RECOVERY_CARD_HEIGHT) }
@@ -187,7 +243,13 @@ private fun Dashboard(
         if (trend != null && trend.points.isNotEmpty()) {
             item(key = "load") {
                 val firstDay = activities.minOf { it.startTime.atZone(zone).toLocalDate() }
-                LoadCard(trend, loads.values, estimate = firstDay.isAfter(today.minusDays(42)), onOpen = onOpenRecovery)
+                LoadCard(
+                    trend,
+                    loads.values,
+                    estimate = firstDay.isAfter(today.minusDays(42)),
+                    onOpen = onOpenRecovery,
+                    onVerifyCss = onVerifyCss.takeIf { check != null },
+                )
             }
         }
         item(key = "week") {
@@ -338,7 +400,14 @@ private fun FormZone.labelRes(): Int = when (this) {
  * for form on a fixed scale with the productive band.
  */
 @Composable
-private fun LoadCard(trend: FitnessTrend, loads: Collection<SessionLoad>, estimate: Boolean, onOpen: () -> Unit) {
+private fun LoadCard(
+    trend: FitnessTrend,
+    loads: Collection<SessionLoad>,
+    estimate: Boolean,
+    onOpen: () -> Unit,
+    /** Set while the swim threshold is in doubt: the card says its numbers may be too high. */
+    onVerifyCss: (() -> Unit)? = null,
+) {
     val points = trend.points
     val latest = points.last()
     val fitnessColor = MaterialTheme.colorScheme.primary
@@ -349,7 +418,7 @@ private fun LoadCard(trend: FitnessTrend, loads: Collection<SessionLoad>, estima
     TriCard(onClick = onOpen) {
         CardHeader(
             title = stringResource(R.string.load_card_title),
-            trailing = stringResource(R.string.today_form_period, points.size),
+            trailing = if (onVerifyCss != null) stringResource(R.string.recovery_confidence_low) else stringResource(R.string.today_form_period, points.size),
         )
         if (loadDays < MIN_LOAD_DAYS / 2 && points.size >= MIN_LOAD_DAYS) {
             Text(
@@ -386,6 +455,14 @@ private fun LoadCard(trend: FitnessTrend, loads: Collection<SessionLoad>, estima
                 note = stringResource(latest.zone.labelRes()),
                 modifier = Modifier.weight(1f),
             )
+        }
+        if (onVerifyCss != null) {
+            Text(
+                text = stringResource(R.string.css_form_doubt),
+                style = MaterialTheme.typography.bodySmall,
+                color = TriColors.accentText,
+            )
+            LinkRow(stringResource(R.string.css_verify), onVerifyCss, Modifier.padding(bottom = 6.dp))
         }
         LoadChart(
             points = points,

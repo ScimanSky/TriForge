@@ -242,7 +242,16 @@ soglia del profilo non viene mai cambiata di nascosto: i coach lo leggono nei
 dati dell'atleta («Soglia del nuoto da verificare») e propongono il test
 400 + 200. Le ripetute con un passo impossibile (vasche contate male
 dall'orologio) sono marcate «dubbie» e restano fuori da migliori tempi, zone e
-stima.
+stima; nel dettaglio della nuotata sono tratteggiate nel grafico e spiegate
+nella tabella.
+
+In Oggi l'avviso «La soglia del nuoto sembra troppo lenta» apre la pagina
+«Soglia del nuoto» (tavola 4f): perché, che cosa falsa, e le due strade. Il
+test 400 + 200 si chiede al Coach Nuoto con un tocco, o si scrivono i due
+tempi (`SwimThreshold.fromTest`: la differenza dei due tempi diviso due, ogni
+100 m); oppure si accetta la stima. «Lascia per ora» fa tacere l'avviso per
+tre settimane (`cssSnoozedUntil` in `coaching/coach`). Finché la soglia è in
+dubbio, «Forma fisica» dice «Affidabilità bassa».
 
 ### La regia non scrive nel passato
 
@@ -252,7 +261,20 @@ non toccano i giorni prima, e una seduta fissa dell'atleta il cui orario è già
 passato non viene più scritta su oggi. Quando l'atleta cambia «Giorni, orari e
 gara», `realign` riallinea la settimana senza richiamare i modelli: tolte le
 sedute di uno sport ora in pausa o seguito dall'allenatore, spostate le sedute
-fisse nei nuovi giorni, e la regia sistema quello che ne consegue.
+fisse nei nuovi giorni, e la regia sistema quello che ne consegue. Che cosa ha
+tolto e aggiunto, e perché, lo dice una volta sulla settimana («Il profilo è
+cambiato», tavola 6i): `ProposalPreview.notice`, salvato nel campo `notice` di
+`coaching/coach` fino a «Va bene» o al cambio successivo della settimana.
+
+### Oggi tocca a
+
+`TodayAdvice.card` è la scheda in cima a Oggi (tavola 3c): le sedute di oggi
+ancora da fare, o quelle di domani quando oggi è fatto, libero o finito; una
+frase sola che legge insieme recupero e forma (la risposta del corpo viene
+prima, il carico la spiega), e il pasto che conta per NutriAI. Nessun modello
+viene chiamato: è tutto calcolato dalla settimana e dai dati già caricati. Una
+seduta di oggi non ancora registrata resta «di oggi» fino a un'ora dopo la sua
+fine all'orario abituale.
 
 ### Quando un modello non risponde
 
@@ -274,6 +296,21 @@ altri due, ripassa tutto alla regia e scrive nel verbale la modifica e gli
 eventuali interventi dell'app. Il riepilogo per NutriAI viene riscritto: i
 numeri dei giorni toccati cambiano subito e i loro pasti, se c'erano, sono
 "da rivedere".
+
+Prima di «Applica» la proposta si legge per intero (tavola 6h): l'app calcola
+`CoachTable.revision` sulla settimana com'è adesso, senza toccarla, e mostra
+ogni seduta del coach con quello che le succede (nuova, spostata, cambiata,
+invariata, tolta) e i suoi blocchi, poi «Cambia anche»: le sedute degli altri
+che la regia deve toccare, i suoi motivi, e che cosa cambia per NutriAI
+(`ProposalPreview`). Niente cambia che non sia scritto lì. Dopo «Applica»
+resta il riepilogo con «Annulla»: la settimana di prima è salvata nel campo
+`undo` di `coaching/coach` e torna com'era con un tocco, finché non si applica
+un'altra modifica o si rifà la settimana. Una proposta annullata ha stato
+`undone` e si può applicare di nuovo.
+
+Con la tastiera aperta la schermata sopra la chat si riduce a una riga (tavola
+6g): il nome del coach, che apre i tre coach, e «Settimana». Le domande già
+pronte si vedono solo finché la chat è vuota.
 
 Una domanda che non è del suo sport il coach la passa con un tasto
 (`handoff`): alla chat di un altro coach o a NutriAI.

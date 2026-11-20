@@ -120,4 +120,14 @@ class SwimThresholdTest {
         assertEquals(111, check.suggestion.paceSecPer100)
         assertFalse(check.suggestion.paceSecPer100 > 126)
     }
+
+    @Test
+    fun `the test's two times give the threshold, and times that cannot be a test give none`() {
+        // 400 m in 7:00 and 200 m in 3:18: (420 − 198) / 2 is 1:51 per 100 m.
+        assertEquals(111, SwimThreshold.fromTest(420, 198))
+        assertNull(SwimThreshold.fromTest(198, 420), "the two fields swapped")
+        assertNull(SwimThreshold.fromTest(390, 200), "a 400 faster than twice the 200")
+        assertNull(SwimThreshold.fromTest(0, 0))
+        assertNull(SwimThreshold.fromTest(3600, 600), "nobody's threshold")
+    }
 }

@@ -28,6 +28,8 @@ data class CssCheck(
     val meters: Int,
     /** Share of those metres swum at threshold pace or faster (Z4 and Z5). */
     val highShare: Double,
+    /** Share of those metres faster than the threshold zone (Z5 alone). */
+    val topShare: Double = 0.0,
     /** Swims whose whole swimming time, half an hour and more, was faster than the threshold. */
     val fasterSessions: Int,
     /** The pace the athlete usually swims at, s/100 m: the median of the swims. */
@@ -83,7 +85,7 @@ object SwimThreshold {
     /** A proposal closer than this to the current value is not worth a warning. */
     const val MIN_GAP = 0.03
 
-    private data class Swim(val meters: Double, val seconds: Double, val highMeters: Double, val avgHr: Int?) {
+    private data class Swim(val meters: Double, val seconds: Double, val highMeters: Double, val topMeters: Double, val avgHr: Int?) {
         val pace: Double get() = seconds / meters * 100.0
     }
 
@@ -93,12 +95,14 @@ object SwimThreshold {
         if (repeats.isNotEmpty()) {
             val meters = repeats.sumOf { it.distanceMeters }
             val high = repeats.filter { SwimAnalysis.zoneOf(it.paceSecPer100, css) >= 4 }.sumOf { it.distanceMeters }
-            return Swim(meters, repeats.sumOf { it.durationSec }, high, activity.avgHr)
+            val top = repeats.filter { SwimAnalysis.zoneOf(it.paceSecPer100, css) >= 5 }.sumOf { it.distanceMeters }
+            return Swim(meters, repeats.sumOf { it.durationSec }, high, top, activity.avgHr)
         }
         if (activity.distanceMeters <= 0 || activity.movingSec <= 0) return null
         val pace = activity.movingSec / activity.distanceMeters * 100.0
         val high = if (SwimAnalysis.zoneOf(pace, css) >= 4) activity.distanceMeters else 0.0
-        return Swim(activity.distanceMeters, activity.movingSec.toDouble(), high, activity.avgHr)
+        val top = if (SwimAnalysis.zoneOf(pace, css) >= 5) activity.distanceMeters else 0.0
+        return Swim(activity.distanceMeters, activity.movingSec.toDouble(), high, top, activity.avgHr)
     }
 
     private fun poolSwims(activities: List<Activity>, from: LocalDate, today: LocalDate, zone: ZoneId): List<Activity> = activities.filter {
@@ -132,12 +136,29 @@ object SwimThreshold {
             sessions = swims.size,
             meters = meters.roundToInt(),
             highShare = highShare,
+            topShare = swims.sumOf { it.topMeters } / meters,
             fasterSessions = faster,
             usualPaceSecPer100 = usual.roundToInt(),
             avgHr = beats.takeIf { it.isNotEmpty() }?.average()?.roundToInt(),
             suggestion = suggestion,
         )
     }
+
+    /**
+     * The threshold from a test: 400 m and 200 m flat out, in seconds. It is
+     * the pace of the 200 m between the two, per 100 m. Null when the two
+     * times cannot be those of a test (the 400 not slower than the 200, or
+     * a pace nobody swims).
+     */
+    fun fromTest(seconds400: Int, seconds200: Int): Int? {
+        if (seconds200 <= 0 || seconds400 <= seconds200) return null
+        // The 400 is swum at the pace of the 200 or slower, never at half its speed.
+        if (seconds400 < seconds200 * 2 || seconds400 > seconds200 * 4) return null
+        return ((seconds400 - seconds200) / 2.0).roundToInt().takeIf { it in TEST_RANGE }
+    }
+
+    /** Paces per 100 m a threshold can have, from a champion to a beginner. */
+    private val TEST_RANGE = 55..240
 
     /**
      * The threshold the app would propose: from the best efforts of the last

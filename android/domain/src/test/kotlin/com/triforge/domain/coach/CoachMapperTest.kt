@@ -105,6 +105,15 @@ class CoachMapperTest {
         assertEquals(listOf(DislikeEntry("lattosio")), profile.dislikes)
         assertEquals(NutritionProfile.MAX_MEALS, profile.mealsPerDay)
         assertEquals(listOf("Vegano", "6 pasti"), profile.chips())
+        assertEquals("Vegano · 1 cibo escluso", profile.summary())
+        assertEquals(
+            "Onnivoro · 1 allergia · 2 cibi esclusi · creatina 3 g",
+            NutritionProfile(
+                otherAllergies = "kiwi",
+                dislikes = listOf(DislikeEntry("latte", listOf("kefir")), DislikeEntry("funghi")),
+                supplements = listOf(Supplement("Creatina", "3 g")),
+            ).summary(),
+        )
         assertEquals(NutritionProfile(), CoachMapper.nutritionProfileFromFields(emptyMap()))
         assertEquals(listOf("Lattosio", "noci"), NutritionProfile.parseList("Lattosio, noci;\nlattosio"))
     }

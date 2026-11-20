@@ -354,6 +354,47 @@ class OwnSessionsTest {
         assertEquals(listOf(2, 4), revision.plan.days.indices.filter { i -> revision.plan.days[i].sessions.any { it.sport == Sport.STRENGTH } })
         assertTrue(revision.notes.any { it.contains("corsa") } && revision.notes.any { it.contains("sedute fisse") }, revision.notes.toString())
         assertNull(CoachTable.realign(revision.plan, monday, budget(now), profile, now, now = LocalTime.of(19, 0)), "once in line it stays so")
+
+        // What the athlete reads on the week: one line per kind of change, with its days and its reason.
+        val notice = ProposalPreview.notice(revision.changes, now)
+        assertTrue(notice.any { it.sport == Sport.RUN && it.text.startsWith("Mar 24. Tolta") && it.text.contains("corsa è in pausa") }, notice.toString())
+        assertTrue(notice.any { it.sport == Sport.STRENGTH && it.text.startsWith("Mer 25 e ven 27. Aggiunta") && it.text.contains("seduta tua") }, notice.toString())
+    }
+
+    @Test
+    fun `a proposal is read session by session, and a session on another day is one that moved`() {
+        val free = coached.copy(run = SportSlot(setOf(DayOfWeek.TUESDAY, DayOfWeek.SATURDAY), LocalTime.of(12, 30)))
+        val week = CoachTable.merge(monday, monday, emptyList(), listOf(SportProposal(Sport.RUN, listOf(day(1, easyRun(40))))), budget(free), profile, free).copy(rounds = 1)
+        val moved = CoachTable.revision(week, SportProposal(Sport.RUN, listOf(day(5, easyRun(40)))), monday, budget(free), profile, free)
+        val line = ProposalPreview.lines(moved, Sport.RUN, monday).single()
+        assertEquals(PreviewLine.Mark.MOVED to monday.plusDays(1), line.mark to line.movedFrom)
+        assertEquals(monday.plusDays(5), line.date)
+
+        val shorter = CoachTable.revision(week, SportProposal(Sport.RUN, listOf(day(1, easyRun(30)))), monday, budget(free), profile, free)
+        assertEquals(listOf(PreviewLine.Mark.CHANGED), ProposalPreview.lines(shorter, Sport.RUN, monday).map { it.mark })
+        val change = shorter.changes.single()
+        assertEquals("«${change.session.title}» da 40′ a 30′", ProposalPreview.describe(change))
+
+        val none = CoachTable.revision(week, SportProposal(Sport.RUN, emptyList()), monday, budget(free), profile, free)
+        assertEquals(listOf(PreviewLine.Mark.REMOVED), ProposalPreview.lines(none, Sport.RUN, monday).map { it.mark })
+        val same = CoachTable.revision(week, SportProposal(Sport.RUN, listOf(day(1, easyRun(40)))), monday, budget(free), profile, free)
+        assertEquals(listOf(PreviewLine.Mark.SAME), ProposalPreview.lines(same, Sport.RUN, monday).map { it.mark })
+        assertEquals("sab 28", ProposalPreview.day(monday.plusDays(5)))
+
+        // Once accepted: what it did in a line per session, what it means for NutriAI, and the week before kept to go back.
+        val summary = ProposalPreview.summary(moved, Sport.RUN, monday)
+        assertEquals(listOf("Sab 28. «${line.session.title}» spostata da mar 24, 40′."), summary.map { it.text })
+        assertTrue(ProposalPreview.also(moved, Sport.RUN).isEmpty(), "nobody else's session changes")
+        assertEquals(
+            "Cambiano i numeri di mar 24 e sab 28. I pasti già preparati di sab 28 sono da rivedere.",
+            ProposalPreview.nutri(moved.changes, setOf(monday.plusDays(5))),
+        )
+        assertEquals(null, ProposalPreview.nutri(same.changes, emptySet()))
+        val undo = PlanUndo(week, Sport.RUN, "m1", summary, "Cambiano i numeri di mar 24.")
+        val read = CoachMapper.undoFromFields(CoachMapper.undoToFields(undo))!!
+        assertEquals(undo.copy(plan = read.plan), read)
+        assertEquals(week.days, read.plan.days)
+        assertEquals(null, CoachMapper.undoFromFields(CoachMapper.undoToFields(undo) - "messageId"))
     }
 
     // ---- Planned and done ----------------------------------------------------
