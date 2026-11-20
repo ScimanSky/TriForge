@@ -127,7 +127,7 @@ object AthleteContext {
 
     /** The zones of each sport with a threshold, in the athlete's own numbers: the only paces a coach may quote. */
     fun zones(profile: AthleteProfile): List<String> = TriRegia.SPORTS.mapNotNull { sport ->
-        val targets = Zones.ALL.map { zone -> zone to Zones.target(sport, zone, profile) }.filter { it.second.isNotEmpty() }
+        val targets = Zones.keys(sport).map { zone -> zone to Zones.target(sport, zone, profile) }.filter { it.second.isNotEmpty() }
         if (targets.isEmpty()) null
         else sportName(sport).replaceFirstChar { c -> c.uppercase() } + ": " + targets.joinToString("; ") { (zone, target) -> "$zone ${Zones.label(zone).lowercase()} $target" }
     }
@@ -138,7 +138,7 @@ object AthleteContext {
         val source = if (check.suggestion.source == CssSource.BEST_EFFORTS) "dai suoi migliori tempi su due distanze" else "stima prudente dal passo a cui nuota di solito"
         return buildString {
             append("La CSS del profilo (${pace(check.currentSecPer100)}/100 m) è con ogni probabilità troppo lenta: nelle ultime tre settimane ")
-            append("${(check.highShare * 100).roundToInt()}% dei metri in vasca risulta a passo soglia o più veloce (${check.sessions} sedute, passo abituale ${pace(check.usualPaceSecPer100)}/100 m")
+            append("${(check.highShare * 100).roundToInt()}% dei metri nuotati senza fermarsi (ripetute da 200 m in su) risulta a passo soglia o più veloce (${check.sessions} sedute, passo abituale su quelle ripetute ${pace(check.usualPaceSecPer100)}/100 m")
             check.avgHr?.let { append(", FC media $it") }
             append("), cosa che con una soglia giusta non succede. ")
             append("Finché non la verifica, zone, carico (TSS) e forma del nuoto sono gonfiati e i ritmi delle sedute di nuoto troppo lenti: non leggere quelle nuotate come lavori di soglia e non dare per certo un sovraccarico che viene dal nuoto. ")

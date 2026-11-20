@@ -89,17 +89,21 @@ data class CssEstimate(
 
 data class CssEffort(val distanceMeters: Int, val seconds: Double, val date: Instant)
 
-enum class CssConfidence { HIGH, MEDIUM }
+/**
+ * How far a [CssEstimate] can be trusted. Never high: the app cannot know
+ * that the intervals were swum flat out, only a test says so.
+ */
+enum class CssConfidence { MEDIUM, LOW }
 
 /**
  * Swim metrics read from the laps of a session, chosen for a triathlete:
  * pace against the CSS, how the pace and the stroke hold in the main set,
- * stroke efficiency, pace zones on the same five levels as bike and run,
+ * stroke efficiency, pace zones as swimmers name them (A1 to C3),
  * the load lap by lap and a CSS estimated from the athlete's best efforts.
  *
  * Adapted from the swim metrics of SwimForge (pace zones on CSS, pacing
  * variation and fade, stroke length drop in repeats, CSS from best efforts),
- * reduced to freestyle and to five zones.
+ * reduced to freestyle.
  */
 object SwimAnalysis {
 
@@ -107,11 +111,23 @@ object SwimAnalysis {
     const val MIN_SET_REPEATS = 3
 
     /**
-     * Upper bounds of zones 1 to 4 as a fraction of CSS speed; above the last
-     * is zone 5. Z1 recovery, Z2 aerobic, Z3 tempo, Z4 threshold (the CSS
-     * itself, give or take a couple of seconds), Z5 above threshold.
+     * The swim zones as coaches name them at the pool, slowest first: A1
+     * recovery, A2 aerobic, B1 tempo, B2 threshold (up to the CSS), C1 just
+     * above it, C2 VO2max, C3 sprint. Recorded swims and planned sessions
+     * both use them, so a planned B1 and a swum B1 are the same pace.
      */
-    val ZONE_SPEED_BOUNDS = doubleArrayOf(0.86, 0.92, 0.97, 1.02)
+    val ZONE_CODES = listOf("A1", "A2", "B1", "B2", "C1", "C2", "C3")
+
+    /**
+     * Upper bounds of A1 to C2 as a fraction of CSS speed, as in SwimForge;
+     * above the last is C3. B2 ends at the CSS itself, with half a percent
+     * of slack so that a repeat swum on the threshold does not fall in C1
+     * for a few tenths of a second.
+     */
+    val ZONE_SPEED_BOUNDS = doubleArrayOf(0.85, 0.90, 0.95, 1.005, 1.04, 1.10)
+
+    /** The place of B2, the threshold zone, among the zones, counted from 1. */
+    const val THRESHOLD_ZONE = 4
 
     /** Intensity factor cap: anything above is a lap button pressed late or early. */
     private const val MAX_IF = 1.3
@@ -186,19 +202,22 @@ object SwimAnalysis {
     fun usualPace(repeats: List<SwimRepeat>): Double? =
         repeats.filter { !it.doubtful && it.distanceMeters > 0 && it.durationSec > 0 }.map { it.paceSecPer100 }.takeIf { it.isNotEmpty() }?.let(Stats::median)
 
-    /** Zone 1 to 5 of a pace against the CSS. */
+    /** The zone of a pace against the CSS, counted from 1 (A1) to 7 (C3): its place in [ZONE_CODES]. */
     fun zoneOf(paceSecPer100: Double, cssSecPer100: Int): Int {
         val relativeSpeed = cssSecPer100 / paceSecPer100
         val index = ZONE_SPEED_BOUNDS.indexOfFirst { relativeSpeed < it }
-        return if (index < 0) 5 else index + 1
+        return if (index < 0) ZONE_CODES.size else index + 1
     }
 
-    /** Metres swum in each zone (index 0 is Z1), doubtful repeats left out. Null without laps or CSS. */
+    /** The code of the zone of a pace against the CSS: «B1». */
+    fun zoneCode(paceSecPer100: Double, cssSecPer100: Int): String = ZONE_CODES[zoneOf(paceSecPer100, cssSecPer100) - 1]
+
+    /** Metres swum in each zone (index 0 is A1, as in [ZONE_CODES]), doubtful repeats left out. Null without laps or CSS. */
     fun zoneMeters(activity: Activity, cssSecPer100: Int?): DoubleArray? {
         val css = cssSecPer100?.takeIf { it > 0 } ?: return null
         val repeats = repeats(activity).filter { !it.doubtful }
         if (repeats.isEmpty()) return null
-        val meters = DoubleArray(5)
+        val meters = DoubleArray(ZONE_CODES.size)
         repeats.forEach { meters[zoneOf(it.paceSecPer100, css) - 1] += it.distanceMeters }
         return meters
     }
@@ -311,16 +330,35 @@ object SwimAnalysis {
     private val CSS_DISTANCES = listOf(200, 300, 400, 500, 800, 1000, 1500)
 
     /**
+     * From this length on an interval says something about the threshold.
+     * Shorter repeats with rest are swum faster than it, by a little or by a
+     * lot depending on the swimmer: a pace over 100 m is not a threshold.
+     */
+    const val CONTINUOUS_METERS = 200.0
+
+    /** How much farther than the model allows a swim may go before it contradicts the estimate. */
+    private const val MODEL_SLACK = 1.03
+
+    /**
      * Critical swim speed from the best freestyle intervals of the pool swims
      * since [since]: for each distance the fastest interval, then the slope of
      * distance over time (distance = CS x time + D'). An effort slower per
      * 100 m than a longer one was not swum hard and is left out. Needs two
      * distances, one of them at least 400 m.
+     *
+     * The estimate is right when the intervals were swum flat out, which the
+     * app cannot know: it is never more than of medium confidence, a test
+     * says more. It is of low confidence when another continuous swim of
+     * [CONTINUOUS_METERS] and more went farther in its time than the model
+     * allows: then the efforts were not the athlete's best and the estimate
+     * is too slow. Short repeats are not compared with it: they are faster
+     * than the threshold for everybody.
      */
     fun estimateCss(activities: List<Activity>, since: Instant): CssEstimate? {
-        val efforts = activities
+        val continuous = activities
             .filter { it.sport == Sport.SWIM && it.openWater != true && it.startTime >= since }
             .flatMap { activity -> repeats(activity).filter { it.isFreestyle && !it.doubtful }.map { activity to it } }
+        val efforts = continuous
             .mapNotNull { (activity, repeat) ->
                 val distance = CSS_DISTANCES.firstOrNull { kotlin.math.abs(repeat.distanceMeters - it) <= it * 0.02 }
                 distance?.let { CssEffort(it, repeat.durationSec, activity.startTime) }
@@ -341,8 +379,11 @@ object SwimAnalysis {
         // D' (metres of anaerobic reserve) must be positive for the model to hold.
         val meanT = points.sumOf { it.first } / points.size
         val meanD = points.sumOf { it.second } / points.size
-        if (meanD - speed * meanT <= 0) return null
-        val confidence = if (hard.size >= 3) CssConfidence.HIGH else CssConfidence.MEDIUM
-        return CssEstimate(pace, hard, confidence)
+        val reserve = meanD - speed * meanT
+        if (reserve <= 0) return null
+        val beaten = continuous.any { (_, repeat) ->
+            repeat.distanceMeters >= CONTINUOUS_METERS && repeat.distanceMeters > (speed * repeat.durationSec + reserve) * MODEL_SLACK
+        }
+        return CssEstimate(pace, hard, if (beaten) CssConfidence.LOW else CssConfidence.MEDIUM)
     }
 }

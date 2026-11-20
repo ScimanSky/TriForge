@@ -65,8 +65,8 @@ import com.triforge.domain.coach.Zones
 import kotlin.math.roundToInt
 
 /** The swim's own colours for the zones at threshold and above, as in the swim detail. */
-private val Z4Color = Color(0xFFFF8A4C)
-private val Z5Color = Color(0xFFFF5C64)
+private val ThresholdColor = Color(0xFFFF8A4C)
+private val AboveColor = Color(0xFFFF5C64)
 
 /**
  * Board 4f, «Soglia del nuoto»: why the threshold of the profile looks too
@@ -163,13 +163,13 @@ private fun WhyCard(check: CssCheck) {
         ) {
             // One bar for the whole: easy zones, threshold, above threshold.
             if (high < 100) Box(Modifier.weight((100 - high).toFloat()).height(18.dp).background(SportColors.swim.copy(alpha = 0.45f)))
-            if (threshold > 0) Box(Modifier.weight(threshold.toFloat()).height(18.dp).background(Z4Color))
-            if (top > 0) Box(Modifier.weight(top.toFloat()).height(18.dp).background(Z5Color))
+            if (threshold > 0) Box(Modifier.weight(threshold.toFloat()).height(18.dp).background(ThresholdColor))
+            if (top > 0) Box(Modifier.weight(top.toFloat()).height(18.dp).background(AboveColor))
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Key(SportColors.swim.copy(alpha = 0.45f), stringResource(R.string.css_zone_easy, 100 - high))
-            if (threshold > 0) Key(Z4Color, stringResource(R.string.css_zone_value, "Z4", threshold))
-            if (top > 0) Key(Z5Color, stringResource(R.string.css_zone_value, "Z5", top))
+            if (threshold > 0) Key(ThresholdColor, stringResource(R.string.css_zone_value, "B2", threshold))
+            if (top > 0) Key(AboveColor, stringResource(R.string.css_zone_value, "C1–C3", top))
         }
         Text(
             stringResource(R.string.css_why_body),
@@ -209,12 +209,12 @@ private fun Key(color: Color, text: String) {
 /** What a threshold too slow distorts: the zones, load and form, the coach's paces. */
 @Composable
 private fun EffectsCard(check: CssCheck) {
-    val now = SwimAnalysis.zoneOf(check.usualPaceSecPer100.toDouble(), check.currentSecPer100)
-    val then = SwimAnalysis.zoneOf(check.usualPaceSecPer100.toDouble(), check.suggestion.paceSecPer100)
+    val now = SwimAnalysis.zoneCode(check.usualPaceSecPer100.toDouble(), check.currentSecPer100)
+    val then = SwimAnalysis.zoneCode(check.usualPaceSecPer100.toDouble(), check.suggestion.paceSecPer100)
     TriCard {
         CardHeader(stringResource(R.string.css_effects_title))
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (now != then) Effect(stringResource(R.string.css_effect_zones), stringResource(R.string.css_effect_zones_body, "Z$now", "Z$then"))
+            if (now != then) Effect(stringResource(R.string.css_effect_zones), stringResource(R.string.css_effect_zones_body, now, then))
             Effect(stringResource(R.string.css_effect_load), stringResource(R.string.css_effect_load_body))
             Effect(stringResource(R.string.css_effect_coach), stringResource(R.string.css_effect_coach_body))
         }
@@ -345,7 +345,7 @@ private fun EstimateCard(check: CssCheck, onUse: (Int) -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 16.dp, bottom = 4.dp).semantics { heading() },
         )
-        Zones.ALL.forEachIndexed { index, zone ->
+        Zones.SWIM.forEachIndexed { index, zone ->
             if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(TriColors.border))
             Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(zone, style = numberStyle(14.sp), modifier = Modifier.width(36.dp))

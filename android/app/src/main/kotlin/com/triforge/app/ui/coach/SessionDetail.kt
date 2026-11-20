@@ -50,13 +50,22 @@ import java.util.Locale
 
 private val fullDate = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ITALIAN)
 
-/** The colour of a zone on the bar: grey for recovery, cold for easy, warm for hard. */
-private fun zoneColor(zone: String): Color = when (Zones.level(zone)) {
-    1 -> Color(0xFF5B6472)
-    2 -> Color(0xFF4CC2FF)
-    3 -> Color(0xFF7FE3B0)
-    4 -> Color(0xFFFF5B2E)
-    else -> Color(0xFFFF5C64)
+/**
+ * The colour of a zone on the bar: grey for recovery, cold for easy, warm
+ * for hard. The swim has two zones more than bike and run, above the
+ * threshold: each has its own colour, so that C1 is not mistaken for B2.
+ */
+private fun zoneColor(zone: String): Color = when (zone) {
+    "C1" -> Color(0xFFFF5C64)
+    "C2" -> Color(0xFFE0457B)
+    "C3" -> Color(0xFFB45AD6)
+    else -> when (Zones.level(zone)) {
+        1 -> Color(0xFF5B6472)
+        2 -> Color(0xFF4CC2FF)
+        3 -> Color(0xFF7FE3B0)
+        4 -> Color(0xFFFF5B2E)
+        else -> Color(0xFFFF5C64)
+    }
 }
 
 /** Background and text of a zone's chip. */
@@ -120,7 +129,7 @@ fun SessionDetail(
             item { Stats(session, sport, profile) }
             if (sport != null && session.steps.isNotEmpty()) {
                 item { ZoneTime(session, sport, profile) }
-                item { Steps(session.steps) }
+                item { Steps(Workouts.withTargets(session, profile).steps) }
             } else if (session.details.isNotBlank()) {
                 item {
                     TriCard {

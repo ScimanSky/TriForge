@@ -27,14 +27,18 @@ class SwimThresholdTest {
         distanceMeters = laps.sumOf { it.distanceMeters }, openWater = false, avgHr = hr, laps = laps,
     )
 
-    /** 3,000 m at about 1:53 /100 m with long rests: thirty 100s. */
+    /** 3,000 m at about 1:53 /100 m with long rests: fifteen 200s. */
     private fun usualSwim(daysAgo: Long, pace: Double = 113.0, hr: Int? = 122) =
-        swim(daysAgo, (1..30).flatMap { listOf(lap(100.0, pace), rest(60.0)) }, hr)
+        swim(daysAgo, (1..15).flatMap { listOf(lap(200.0, pace * 2), rest(60.0)) }, hr)
 
-    private fun swimNoLaps(daysAgo: Long, meters: Double, movingSec: Long) = Activity(
+    /** 3,000 m of short repeats: thirty 100s. */
+    private fun hundreds(daysAgo: Long, pace: Double) =
+        swim(daysAgo, (1..30).flatMap { listOf(lap(100.0, pace), rest(30.0)) }, 130)
+
+    private fun swimNoLaps(daysAgo: Long, meters: Double, movingSec: Long, restSec: Long = 120) = Activity(
         id = "block-$daysAgo", source = ActivitySource.GARMIN, sport = Sport.SWIM, name = "",
         startTime = today.minusDays(daysAgo).atTime(13, 20).toInstant(zone),
-        durationSec = movingSec + 600, movingDurationSec = movingSec, distanceMeters = meters, openWater = false,
+        durationSec = movingSec + restSec, movingDurationSec = movingSec, distanceMeters = meters, openWater = false,
     )
 
     // ---- Repeats the watch got wrong ------------------------------------------
@@ -68,6 +72,16 @@ class SwimThresholdTest {
         assertEquals(208.0, estimate.efforts.first { it.distanceMeters == 200 }.seconds)
     }
 
+    @Test
+    fun `best efforts that a longer swim contradicts are not proposed`() {
+        // A 400 at an easy pace, and 600 m without stopping faster than the model
+        // allows: the proposal comes from the usual pace.
+        val easy = swim(2, listOf(lap(200.0, 235.0), rest(30.0), lap(400.0, 487.0), rest(60.0), lap(600.0, 690.0)))
+        val suggestion = SwimThreshold.suggest(listOf(usualSwim(1), usualSwim(4), usualSwim(8), easy), today, zone)
+
+        assertEquals(CssSuggestion(107, CssSource.USUAL_PACE), suggestion)
+    }
+
     // ---- The threshold against the swims ---------------------------------------
 
     @Test
@@ -99,6 +113,22 @@ class SwimThresholdTest {
         val profile = AthleteProfile(cssSecPer100m = 126)
         assertNull(SwimThreshold.check(listOf(usualSwim(1)), profile, today, zone))
         assertNull(SwimThreshold.check(listOf(usualSwim(30), usualSwim(34), usualSwim(40)), profile, today, zone))
+    }
+
+    @Test
+    fun `the pace of short repeats says nothing about the threshold`() {
+        // 1:49 to 1:55 over 100 m with a threshold of 2:06: every metre is faster than
+        // the threshold, and nothing is wrong. Repeats with rest are swum above it.
+        val swims = listOf(hundreds(1, 109.0), hundreds(4, 112.0), hundreds(8, 115.0))
+
+        assertNull(SwimThreshold.check(swims, AthleteProfile(cssSecPer100m = 126), today, zone))
+        assertNull(SwimThreshold.suggest(swims, today, zone), "nothing swum without stopping to read a threshold from")
+    }
+
+    @Test
+    fun `a swim without laps and with long stops is not one block`() {
+        val swims = listOf(swimNoLaps(2, 2500.0, 2825, restSec = 900), swimNoLaps(6, 2000.0, 2260, restSec = 700))
+        assertNull(SwimThreshold.check(swims, AthleteProfile(cssSecPer100m = 126), today, zone))
     }
 
     @Test
