@@ -47,8 +47,8 @@ class GeminiDishAdvisor(private val modelName: String, location: String) : DishA
     private val estimateModel by lazy { model(CoachSchemas.dishEstimate, 0.2f) }
 
     override suspend fun alternatives(request: String): List<Dish> =
-        CoachMapper.dishAlternativesFromFields(geminiJson { alternativesModel.generateContent(request).text })
+        CoachMapper.dishAlternativesFromFields(geminiJson(AiWait.DISH_MS, attempts = 2) { alternativesModel.generateContent(request).text })
 
     override suspend fun estimate(request: String): DishEstimate =
-        CoachMapper.dishEstimateFromFields(geminiJson { estimateModel.generateContent(request).text })
+        CoachMapper.dishEstimateFromFields(geminiJson(AiWait.DISH_MS, attempts = 2) { estimateModel.generateContent(request).text })
 }

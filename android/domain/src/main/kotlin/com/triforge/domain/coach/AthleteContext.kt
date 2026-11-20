@@ -3,6 +3,8 @@ package com.triforge.domain.coach
 import com.triforge.domain.Activity
 import com.triforge.domain.AthleteProfile
 import com.triforge.domain.CheckIn
+import com.triforge.domain.CssCheck
+import com.triforge.domain.CssSource
 import com.triforge.domain.Formatters
 import com.triforge.domain.FormZone
 import com.triforge.domain.LoadResponsePattern
@@ -15,6 +17,7 @@ import com.triforge.domain.SessionLoad
 import com.triforge.domain.Sport
 import com.triforge.domain.TrainingStats
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
@@ -39,6 +42,8 @@ data class AthleteData(
     val birthYear: Int? = null,
     /** Days and hours for each sport, for the regia. */
     val availability: TrainingAvailability = TrainingAvailability(),
+    /** What the swims say of the swim threshold, when it does not fit them ([com.triforge.domain.SwimThreshold]). */
+    val cssCheck: CssCheck? = null,
 ) {
     /** Age in years this year, from the year of birth of the account. */
     val age: Int? get() = birthYear?.let { today.year - it }?.takeIf { it in 10..110 }
@@ -52,12 +57,34 @@ object AthleteContext {
     const val RECENT_DAYS = 14L
     const val TREND_WEEKS = 8
 
-    fun describe(data: AthleteData): String = buildString {
-        appendLine("Oggi è ${dayLabel(data.today)} ${data.today}.")
+    /**
+     * [now] is the time on the athlete's phone: late in the evening the
+     * coaches are told that the day is over, so nothing is proposed for it.
+     */
+    fun describe(data: AthleteData, now: LocalTime? = null): String = buildString {
+        append("Oggi è ${dayLabel(data.today)} ${data.today}")
+        if (now == null) {
+            appendLine(".")
+        } else {
+            append(", sono le ${"%02d:%02d".format(now.hour, now.minute)}.")
+            appendLine(if (now >= CoachTable.DAY_OVER) " La giornata è finita: non proporre e non spostare nulla su oggi, si riparte da domani." else "")
+        }
         appendLine()
         appendLine("## Profilo")
         profile(data.profile, data.today, data.age).forEach { appendLine("- $it") }
         habits(data.availability).forEach { appendLine("- $it") }
+        data.cssCheck?.let { check ->
+            appendLine()
+            appendLine("## Soglia del nuoto da verificare")
+            appendLine(cssWarning(check))
+        }
+        val zones = zones(data.profile)
+        if (zones.isNotEmpty()) {
+            appendLine()
+            appendLine("## Zone dell'atleta (calcolate dall'app dalle sue soglie)")
+            zones.forEach { appendLine("- $it") }
+            appendLine("Quando citi un ritmo, una potenza o dei battiti usa solo questi valori: sono gli stessi che l'atleta legge nelle sedute.")
+        }
         appendLine()
         appendLine("## Volume settimanale (ultime $TREND_WEEKS settimane, dalla più vecchia)")
         weeks(data).forEach { appendLine("- $it") }
@@ -95,6 +122,28 @@ object AthleteContext {
         p.thresholdPaceSecPerKm?.let { add("Passo soglia corsa: ${Formatters.minutesAndSeconds(it.toDouble())}/km") }
         if (p.cssSecPer100m == null && p.ftpWatts == null && p.thresholdPaceSecPerKm == null) {
             add("Soglie non indicate: usa zone di frequenza cardiaca o percezione dello sforzo")
+        }
+    }
+
+    /** The zones of each sport with a threshold, in the athlete's own numbers: the only paces a coach may quote. */
+    fun zones(profile: AthleteProfile): List<String> = TriRegia.SPORTS.mapNotNull { sport ->
+        val targets = Zones.ALL.map { zone -> zone to Zones.target(sport, zone, profile) }.filter { it.second.isNotEmpty() }
+        if (targets.isEmpty()) null
+        else sportName(sport).replaceFirstChar { c -> c.uppercase() } + ": " + targets.joinToString("; ") { (zone, target) -> "$zone ${Zones.label(zone).lowercase()} $target" }
+    }
+
+    /** What the coaches must know when the swim threshold does not fit the swims. */
+    fun cssWarning(check: CssCheck): String {
+        fun pace(seconds: Int) = Formatters.minutesAndSeconds(seconds.toDouble())
+        val source = if (check.suggestion.source == CssSource.BEST_EFFORTS) "dai suoi migliori tempi su due distanze" else "stima prudente dal passo a cui nuota di solito"
+        return buildString {
+            append("La CSS del profilo (${pace(check.currentSecPer100)}/100 m) è con ogni probabilità troppo lenta: nelle ultime tre settimane ")
+            append("${(check.highShare * 100).roundToInt()}% dei metri in vasca risulta a passo soglia o più veloce (${check.sessions} sedute, passo abituale ${pace(check.usualPaceSecPer100)}/100 m")
+            check.avgHr?.let { append(", FC media $it") }
+            append("), cosa che con una soglia giusta non succede. ")
+            append("Finché non la verifica, zone, carico (TSS) e forma del nuoto sono gonfiati e i ritmi delle sedute di nuoto troppo lenti: non leggere quelle nuotate come lavori di soglia e non dare per certo un sovraccarico che viene dal nuoto. ")
+            append("L'app propone all'atleta ${pace(check.suggestion.paceSecPer100)}/100 m ($source) oppure un test: 400 m e 200 m al massimo, con recupero completo tra i due. ")
+            append("La soglia non la cambi tu: se se ne parla, digli cosa vedi nei dati e invitalo al test.")
         }
     }
 

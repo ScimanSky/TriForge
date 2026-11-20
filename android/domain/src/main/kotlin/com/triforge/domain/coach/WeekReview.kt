@@ -1,6 +1,7 @@
 package com.triforge.domain.coach
 
 import com.triforge.domain.Activity
+import com.triforge.domain.OtherKind
 import com.triforge.domain.Sport
 import java.time.LocalDate
 import java.time.ZoneId
@@ -13,6 +14,12 @@ enum class ReviewState {
 
     /** A planned session of a day gone that the watch did not record. */
     MISSED,
+
+    /**
+     * A planned session of a day gone that the athlete did not do, with what
+     * they trained instead: the gym in place of the swim, say.
+     */
+    REPLACED,
 
     /** A planned session still to do, or a rest line. */
     TODO,
@@ -37,6 +44,7 @@ data class ReviewedSession(
     /** Done, but for a time worth telling apart from the one planned. */
     val differs: Boolean
         get() {
+            if (state != ReviewState.DONE) return false
             val planned = plannedMin ?: return false
             val done = doneMin ?: return false
             return abs(done - planned) >= WeekReview.NOTABLE_MINUTES
@@ -68,6 +76,9 @@ data class WeekReview(val days: List<ReviewedDay>) {
         /** A difference from the plan smaller than this is not worth a line. */
         const val NOTABLE_MINUTES = 5
 
+        /** A recording shorter than this does not take the place of a planned session. */
+        const val MIN_REPLACEMENT_SEC = 20 * 60L
+
         /** A recording shorter than this is a watch started by mistake, not a session. */
         const val MIN_ACTIVITY_SEC = 5 * 60L
 
@@ -87,6 +98,10 @@ data class WeekReview(val days: List<ReviewedDay>) {
         private fun covered(plan: WeekPlan, day: PlannedDay): Boolean =
             plan.plannedFrom?.let { !day.date.isBefore(it) } ?: day.sessions.none { it.focus == CoachTable.DONE }
 
+        /** Whether [activity] is a training that can stand for a planned one: not a walk, not a stretch. */
+        private fun isTraining(activity: Activity): Boolean = activity.durationSec >= MIN_REPLACEMENT_SEC &&
+            (activity.sport != Sport.OTHER || activity.kind == OtherKind.CARDIO || activity.kind == OtherKind.HIKE)
+
         private fun review(day: PlannedDay, recorded: List<Activity>, covered: Boolean, gone: Boolean): List<ReviewedSession> {
             // On a day without a programme the plan holds a copy of what was done: the recordings say it better.
             val planned = day.sessions.filter { covered && it.focus != CoachTable.DONE }
@@ -101,7 +116,15 @@ data class WeekReview(val days: List<ReviewedDay>) {
                     else -> ReviewedSession(ReviewState.TODO, session)
                 }
             }
-            return lines + free.map { ReviewedSession(if (covered) ReviewState.EXTRA else ReviewState.RECORD, activity = it) }
+            // A session missed on a day with another training: that one took its place.
+            val settled = lines.map { line ->
+                val session = line.session
+                if (line.state != ReviewState.MISSED || session == null) return@map line
+                val other = free.filter(::isTraining).minByOrNull { abs(it.durationSec / 60 - session.durationMin) } ?: return@map line
+                free.remove(other)
+                ReviewedSession(ReviewState.REPLACED, session, other)
+            }
+            return settled + free.map { ReviewedSession(if (covered) ReviewState.EXTRA else ReviewState.RECORD, activity = it) }
         }
     }
 
@@ -119,6 +142,9 @@ data class WeekReview(val days: List<ReviewedDay>) {
                     }
                     ReviewState.MISSED -> "${TriRegia.sportName(session!!.sport!!).lowercase()} ${session.focus.ifBlank { session.title }}".trim() +
                         " di ${session.durationMin} min" + (if (session.own) " (seduta dell'atleta)" else "") + ": non fatta"
+                    ReviewState.REPLACED -> "${TriRegia.sportName(session!!.sport!!).lowercase()} ${session.focus.ifBlank { session.title }}".trim() +
+                        " di ${session.durationMin} min" + (if (session.own) " (seduta dell'atleta)" else "") +
+                        ": non fatta, al suo posto ${AthleteContext.activityName(activity!!)}, ${item.doneMin} min"
                     ReviewState.EXTRA -> "fuori programma: ${AthleteContext.activityName(activity!!)}, ${item.doneMin} min"
                     ReviewState.RECORD -> "${AthleteContext.activityName(activity!!)}, ${item.doneMin} min (prima che la settimana fosse scritta)"
                     ReviewState.TODO -> null

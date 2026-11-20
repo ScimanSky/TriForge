@@ -367,6 +367,8 @@ fun LegendDot(color: Color, label: String, modifier: Modifier = Modifier) {
             text = label,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }

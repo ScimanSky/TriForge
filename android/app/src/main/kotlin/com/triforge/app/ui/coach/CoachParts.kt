@@ -1,6 +1,11 @@
 package com.triforge.app.ui.coach
 
-import androidx.annotation.StringRes
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -146,20 +151,37 @@ fun AiConsentCard(palette: CoachPalette, onEnable: () -> Unit, modifier: Modifie
     }
 }
 
-@StringRes
-fun errorText(reason: CoachException.Reason): Int = when (reason) {
-    CoachException.Reason.NETWORK -> R.string.coach_error_network
-    CoachException.Reason.BUSY -> R.string.coach_error_busy
-    CoachException.Reason.NOT_ENABLED -> R.string.coach_error_not_enabled
-    CoachException.Reason.BAD_ANSWER -> R.string.coach_error_bad_answer
-    CoachException.Reason.NEEDS_WEIGHT -> R.string.nutri_error_weight
-    CoachException.Reason.BLOCKED -> R.string.coach_error_blocked
+/**
+ * What went wrong, in words the athlete can act on, naming [who] did not
+ * answer: a coach by its name, NutriAI, or the coaches together.
+ */
+@Composable
+fun errorText(reason: CoachException.Reason, who: String): String {
+    val text = when (reason) {
+        CoachException.Reason.NETWORK -> stringResource(R.string.coach_error_network, who)
+        CoachException.Reason.TIMEOUT -> stringResource(R.string.coach_error_timeout, who)
+        CoachException.Reason.UNAVAILABLE -> stringResource(R.string.coach_error_unavailable, who)
+        CoachException.Reason.BUSY -> stringResource(R.string.coach_error_busy)
+        CoachException.Reason.NOT_ENABLED -> stringResource(R.string.coach_error_not_enabled)
+        CoachException.Reason.BAD_ANSWER -> stringResource(R.string.coach_error_bad_answer, who)
+        CoachException.Reason.NEEDS_WEIGHT -> stringResource(R.string.nutri_error_weight)
+        CoachException.Reason.BLOCKED -> stringResource(R.string.coach_error_blocked, who)
+    }
+    return text.replaceFirstChar { it.uppercase() }
 }
 
+/**
+ * An answer that did not come. [onRetry] asks again exactly what was asked:
+ * the athlete never has to write a message twice. [hint] says so when what
+ * is asked again is a message already in the chat.
+ */
 @Composable
-fun ErrorCard(reason: CoachException.Reason, onRetry: (() -> Unit)?, onDismiss: () -> Unit) {
+fun ErrorCard(reason: CoachException.Reason, who: String, onRetry: (() -> Unit)?, onDismiss: () -> Unit, hint: String? = null) {
     TriCard {
-        Text(stringResource(errorText(reason)), style = MaterialTheme.typography.bodyMedium)
+        Text(errorText(reason, who), style = MaterialTheme.typography.bodyMedium)
+        if (hint != null && onRetry != null) {
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+        }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (onRetry != null) PrimaryButton(stringResource(R.string.coach_retry), onRetry, compact = true)
             SecondaryButton(stringResource(R.string.coach_close), onDismiss, compact = true)
@@ -275,5 +297,20 @@ fun ProposalActions(palette: CoachPalette, onApply: () -> Unit, onDismiss: () ->
             colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = palette.accent, contentColor = palette.onAccent),
         ) { Text(stringResource(R.string.coach_apply)) }
         SecondaryButton(stringResource(R.string.coach_ignore), onDismiss, modifier = Modifier.weight(1f), enabled = enabled, compact = true)
+    }
+}
+
+/**
+ * With the keyboard open, the back button closes the keyboard and nothing
+ * else: without this the same press also left the screen for another tab.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun KeyboardBack() {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    BackHandler(enabled = WindowInsets.isImeVisible) {
+        keyboard?.hide()
+        focus.clearFocus()
     }
 }

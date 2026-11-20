@@ -77,6 +77,11 @@ data class PlannedSession(
      * shortens it.
      */
     val own: Boolean = false,
+    /**
+     * The energy the watch measured, on a line that stands for a recorded
+     * activity in the day's energy count. Never saved with the plan.
+     */
+    val measuredKcal: Int? = null,
 )
 
 /** Who spoke at the coaches' table: a sport coach, NutriAI or the app's regia. */

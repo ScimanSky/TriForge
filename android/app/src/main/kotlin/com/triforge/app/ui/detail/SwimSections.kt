@@ -182,10 +182,16 @@ private fun SetHoldCards(activity: Activity) {
                 },
             ),
             verdictColor = if (hold.regularity == PacingRegularity.UNEVEN) TriColors.warn else TriColors.good,
+            // The sign alone («−22″») does not say which way: the note does, in words.
             note = stringResource(
-                R.string.swim_hold_pace_note,
+                when {
+                    hold.fadeSecPer100.roundToInt() < 0 -> R.string.swim_hold_pace_note_faster
+                    hold.fadeSecPer100.roundToInt() > 0 -> R.string.swim_hold_pace_note_slower
+                    else -> R.string.swim_hold_pace_note
+                },
                 setName,
                 "%.1f".format(Locale.ITALY, hold.variationPct),
+                "${abs(hold.fadeSecPer100.roundToInt())}″",
             ),
             modifier = Modifier.weight(1f),
         )

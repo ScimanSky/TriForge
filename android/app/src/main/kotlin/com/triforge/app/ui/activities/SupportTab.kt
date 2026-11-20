@@ -273,10 +273,18 @@ private fun ExercisesCard(exercises: List<ExerciseTotal>) {
 /** One exercise: its name on the left, sets and repetitions and the weight moved on the right. */
 @Composable
 internal fun ExerciseRow(name: String, under: String?, sets: Int, reps: Int, volumeKg: Double?, modifier: Modifier = Modifier) {
-    val work = listOfNotNull(
-        stringResource(R.string.activity_sets, sets),
-        reps.takeIf { it > 0 }?.let { countLabel(it, R.string.activity_reps_one, R.string.activity_reps_many) },
-    ).joinToString(" · ")
+    // One session: serie × ripetizioni × chili when the watch counted them all and the sets are even.
+    // Over a period, or with uneven sets, in words.
+    val kg = StrengthStats.kgPerRep(volumeKg, reps)?.let { wholeNumber(it.roundToInt()) }
+    val work = if (under == null && kg != null && sets > 0 && reps % sets == 0) {
+        stringResource(R.string.support_exercise_work, sets, reps / sets, kg)
+    } else {
+        listOfNotNull(
+            stringResource(R.string.activity_sets, sets),
+            reps.takeIf { it > 0 }?.let { countLabel(it, R.string.activity_reps_one, R.string.activity_reps_many) },
+            kg?.let { stringResource(R.string.support_exercise_kg_avg, it) },
+        ).joinToString(" · ")
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -296,7 +304,7 @@ internal fun ExerciseRow(name: String, under: String?, sets: Int, reps: Int, vol
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             if (volumeKg != null && volumeKg > 0) {
-                Text(text = stringResource(R.string.unit_kg_value, wholeNumber(volumeKg.roundToInt())), style = numberStyle(15.sp), maxLines = 1)
+                Text(text = stringResource(R.string.support_exercise_total, wholeNumber(volumeKg.roundToInt())), style = numberStyle(15.sp), maxLines = 1)
             } else {
                 Text(
                     text = stringResource(R.string.support_bodyweight),

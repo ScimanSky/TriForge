@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.triforge.app.R
@@ -176,7 +177,13 @@ private fun Dashboard(
             return@LazyColumn
         }
 
-        item(key = "recovery") { RecoveryCard(recovery, onOpen = onOpenRecovery, onCheckIn = onCheckIn) }
+        if (recovery is RecoveryState.Loading) {
+            // The two cards take a couple of seconds to compute: their place is held, so the week does not jump down when they arrive.
+            item(key = "recovery") { PendingCard(stringResource(R.string.recovery_title), RECOVERY_CARD_HEIGHT) }
+            item(key = "load") { PendingCard(stringResource(R.string.load_card_title), LOAD_CARD_HEIGHT) }
+        } else {
+            item(key = "recovery") { RecoveryCard(recovery, onOpen = onOpenRecovery, onCheckIn = onCheckIn) }
+        }
         if (trend != null && trend.points.isNotEmpty()) {
             item(key = "load") {
                 val firstDay = activities.minOf { it.startTime.atZone(zone).toLocalDate() }
@@ -239,6 +246,24 @@ private fun EmptyCard(onConnectSource: () -> Unit) {
             text = stringResource(R.string.today_connect_source),
             onClick = onConnectSource,
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** About as tall as the cards of «Carico e recupero» and of the form once they are computed. */
+private val RECOVERY_CARD_HEIGHT = 250.dp
+private val LOAD_CARD_HEIGHT = 440.dp
+
+/** A card still being computed: its title and its room, so that what is below stays where it is. */
+@Composable
+private fun PendingCard(title: String, height: Dp) {
+    TriCard(modifier = Modifier.heightIn(min = height)) {
+        CardHeader(title = title)
+        Text(
+            text = stringResource(R.string.today_pending),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 10.dp),
         )
     }
 }
@@ -405,7 +430,8 @@ private fun LoadCard(trend: FitnessTrend, loads: Collection<SessionLoad>, estima
             modifier = Modifier.padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            LegendSwatch(FormBandColor.copy(alpha = 0.6f), stringResource(R.string.form_legend_productive))
+            // The long label gives way, the short one stays whole.
+            LegendSwatch(FormBandColor.copy(alpha = 0.6f), stringResource(R.string.form_legend_productive), Modifier.weight(1f, fill = false))
             LegendSwatch(TriColors.danger, stringResource(R.string.form_zone_overload))
         }
 
@@ -451,15 +477,16 @@ private fun LoadCard(trend: FitnessTrend, loads: Collection<SessionLoad>, estima
 }
 
 @Composable
-private fun LegendSwatch(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+private fun LegendSwatch(color: Color, label: String, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
             Modifier
                 .size(width = 12.dp, height = 8.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(color),
         )
-        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // A legend is one line: a word cut in two («Sovraccar-ico») reads as a mistake.
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

@@ -29,6 +29,7 @@ import com.triforge.domain.coach.WeekBudget
 import com.triforge.domain.coach.WeekPlan
 import com.triforge.domain.coach.WeekReview
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -39,7 +40,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -60,7 +63,15 @@ data class CoachUiState(
     /** While replying: the coach that is writing. */
     val replying: Sport? = null,
     val error: CoachException.Reason? = null,
-)
+) {
+    /**
+     * The athlete's last message to the coach of [sport], when it is still
+     * without an answer and nobody is writing one: «Riprova» asks again
+     * with it, so it never has to be typed twice.
+     */
+    fun unanswered(sport: Sport): ChatEntry? =
+        chats[sport].orEmpty().lastOrNull()?.takeIf { it.message.fromAthlete && !(task == CoachTask.REPLYING && replying == sport) }
+}
 
 /**
  * The training coaches' screen. The week is written by the three sport
@@ -84,6 +95,48 @@ class CoachViewModel(
 
     private fun thisWeek(): LocalDate = TrainingStats.weekStart(LocalDate.now(zone))
 
+    /**
+     * Where a week can still be written from: [day] is today, or tomorrow
+     * once the evening is gone, and [now] the time when [day] is today. The
+     * coaches and the regia never write in a time already past.
+     */
+    private class Clock(val day: LocalDate, val now: LocalTime?)
+
+    private fun clock(today: LocalDate): Clock {
+        val time = LocalTime.now(zone)
+        val day = CoachTable.planningDay(today, time)
+        return Clock(day, time.takeIf { day == today })
+    }
+
+    init {
+        // "Giorni, orari e gara" changed (a sport in pause, the gym days): the week follows at once, and says so.
+        viewModelScope.launch {
+            athlete.data.map { it.availability to it.profile }.distinctUntilChanged().collect {
+                try {
+                    alignWithProfile()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The week stays as it is: the next change, or «Rifai la settimana», brings it in line.
+                }
+            }
+        }
+    }
+
+    /**
+     * Brings the week in line with the profile without asking any coach:
+     * see [CoachTable.realign]. What it changes is written in the minutes.
+     */
+    private suspend fun alignWithProfile() {
+        if (task.value != null) return
+        val weekStart = thisWeek()
+        val current = repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == weekStart && it.fromTable } ?: return
+        val data = athlete.current()
+        val clock = clock(data.today)
+        val revision = CoachTable.realign(current, clock.day, weekBudget(data, weekStart), data.profile, data.availability, clock.now) ?: return
+        repository.saveWeekPlan(uid, revision.plan, CoachBriefs.of(revision.plan, data.today))
+    }
+
     val state: StateFlow<CoachUiState> = combine(
         repository.coachDesk(uid).onStart { emit(CoachDesk()) },
         repository.nutriDesk(uid).onStart { emit(NutriDesk()) },
@@ -97,14 +150,15 @@ class CoachViewModel(
             loaded = true,
             plan = desk.plan?.takeIf { it.weekStart == thisWeek() },
             chats = chats,
-            nutriNote = nutri.brief?.noteForPartner.orEmpty(),
+            // NutriAI's note was written for the week as it was: after a change of plan it waits for NutriAI's next word.
+            nutriNote = nutri.brief?.takeIf { brief -> desk.plan?.createdAt?.let { changed -> brief.updatedAt?.isBefore(changed) } != true }?.noteForPartner.orEmpty(),
             task = task,
             round = if (task == CoachTask.PLANNING) round else 0,
             replying = sport.takeIf { task == CoachTask.REPLYING },
             error = error,
         )
     }
-        .catch { emit(CoachUiState(loaded = true, error = CoachException.Reason.NETWORK)) }
+        .catch { emit(CoachUiState(loaded = true, error = CoachException.Reason.UNAVAILABLE)) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CoachUiState())
 
     /** Called when the screen opens: writes this week's plan once if there is none. */
@@ -134,10 +188,14 @@ class CoachViewModel(
         val nutri = repository.nutriDesk(uid).first()
         val chats = state.value.chats
         val data = athlete.current()
-        val today = data.today
+        val clock = clock(data.today)
+        // Late in the evening the week is written from tomorrow: today is as it went.
+        val today = clock.day
+        // Sunday night: nothing of this week is left to write.
+        if (today.isAfter(weekStart.plusDays(6))) return@run
         val budget = weekBudget(data, weekStart)
         val regia = TriRegia.describe(budget, data.availability)
-        val described = AthleteContext.describe(data)
+        val described = AthleteContext.describe(data, LocalTime.now(zone))
         val past = CoachTable.pastDays(data.activities, weekStart, today, data.zone)
         val done = CoachTable.doneMinutes(past)
         // The week as written so far: its days gone are kept, and the coaches are told what was done of it.
@@ -188,8 +246,10 @@ class CoachViewModel(
             val reading = async { read() }
             ask(emptyList(), emptyList(), emptyList()) to reading.await()
         }
+        // One of the athlete's own sessions whose time today is gone is kept only if it was already on the calendar.
+        val keptToday = previous?.day(today)?.sessions.orEmpty().filter { it.own }
         fun join(proposals: List<SportProposal>) =
-            CoachTable.merge(weekStart, today, past, proposals + comments, budget, data.profile, data.availability)
+            CoachTable.merge(weekStart, today, past, proposals + comments, budget, data.profile, data.availability, now = clock.now, keptToday = keptToday)
 
         var proposals = first
         var plan = join(proposals)
@@ -218,7 +278,7 @@ class CoachViewModel(
         } + fixes + listOfNotNull(nutri.brief?.noteForPartner?.takeIf { it.isNotBlank() }?.let { TableNote(TableVoice.NUTRI, it) })
         // The regia checked the week against what was done; what is saved keeps what was planned for the days gone.
         val agreed = CoachTable.keepPlanned(settled, previous, today).copy(table = minutes, rounds = rounds)
-        repository.saveWeekPlan(uid, agreed, CoachBriefs.of(agreed, today))
+        repository.saveWeekPlan(uid, agreed, CoachBriefs.of(agreed, data.today))
     }
 
     /** The days gone of [plan] in words: what was planned and what the athlete did of it. */
@@ -226,26 +286,39 @@ class CoachViewModel(
         WeekReview.of(plan, data.activities, data.today, data.zone).describe(data.today)
 
     /** A message to one sport coach, in its own chat. */
-    fun send(sport: Sport, text: String) {
-        val message = text.trim()
+    fun send(sport: Sport, text: String) = ask(sport, text.trim(), add = true)
+
+    /**
+     * «Riprova»: asks the coach of [sport] again with the athlete's last
+     * message, which is already in the chat and is not written twice.
+     */
+    fun retry(sport: Sport) {
+        val last = state.value.unanswered(sport) ?: return
+        ask(sport, last.message.text, add = false)
+    }
+
+    private fun ask(sport: Sport, message: String, add: Boolean) {
         if (message.isEmpty() || task.value != null) return
         replying.value = sport
         run(CoachTask.REPLYING) {
-            val history = state.value.chats[sport].orEmpty().map { it.message }
-            repository.addMessage(uid, sport, fromAthlete = true, text = message)
+            val chat = state.value.chats[sport].orEmpty().map { it.message }
+            // The message being answered travels in the turn, not in the history.
+            val history = if (!add && chat.lastOrNull()?.let { it.fromAthlete && it.text == message } == true) chat.dropLast(1) else chat
+            if (add) repository.addMessage(uid, sport, fromAthlete = true, text = message)
             if (NutriSafety.flags(message)) {
                 repository.addMessage(uid, sport, fromAthlete = false, text = NutriSafety.REPLY)
                 return@run
             }
             val weekStart = thisWeek()
             val data = athlete.current()
-            val today = data.today
+            // A change can only start from a day that is not over yet.
+            val today = clock(data.today).day
             val budget = weekBudget(data, weekStart)
             val nutri = repository.nutriDesk(uid).first()
             val plan = repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == weekStart }
             val turn = SportCoachPrompts.chatTurn(
                 sport = sport,
-                athlete = AthleteContext.describe(data),
+                athlete = AthleteContext.describe(data, LocalTime.now(zone)),
                 weekStart = weekStart,
                 today = today,
                 week = plan?.let(CoachPrompts::describe),
@@ -283,15 +356,17 @@ class CoachViewModel(
         val proposal = entry.proposal?.let { CoachMapper.sportProposalFromFields(it, sport, weekStart) } ?: return@run
         val current = repository.coachDesk(uid).first().plan?.takeIf { it.weekStart == weekStart } ?: return@run
         val data = athlete.current()
+        val clock = clock(data.today)
         val revised = CoachTable.revise(
             current = current,
             proposal = proposal,
-            today = data.today,
+            today = clock.day,
             budget = weekBudget(data, weekStart),
             profile = data.profile,
             availability = data.availability,
             // The regia checks the change against what was really done in the days gone.
-            done = CoachTable.pastDays(data.activities, weekStart, data.today, data.zone),
+            done = CoachTable.pastDays(data.activities, weekStart, clock.day, data.zone),
+            now = clock.now,
         )
         repository.saveWeekPlan(uid, revised, CoachBriefs.of(revised, data.today))
         repository.setProposalStatus(uid, sport, entry.id, ProposalStatus.APPLIED)
@@ -320,7 +395,7 @@ class CoachViewModel(
             } catch (e: CoachException) {
                 error.value = e.reason
             } catch (e: Exception) {
-                error.value = CoachException.Reason.NETWORK
+                error.value = CoachException.Reason.UNAVAILABLE
             } finally {
                 tableRound.value = 0
                 replying.value = null

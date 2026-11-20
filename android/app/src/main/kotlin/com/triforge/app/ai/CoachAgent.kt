@@ -26,8 +26,14 @@ interface CoachAgent<P> {
 /** Why a coach could not answer, in words the athlete can act on. */
 class CoachException(val reason: Reason, cause: Throwable? = null) : Exception(reason.name, cause) {
     enum class Reason {
-        /** No connection, or the service did not answer. */
+        /** The phone has no connection. */
         NETWORK,
+
+        /** The model took longer than the app waits for it. */
+        TIMEOUT,
+
+        /** The AI service answered with an error: nothing the athlete's connection can fix. */
+        UNAVAILABLE,
 
         /** Too many requests in a short time. */
         BUSY,
@@ -43,5 +49,24 @@ class CoachException(val reason: Reason, cause: Throwable? = null) : Exception(r
 
         /** The model declined to answer, e.g. for its safety filters. */
         BLOCKED,
+        ;
+
+        /** Whether asking again, unchanged, may well work. */
+        val transient: Boolean get() = this == TIMEOUT || this == UNAVAILABLE || this == NETWORK || this == BAD_ANSWER
     }
+}
+
+/**
+ * How long the app waits for one answer before giving the athlete the
+ * screen back with «Riprova». Firebase AI Logic itself waits three minutes.
+ */
+object AiWait {
+    /** One dish: alternatives, or the values of a dish the athlete wrote. */
+    const val DISH_MS = 20_000L
+
+    /** One answer in a chat, with the change it may propose. */
+    const val CHAT_MS = 45_000L
+
+    /** A whole week of sessions, or a day of meals. */
+    const val PLAN_MS = 90_000L
 }

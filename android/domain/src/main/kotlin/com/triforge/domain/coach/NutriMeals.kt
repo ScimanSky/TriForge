@@ -1,5 +1,6 @@
 package com.triforge.domain.coach
 
+import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
@@ -263,6 +264,49 @@ object NutriMeals {
         )
     }
 
+    // ---- Supplements ------------------------------------------------------
+
+    /** The supplement of the food profile [dish] is, or null: «Creatina monoidrato» is the athlete's «creatina». */
+    fun supplementOf(dish: Dish, profile: NutritionProfile?): Supplement? {
+        val name = FoodBans.normalize(dish.name)
+        return profile?.supplements?.firstOrNull { supplement ->
+            val known = FoodBans.normalize(supplement.name)
+            known.length >= 3 && (name == known || Regex("\\b${Regex.escape(known)}\\b").containsMatchIn(name))
+        }
+    }
+
+    private val DOSE = Regex("(\\d+(?:[.,]\\d+)?)\\s*(mg|g|gr|grammi|ml|[a-zà-ù]+)?", RegexOption.IGNORE_CASE)
+
+    /** «5 g», «500 mg», «2 capsule», «1 misurino»: the quantity and unit of a dose, or null when it has no number. */
+    fun dose(text: String): Pair<Double, DishUnit>? {
+        val match = DOSE.find(text.trim()) ?: return null
+        val value = match.groupValues[1].replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 } ?: return null
+        return when (match.groupValues[2].lowercase()) {
+            "g", "gr", "grammi" -> value to DishUnit.GRAM
+            "mg" -> value / 1000 to DishUnit.GRAM
+            "ml" -> value to DishUnit.MILLILITRE
+            else -> value to DishUnit.PIECE
+        }
+    }
+
+    /**
+     * The supplements of the day in the dose of the food profile: the
+     * athlete takes what they take, the same every day, and NutriAI does not
+     * decide how much.
+     */
+    fun fixSupplements(day: NutritionDay, profile: NutritionProfile): NutritionDay {
+        if (profile.supplements.isEmpty()) return day
+        return day.copy(
+            meals = day.meals.map { meal ->
+                val dishes = meal.dishes.map { dish ->
+                    val (quantity, unit) = supplementOf(dish, profile)?.let { dose(it.dose) } ?: return@map dish
+                    if (unit == dish.unit) scaled(dish, quantity) else dish.copy(quantity = quantity, unit = unit)
+                }
+                if (dishes == meal.dishes) meal else rebuilt(meal, dishes)
+            },
+        )
+    }
+
     /** The dishes the athlete chose, by meal: what «Rifai» must leave in place. */
     fun fixed(day: NutritionDay): List<Pair<String, List<Dish>>> =
         day.meals.mapNotNull { meal -> meal.dishes.filter { it.origin.fixed }.takeIf { it.isNotEmpty() }?.let { meal.name to it } }
@@ -300,6 +344,18 @@ object NutriMeals {
             .flatMap { day -> day.meals.filter { it.dishes.size >= 2 }.mapNotNull { meal -> meal.dishes.maxByOrNull { it.kcal }?.name } }
             .distinctBy(FoodBans::normalize)
             .takeLast(limit)
+
+    /**
+     * The meals of the days next to the one NutriAI is about to write, as
+     * text: what it should not serve again the day after.
+     */
+    fun nearby(days: Collection<NutritionDay>, date: LocalDate): String = days
+        .filter { it.date == date.minusDays(1) || it.date == date.plusDays(1) }
+        .sortedBy { it.date }
+        .joinToString("\n") { day ->
+            (if (day.date.isBefore(date)) "Il giorno prima" else "Il giorno dopo") + ": " +
+                day.meals.filter { it.dishes.isNotEmpty() }.joinToString("; ") { meal -> "${meal.name}: ${describe(meal.dishes)}" }
+        }
 
     /** Whether the meals were written for other numbers than the app's of today: the plan changed since. */
     fun outdated(day: NutritionDay, targets: DayTargets): Boolean =

@@ -1,6 +1,7 @@
 package com.triforge.domain.coach
 
 import com.triforge.domain.Sport
+import java.time.LocalTime
 import kotlin.math.roundToInt
 
 /** What to take around one effort: grams before, per hour during, and after. */
@@ -84,8 +85,26 @@ object NutriFueling {
         "${TriRegia.sportName(session.sport!!).lowercase()} ${session.focus.ifBlank { session.title }} (${session.durationMin} min)"
     }
 
-    /** The lines of the request that give NutriAI the fuelling to write about. */
-    fun describe(sessions: List<PlannedSession>, weightKg: Double, context: DayContext = DayContext()): String = buildString {
+    /** «alle 13:20, fino alle 14:20 circa»: when the effort is, from the usual time of its first sport. */
+    private fun clock(effort: EffortFuel, times: Map<Sport, LocalTime>): String? {
+        val start = effort.sessions.firstOrNull()?.sport?.let(times::get) ?: return null
+        val end = start.plusMinutes(effort.minutes.toLong())
+        fun text(time: LocalTime) = "%d:%02d".format(time.hour, time.minute)
+        return "alle ${text(start)}, fino alle ${text(end)} circa"
+    }
+
+    /**
+     * The lines of the request that give NutriAI the fuelling to write
+     * about. [times] is when the athlete usually does each sport, from the
+     * profile: with it «prima» and «dopo» are hours of the day, and a meal
+     * is not called the recovery of a session that comes after it.
+     */
+    fun describe(
+        sessions: List<PlannedSession>,
+        weightKg: Double,
+        context: DayContext = DayContext(),
+        times: Map<Sport, LocalTime> = emptyMap(),
+    ): String = buildString {
         val plan = plan(sessions, weightKg)
         if (plan.isEmpty()) {
             appendLine("Nessuna seduta in questo giorno: \"fueling\" resta vuoto.")
@@ -94,7 +113,8 @@ object NutriFueling {
         }
         plan.forEach { effort ->
             val brick = effort.sessions.size > 1
-            appendLine("- ${name(effort)}" + if (brick) ": bici e corsa di seguito, un solo sforzo di ${effort.minutes} minuti." else ":")
+            val clock = clock(effort, times)?.let { " $it (orario abituale dell'atleta)" }.orEmpty()
+            appendLine("- ${name(effort)}$clock" + if (brick) ": bici e corsa di seguito, un solo sforzo di ${effort.minutes} minuti." else ":")
             appendLine("  Prima: " + (effort.beforeCarbsG?.let { "circa $it g di carboidrati 1-3 ore prima, pochi grassi e poche fibre." } ?: "basta il pasto normale; uno spuntino leggero se sono passate più di 3 ore."))
             appendLine(
                 "  Durante: " + (effort.duringCarbsPerHour?.let { "${it.first}-${it.last} g di carboidrati l'ora" + (if (it.last > 60) ", da fonti miste (glucosio e fruttosio)" else "") + ", 400-800 ml di liquidi l'ora" + (if (effort.sodium) " con sali." else ".") }
@@ -108,6 +128,11 @@ object NutriFueling {
                         ?: "il pasto successivo basta."
                     ),
             )
+        }
+        if (plan.any { clock(it, times) != null }) {
+            appendLine("Usa gli orari: in \"fueling\" scrivi l'ora di ogni passo, e il «dopo» è il primo pasto o spuntino che viene dopo la fine della seduta, non uno che viene prima. Una seduta all'ora di pranzo o di cena sposta quel pasto a dopo, con uno spuntino leggero un'ora e mezza prima.")
+        } else if (plan.isNotEmpty()) {
+            appendLine("L'atleta non ha indicato a che ora si allena: non dare per scontato quale pasto viene dopo la seduta, scrivi «entro un'ora dalla fine».")
         }
         if (plan.size > 1) appendLine("Più sedute nello stesso giorno: il recupero dopo la prima è la preparazione della seconda, non va saltato.")
         val next = NutriEnergy.dayType(context.tomorrow)

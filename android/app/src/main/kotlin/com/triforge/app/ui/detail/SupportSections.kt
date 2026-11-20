@@ -71,7 +71,7 @@ private fun SupportHeadline(activity: Activity, load: Int?) {
 
 @Composable
 private fun ExercisesCard(activity: Activity) {
-    val exercises = activity.exercises
+    val exercises = StrengthStats.merged(activity.exercises)
     CollapsibleCard(
         title = stringResource(R.string.support_detail_exercises),
         summary = exercises.size.takeIf { it > 0 }?.let { stringResource(R.string.support_detail_exercises_count, it) },
@@ -114,10 +114,11 @@ private fun CountsCard(activity: Activity, load: Int?, weightKg: Double?) {
             CountLine(stringResource(R.string.support_counts_coach), stringResource(R.string.support_counts_coach_text))
             CountLine(
                 lead = stringResource(R.string.support_counts_nutri),
-                text = if (kcal != null) {
-                    stringResource(R.string.support_counts_nutri_kcal, wholeNumber(kcal))
-                } else {
-                    stringResource(R.string.support_counts_nutri_text)
+                // One number for the session's energy: the watch's when it gave one, the app's estimate otherwise.
+                text = when {
+                    (activity.calories ?: 0) > 0 -> stringResource(R.string.support_counts_nutri_watch)
+                    kcal != null -> stringResource(R.string.support_counts_nutri_kcal, wholeNumber(kcal))
+                    else -> stringResource(R.string.support_counts_nutri_text)
                 },
             )
         }

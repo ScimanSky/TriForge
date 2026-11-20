@@ -148,6 +148,10 @@ class NutriRulesTest {
         assertEquals(DayType.HEAVY, NutriEnergy.dayType(listOf(session(Sport.BIKE, 180, Intensity.ENDURANCE))))
         assertEquals(DayType.HEAVY, NutriEnergy.dayType(listOf(session(Sport.BIKE, 60, Intensity.THRESHOLD), session(Sport.RUN, 30, Intensity.EASY))))
         assertEquals(DayType.RACE, NutriEnergy.dayType(listOf(session(Sport.RUN, 40, Intensity.RACE))))
+        // Seventy steady minutes in the pool cost more than an hour and a half in the gym: not a «light» day.
+        assertEquals(DayType.MODERATE, NutriEnergy.dayType(listOf(session(Sport.STRENGTH, 90, Intensity.TEMPO))))
+        assertEquals(DayType.MODERATE, NutriEnergy.dayType(listOf(session(Sport.SWIM, 70, Intensity.ENDURANCE))))
+        assertEquals(DayType.LIGHT, NutriEnergy.dayType(listOf(session(Sport.SWIM, 43, Intensity.ENDURANCE))))
     }
 
     @Test
@@ -277,5 +281,19 @@ class NutriRulesTest {
         assertTrue(text.contains("Il giorno dopo c'è la gara"))
         assertTrue(NutriFueling.describe(emptyList(), 72.0).contains("resta vuoto"))
         assertNull(NutriFueling.plan(listOf(session(Sport.RUN, 40, Intensity.EASY)), 72.0).single().afterCarbsG)
+    }
+
+    // ---- The hours of the day ----------------------------------------------------
+
+    @Test
+    fun `the fuelling knows when the athlete trains`() {
+        val swim = listOf(session(Sport.SWIM, 60, Intensity.ENDURANCE))
+        val timed = NutriFueling.describe(swim, 73.0, times = mapOf(Sport.SWIM to java.time.LocalTime.of(13, 20)))
+        assertTrue("alle 13:20, fino alle 14:20 circa" in timed, timed)
+        assertTrue("non uno che viene prima" in timed)
+        val untimed = NutriFueling.describe(swim, 73.0)
+        assertFalse("alle 13:20" in untimed)
+        assertTrue("non ha indicato a che ora si allena" in untimed)
+        assertFalse("orario" in NutriFueling.describe(emptyList(), 73.0))
     }
 }

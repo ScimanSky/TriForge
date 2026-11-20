@@ -92,10 +92,17 @@ object NutriEnergy {
         }
     }
 
-    /** The energy the sessions add to daily life (the resting part is already counted). */
+    /**
+     * The energy the sessions add to daily life (the resting part is already
+     * counted). A recorded activity counts for what the watch measured, so
+     * the app has one number for it and not two; a planned session for its
+     * sport, intensity and duration.
+     */
     fun trainingKcal(sessions: List<PlannedSession>, weightKg: Double): Double =
-        sessions.filter { it.sport != null && it.durationMin > 0 }
-            .sumOf { (met(it.sport, it.intensity) - 1.0) * weightKg * it.durationMin / 60.0 }
+        sessions.filter { it.sport != null && it.durationMin > 0 }.sumOf { session ->
+            val resting = weightKg * session.durationMin / 60.0
+            session.measuredKcal?.let { max(it - resting, 0.0) } ?: ((met(session.sport, session.intensity) - 1.0) * resting)
+        }
 
     private fun isHard(session: PlannedSession) =
         session.intensity == Intensity.THRESHOLD || session.intensity == Intensity.VO2MAX || session.intensity == Intensity.RACE
@@ -115,6 +122,7 @@ object NutriEnergy {
                 durationMin = (activity.durationSec / 60).toInt(),
                 intensity = doneIntensity(activity),
                 focus = CoachTable.DONE,
+                measuredKcal = activity.calories?.takeIf { it > 0 },
             )
         }
         return planned + extra
@@ -142,9 +150,12 @@ object NutriEnergy {
         if (real.any { it.intensity == Intensity.RACE }) return DayType.RACE
         val minutes = real.sumOf { it.durationMin }
         val hard = real.count(::isHard)
+        // The energy of the sessions for each kilo: seventy minutes in the pool cost more than an hour
+        // and a half in the gym, and a day is not «light» when it burns more than a «moderate» one.
+        val energy = trainingKcal(real, 1.0)
         return when {
             minutes >= 150 || hard >= 2 || (hard >= 1 && minutes >= 90) -> DayType.HEAVY
-            minutes >= 75 || hard >= 1 -> DayType.MODERATE
+            minutes >= 75 || hard >= 1 || energy >= MODERATE_KCAL_PER_KG -> DayType.MODERATE
             else -> DayType.LIGHT
         }
     }
@@ -237,6 +248,9 @@ object NutriEnergy {
     }.trimEnd()
 
     private const val TYPICAL_AGE = 35.0
+
+    /** Training energy, in kcal for each kilo of weight, from which a day is no more a light one: 65 minutes of steady swimming. */
+    const val MODERATE_KCAL_PER_KG = 6.5
 
     /** A recorded activity shorter than this is not worth a line in the day. */
     private const val MIN_DONE_SEC = 10 * 60

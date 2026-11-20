@@ -129,6 +129,7 @@
     <string name="today_sport_stats">Statistiche per sport</string>
     <string name="today_recent">Ultime attività</string>
     <string name="today_empty_title">Nessuna attività, per ora</string>
+    <string name="today_pending">Calcolo in corso…</string>
     <string name="today_empty_body">Collega Garmin o Health Connect per importare i tuoi allenamenti e vedere forma, volumi e statistiche.</string>
     <string name="today_connect_source">Collega una sorgente</string>
     <string name="load_error">Non riesco a caricare le attività. Controlla la connessione.</string>
@@ -163,8 +164,11 @@
     <string name="support_hours_title">Ore a settimana</string>
     <string name="support_exercises_title">Esercizi più frequenti</string>
     <string name="support_exercises_source">dal Garmin</string>
-    <string name="support_exercises_note">Compare quando l\'orologio registra serie, ripetizioni e pesi. Senza, restano tempo, battiti e carico.</string>
+    <string name="support_exercises_note">A destra i chili sollevati in tutto nel periodo, cioè chili per ripetizioni. Compare quando l\'orologio registra serie, ripetizioni e pesi. Senza, restano tempo, battiti e carico.</string>
     <string name="support_bodyweight">a corpo libero</string>
+    <string name="support_exercise_work">%1$d × %2$d × %3$s kg</string>
+    <string name="support_exercise_kg_avg">%1$s kg in media</string>
+    <string name="support_exercise_total">%1$s kg in tutto</string>
     <string name="support_kinds_title">Per tipo</string>
     <string name="support_kind_count">%1$d attività</string>
     <string name="support_heart_title">Battiti e calorie</string>
@@ -180,7 +184,7 @@
     <string name="support_detail_lifted">Peso sollevato in tutto</string>
     <string name="support_detail_exercises">Esercizi</string>
     <string name="support_detail_exercises_count">%1$d esercizi</string>
-    <string name="support_detail_exercises_note">Compare quando l\'orologio registra serie e pesi durante la seduta.</string>
+    <string name="support_detail_exercises_note">Sotto ogni esercizio: serie × ripetizioni × chili. A destra i chili sollevati in tutto, cioè chili per ripetizioni. Compare quando l\'orologio registra serie e pesi durante la seduta.</string>
     <string name="support_counts_title">Come conta questa seduta</string>
     <string name="support_counts_load">Carico.</string>
     <string name="support_counts_load_value">Carico %1$d.</string>
@@ -191,7 +195,8 @@
     <string name="support_counts_coach">Coach.</string>
     <string name="support_counts_coach_text">I coach la vedono tra gli allenamenti degli ultimi giorni quando scrivono o cambiano la settimana.</string>
     <string name="support_counts_nutri">NutriAI.</string>
-    <string name="support_counts_nutri_kcal">Vale circa %1$s kcal nel fabbisogno del suo giorno.</string>
+    <string name="support_counts_nutri_kcal">L\'orologio non ha dato le calorie: l\'app la stima in circa %1$s kcal nel fabbisogno del suo giorno.</string>
+    <string name="support_counts_nutri_watch">Le calorie misurate dall\'orologio entrano nel fabbisogno del suo giorno.</string>
     <string name="support_counts_nutri_text">Entra nel fabbisogno del suo giorno. Con il peso nel profilo vedi qui di quanto.</string>
     <string name="source_garmin">Garmin</string>
     <string name="source_health_connect">Health Connect</string>
@@ -199,6 +204,8 @@
     <!-- Sport tab -->
     <string name="sport_empty_title">Nessuna attività di %1$s</string>
     <string name="sport_empty_body">Le statistiche compaiono dopo il primo allenamento sincronizzato.</string>
+    <string name="sport_empty_period_title">Nessuna attività di %1$s nelle ultime %2$d settimane</string>
+    <string name="sport_empty_period_body">Scegli un periodo più lungo per vedere le statistiche. Qui sotto trovi le ultime sedute registrate.</string>
     <string name="sport_kpi_volume">Volume</string>
     <string name="sport_kpi_change">%1$s%% a pari giorni</string>
     <string name="sport_kpi_sessions">Sedute</string>
@@ -271,6 +278,8 @@
     <string name="detail_compare_speed">Velocità a confronto</string>
     <string name="detail_compare_count">ultime %1$d uscite</string>
     <string name="detail_compare_chart">Le ultime %1$d uscite dello stesso sport. Questa: %2$s. La migliore: %3$s.</string>
+    <string name="detail_compare_direction_pace">Dalla più vecchia alla più recente. Più in alto, passo più veloce.</string>
+    <string name="detail_compare_direction_speed">Dalla più vecchia alla più recente. Più in alto, più veloce.</string>
     <string name="detail_compare_this">Questa: %1$s</string>
     <string name="detail_compare_best">Migliore: %1$s</string>
     <string name="detail_hr_title">Frequenza cardiaca</string>
@@ -384,13 +393,14 @@
     <string name="recovery_part_check_in">Check-in</string>
     <string name="recovery_part_hrv">HRV</string>
     <string name="recovery_part_resting_hr">FC a riposo</string>
-    <string name="recovery_part_sleep">Sonno</string>
+    <string name="recovery_part_sleep">Sonno delle ultime 7 notti</string>
     <string name="recovery_part_load">Carico</string>
     <string name="recovery_part_performance">Efficienza</string>
     <string name="recovery_points">+%1$d</string>
 
     <string name="recovery_missing_title">Per una lettura più precisa</string>
     <string name="recovery_missing_check_in">Fai il check-in del mattino: è il segnale più sensibile.</string>
+    <string name="recovery_missing_check_in_done">Check-in: quello di oggi c\'è. Entra nell\'indice dopo qualche mattina di fila, quando l\'app conosce il tuo solito.</string>
     <string name="recovery_missing_hrv">Indossa l\'orologio di notte per avere l\'HRV.</string>
     <string name="recovery_missing_resting_hr">Indossa l\'orologio di notte per avere la FC a riposo.</string>
     <string name="recovery_missing_sleep">Mancano i dati del sonno delle ultime notti.</string>
@@ -625,7 +635,9 @@
     <string name="swim_hold_very_steady">molto regolare</string>
     <string name="swim_hold_steady">regolare</string>
     <string name="swim_hold_uneven">irregolare</string>
-    <string name="swim_hold_pace_note">Ultima ripetuta del %1$s contro la prima, ogni 100 m. Variazione tra le ripetute %2$s%%.</string>
+    <string name="swim_hold_pace_note">Ultima ripetuta del %1$s uguale alla prima. Variazione tra le ripetute %2$s%%.</string>
+    <string name="swim_hold_pace_note_faster">Nel %1$s l\'ultima ripetuta è stata %3$s più veloce della prima, ogni 100 m. Variazione tra le ripetute %2$s%%.</string>
+    <string name="swim_hold_pace_note_slower">Nel %1$s l\'ultima ripetuta è stata %3$s più lenta della prima, ogni 100 m. Variazione tra le ripetute %2$s%%.</string>
     <string name="swim_hold_stroke">Bracciata sotto fatica</string>
     <string name="swim_hold_stroke_shorter">si accorcia a fine serie</string>
     <string name="swim_hold_stroke_kept">tenuta fino in fondo</string>

@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.triforge.app.R
 import com.triforge.app.data.ChatEntry
 import com.triforge.app.data.ProposalStatus
+import com.triforge.app.ui.common.PrimaryButton
 import com.triforge.app.ui.common.TriCard
 import com.triforge.app.ui.theme.SportColors
 import com.triforge.app.ui.theme.TriColors
@@ -76,6 +77,7 @@ fun CoachChat(
         val last = listState.layoutInfo.totalItemsCount - 1
         if (chat.isNotEmpty() && last >= 0) listState.animateScrollToItem(last)
     }
+    KeyboardBack()
     Column(Modifier.fillMaxSize().imePadding()) {
         CoachSelector(sport, onSelect)
         Text(
@@ -111,7 +113,22 @@ fun CoachChat(
                 )
             }
             if (writing) item { ThinkingRow(stringResource(R.string.coach_thinking, coach), palette) }
-            state.error?.let { reason -> item { ErrorCard(reason, onRetry = null, onDismiss = viewModel::clearError) } }
+            // An answer that did not come: «Riprova» asks again with the message already in the chat.
+            val unanswered = state.unanswered(sport)
+            val failed = state.error
+            if (failed != null) {
+                item {
+                    ErrorCard(
+                        failed,
+                        who = coach,
+                        onRetry = if (unanswered != null && state.task == null) ({ viewModel.retry(sport) }) else null,
+                        onDismiss = viewModel::clearError,
+                        hint = stringResource(R.string.coach_error_retry_message),
+                    )
+                }
+            } else if (unanswered != null && state.task == null) {
+                item { UnansweredCard(coach, onRetry = { viewModel.retry(sport) }) }
+            }
             // The ready-made questions scroll with the chat: with the keyboard open
             // they would otherwise cover the messages, or the first lines of an empty chat.
             item {
@@ -129,6 +146,15 @@ fun CoachChat(
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Composer(stringResource(R.string.coach_composer, coach), palette, enabled = state.task == null, onSend = { viewModel.send(sport, it) })
         }
+    }
+}
+
+/** The athlete's last message has no answer, e.g. the app was closed while the coach was writing. */
+@Composable
+internal fun UnansweredCard(who: String, onRetry: () -> Unit) {
+    TriCard {
+        Text(stringResource(R.string.coach_unanswered, who), style = MaterialTheme.typography.bodyMedium)
+        PrimaryButton(stringResource(R.string.coach_retry), onRetry, compact = true, modifier = Modifier.padding(top = 12.dp))
     }
 }
 

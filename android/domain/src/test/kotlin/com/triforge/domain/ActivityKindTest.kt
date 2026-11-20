@@ -132,8 +132,14 @@ class ActivityKindTest {
         assertEquals(null, top[2].volumeKg)
         assertEquals(0, top[1].reps)
         assertTrue(StrengthStats.frequentExercises(sessions.map { it.copy(sport = Sport.OTHER) }, since).isEmpty())
+        // In one session the two rows are one line, with the kilograms of a repetition.
+        val merged = StrengthStats.merged(sessions[1].exercises)
+        assertEquals(listOf(ExerciseSummary("squat", 4, 26, 2100.0), ExerciseSummary("plank", 3)), merged)
+        assertEquals(80.0, StrengthStats.kgPerRep(2560.0, 32))
+        assertEquals(null, StrengthStats.kgPerRep(null, 21))
+        assertEquals(null, StrengthStats.kgPerRep(900.0, 0))
         assertEquals("Trazioni", StrengthStats.exerciseName("PULL_UP"))
         assertEquals("Kettlebell swing", StrengthStats.exerciseName("kettlebell_swing"))
-        assertEquals("Altro esercizio", StrengthStats.exerciseName(" "))
+        assertEquals("Esercizio non riconosciuto", StrengthStats.exerciseName(" "))
     }
 }

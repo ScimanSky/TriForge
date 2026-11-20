@@ -10,6 +10,7 @@ import com.triforge.app.data.CoachDesk
 import com.triforge.app.data.CoachRepository
 import com.triforge.app.data.NutriDesk
 import com.triforge.app.data.ProposalStatus
+import com.triforge.domain.Sport
 import com.triforge.domain.TrainingStats
 import com.triforge.domain.coach.AthleteContext
 import com.triforge.domain.coach.AthleteData
@@ -34,9 +35,11 @@ import com.triforge.domain.coach.NutriSafety
 import com.triforge.domain.coach.NutritionDay
 import com.triforge.domain.coach.NutritionProfile
 import com.triforge.domain.coach.PlannedSession
+import com.triforge.domain.coach.TriRegia
 import com.triforge.domain.coach.TypedDish
 import com.triforge.domain.coach.WeekPlan
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.CancellationException
@@ -66,6 +69,8 @@ data class NutriDayView(
     val flags: Map<DishKey, BanHit> = emptyMap(),
     /** The training changed after the meals were written: their numbers are no more the day's. */
     val outdated: Boolean = false,
+    /** The dishes that are supplements of the food profile: their dose is the athlete's, there is nothing to change. */
+    val supplements: Set<DishKey> = emptySet(),
 ) {
     val hasMeals: Boolean get() = day?.meals?.isNotEmpty() == true
 
@@ -121,10 +126,15 @@ data class NutriUiState(
     /** The day NutriAI is writing now. */
     val preparing: LocalDate? = null,
     val error: CoachException.Reason? = null,
+    /** What failed can be asked again as it was, with «Riprova». */
+    val retryable: Boolean = false,
     val change: ChangeDishUi? = null,
     val undo: NutriUndo? = null,
 ) {
     val day: NutriDayView? get() = week.firstOrNull { it.date == selected }
+
+    /** The athlete's last message, when it is still without an answer and NutriAI is not writing one. */
+    val unanswered: ChatEntry? get() = chat.lastOrNull()?.takeIf { it.message.fromAthlete && task != CoachTask.REPLYING }
 
     /** The days from today to Sunday that still have no meals. */
     val toPrepare: Int get() = week.count { !it.date.isBefore(today) && !it.hasMeals }
@@ -153,9 +163,13 @@ class NutriViewModel(
         val task: CoachTask? = null,
         val preparing: LocalDate? = null,
         val error: CoachException.Reason? = null,
+        val retryable: Boolean = false,
         val change: ChangeDishUi? = null,
         val undo: NutriUndo? = null,
     )
+
+    /** What NutriAI was last asked, to ask it again unchanged when the answer did not come. */
+    private var again: (() -> Unit)? = null
 
     private val zone = ZoneId.systemDefault()
     private val local = MutableStateFlow(Local())
@@ -185,6 +199,9 @@ class NutriViewModel(
                 day = day,
                 flags = if (day != null && profile != null) NutriMeals.flags(day, profile) else emptyMap(),
                 outdated = day != null && targets != null && NutriMeals.outdated(day, targets),
+                supplements = day?.meals.orEmpty().flatMapIndexed { m, meal ->
+                    meal.dishes.mapIndexedNotNull { d, dish -> DishKey(m, d).takeIf { NutriMeals.supplementOf(dish, profile) != null } }
+                }.toSet(),
             )
         }
         NutriUiState(
@@ -199,11 +216,12 @@ class NutriViewModel(
             task = ui.task,
             preparing = ui.preparing,
             error = ui.error,
+            retryable = ui.retryable,
             change = ui.change,
             undo = ui.undo,
         )
     }
-        .catch { emit(NutriUiState(loaded = true, error = CoachException.Reason.NETWORK)) }
+        .catch { emit(NutriUiState(loaded = true, error = CoachException.Reason.UNAVAILABLE)) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NutriUiState())
 
     fun select(date: LocalDate) = local.update { it.copy(selected = date) }
@@ -245,13 +263,15 @@ class NutriViewModel(
         val recorded = data.activities.filter { it.startTime.atZone(data.zone).toLocalDate() == date }
         val targets = NutriEnergy.targets(profile, body, NutriEnergy.withDone(sessions, recorded), context)
         val weight = data.profile.weightKg?.takeIf { targets != null }
-        return DayNumbers(targets, weight?.let { NutriFueling.describe(sessions, it, context) })
+        // When the athlete usually does each sport, so that «prima» and «dopo» are hours of the day.
+        val times = (TriRegia.SPORTS + Sport.STRENGTH).mapNotNull { sport -> data.availability.slot(sport)?.time?.let { sport to it } }.toMap()
+        return DayNumbers(targets, weight?.let { NutriFueling.describe(sessions, it, context, times) })
     }
 
     // ---- Meals, when the athlete asks --------------------------------------
 
     /** «Prepara i pasti di …», «Rifai i pasti di …» and «Aggiorna i pasti»: NutriAI writes one day. */
-    fun prepareDay(date: LocalDate) = run(CoachTask.PLANNING) {
+    fun prepareDay(date: LocalDate): Unit = run(CoachTask.PLANNING, again = { prepareDay(date) }) {
         local.update { it.copy(preparing = date, undo = null) }
         val desk = repository.nutriDesk(uid).first()
         val day = write(date, desk, NutriMeals.mains(thisWeek(desk).filter { it.date != date }))
@@ -263,7 +283,7 @@ class NutriViewModel(
      * other, only the days without meals. Each is saved as soon as it is
      * written, so a failure half way keeps what is done.
      */
-    fun prepareWeek() = run(CoachTask.PLANNING) {
+    fun prepareWeek(): Unit = run(CoachTask.PLANNING, again = { prepareWeek() }) {
         val today = today()
         val sunday = TrainingStats.weekStart(today).plusDays(6)
         val desk = repository.nutriDesk(uid).first()
@@ -288,7 +308,8 @@ class NutriViewModel(
         val targets = state.value.week.firstOrNull { it.date == date }?.targets ?: return@run
         val desk = repository.nutriDesk(uid).first()
         val day = desk.days[date] ?: return@run
-        save(desk, listOf(NutriEnergy.apply(day, targets)))
+        // The headline and the reasons were written for the numbers of before: the app's take their place.
+        save(desk, listOf(NutriEnergy.apply(day, targets).copy(headline = "", rationale = "")))
     }
 
     private fun thisWeek(desk: NutriDesk): List<NutritionDay> {
@@ -314,7 +335,7 @@ class NutriViewModel(
         val old = nutri.days[date]?.let { FoodBans.clean(it, profile) }
         val fixed = old?.let { NutriMeals.fixed(it) }.orEmpty()
         val recent = state.value.chat.takeLast(RECENT_MESSAGES).map { it.message }
-        val described = AthleteContext.describe(data)
+        val described = AthleteContext.describe(data, LocalTime.now(zone))
         fun request(violations: List<BanViolation>) = CoachPrompts.nutritionDayRequest(
             athlete = described,
             date = date,
@@ -327,12 +348,13 @@ class NutriViewModel(
             fueling = numbers.fueling,
             fixed = fixed,
             elsewhere = elsewhere,
+            nearby = NutriMeals.nearby(nutri.days.values, date),
         )
         fun made(answer: NutritionDay) = NutriEnergy.apply(NutriMeals.keepFixed(NutriMeals.sanitized(answer.copy(date = date)), old), targets)
         var day = made(agent.plan(request(emptyList())))
         val violations = FoodBans.violations(day, profile)
         if (violations.isNotEmpty()) day = made(agent.plan(request(violations)))
-        day = NutriMeals.settle(FoodBans.clean(day, profile))
+        day = NutriMeals.fixSupplements(NutriMeals.settle(FoodBans.clean(day, profile)), profile)
         if (day.meals.isEmpty()) throw CoachException(CoachException.Reason.BAD_ANSWER)
         return day
     }
@@ -391,7 +413,7 @@ class NutriViewModel(
         } catch (e: CoachException) {
             changing(of) { it.copy(loading = false, checking = false, saving = false, error = e.reason) }
         } catch (e: Exception) {
-            changing(of) { it.copy(loading = false, checking = false, saving = false, error = CoachException.Reason.NETWORK) }
+            changing(of) { it.copy(loading = false, checking = false, saving = false, error = CoachException.Reason.UNAVAILABLE) }
         }
     }
 
@@ -412,12 +434,14 @@ class NutriViewModel(
             changing(open) { it.copy(loading = true, error = null) }
             val context = dishContext(open)
             val request = CoachPrompts.dishAlternativesRequest(context.profile, context.day, context.meal, open.target, context.sessions, open.seen)
-            val fresh = NutriMeals.alternatives(
+            suspend fun batch() = NutriMeals.alternatives(
                 candidates = advisor.alternatives(request),
                 target = open.target,
                 profile = context.profile,
                 exclude = open.seen + context.meal.dishes.map { it.name },
             )
+            // A first batch can come back with nothing the profile allows: ask once more before saying there is none.
+            val fresh = batch().ifEmpty { if (open.seen.isEmpty()) batch() else emptyList() }
             changing(open) {
                 if (fresh.isEmpty()) {
                     it.copy(loading = false, exhausted = true)
@@ -535,12 +559,28 @@ class NutriViewModel(
 
     // ---- Chat --------------------------------------------------------------
 
-    fun send(text: String) {
-        val message = text.trim()
+    fun send(text: String) = ask(text.trim(), add = true)
+
+    /**
+     * «Riprova»: what failed is asked again as it was. For a message, it is
+     * the one already in the chat: the athlete does not write it twice.
+     */
+    fun retry() {
+        val retry = again
+        if (retry != null) {
+            retry()
+        } else {
+            state.value.unanswered?.let { ask(it.message.text, add = false) }
+        }
+    }
+
+    private fun ask(message: String, add: Boolean) {
         if (message.isEmpty() || local.value.task != null) return
-        run(CoachTask.REPLYING) {
-            val history = state.value.chat.map { it.message }
-            repository.addMessage(uid, CoachRole.NUTRI_AI, fromAthlete = true, text = message)
+        run(CoachTask.REPLYING, again = { ask(message, add = false) }) {
+            val chat = state.value.chat.map { it.message }
+            // The message being answered travels in the turn, not in the history.
+            val history = if (!add && chat.lastOrNull()?.let { it.fromAthlete && it.text == message } == true) chat.dropLast(1) else chat
+            if (add) repository.addMessage(uid, CoachRole.NUTRI_AI, fromAthlete = true, text = message)
             // Signs of an eating disorder: a fixed, kind answer, and no model.
             if (NutriSafety.flags(message)) {
                 repository.addMessage(uid, CoachRole.NUTRI_AI, fromAthlete = false, text = NutriSafety.REPLY)
@@ -557,7 +597,7 @@ class NutriViewModel(
             val targets = numbers.targets
             val turn = CoachPrompts.chatTurn(
                 role = CoachRole.NUTRI_AI,
-                athlete = AthleteContext.describe(data),
+                athlete = AthleteContext.describe(data, LocalTime.now(zone)),
                 partner = coach.brief,
                 ownPlan = nutri.days[date]?.let(CoachPrompts::describe),
                 extra = buildString {
@@ -607,25 +647,35 @@ class NutriViewModel(
         repository.setProposalStatus(uid, CoachRole.NUTRI_AI, entry.id, ProposalStatus.DISMISSED)
     }
 
-    fun clearError() = local.update { it.copy(error = null) }
+    fun clearError() {
+        again = null
+        local.update { it.copy(error = null, retryable = false) }
+    }
 
     /**
      * Runs [block] and shows what goes wrong. With a [kind] the screen shows
      * NutriAI at work, and nothing else of the kind starts meanwhile.
      */
-    private fun run(kind: CoachTask?, block: suspend () -> Unit) {
+    private fun run(kind: CoachTask?, again: (() -> Unit)? = null, block: suspend () -> Unit) {
         if (kind != null && local.value.task != null) return
         if (kind != null) local.update { it.copy(task = kind) }
         viewModelScope.launch {
-            local.update { it.copy(error = null) }
+            local.update { it.copy(error = null, retryable = false) }
+            fun failed(reason: CoachException.Reason) {
+                // Asking again helps when the answer did not come, not when the weight is missing.
+                val retry = again?.takeIf { reason != CoachException.Reason.NEEDS_WEIGHT }
+                this@NutriViewModel.again = retry
+                local.update { it.copy(error = reason, retryable = retry != null) }
+            }
             try {
                 block()
+                this@NutriViewModel.again = null
             } catch (e: CancellationException) {
                 throw e
             } catch (e: CoachException) {
-                local.update { it.copy(error = e.reason) }
+                failed(e.reason)
             } catch (e: Exception) {
-                local.update { it.copy(error = CoachException.Reason.NETWORK) }
+                failed(CoachException.Reason.UNAVAILABLE)
             } finally {
                 if (kind != null) local.update { it.copy(task = null, preparing = null) }
             }
