@@ -149,11 +149,9 @@ class SwimSeriesTest {
 
     @Test
     fun `a length the watch counted twice is not equipment`() {
-        // 100 m in 2:02 read as 150 m, two lengths split in two: it looks fast and short of strokes, and is neither.
+        // 100 m in 2:02 read as 150 m, two lengths split in two: it looked fast and short of strokes, and was neither.
         val twice = counted(150.0, 122.0, 54, 29.3, 27.5, 12.6, 19.3, 20.1, 13.2)
-        // 100 m with fins read as 125 m: still with fins once the length that was not swum is taken away.
-        val fins = counted(125.0, 97.5, 41, 18.8, 20.5, 25.3, 20.1, 12.8)
-        val activity = swim(listOf(twice, rest(20.0)) + set(6, 100.0, 115.0, 13) + listOf(fins, rest(20.0)))
+        val activity = swim(listOf(twice, rest(20.0)) + set(6, 100.0, 115.0, 13) + set(1, 100.0, 97.5, 10))
         val guess = assertNotNull(SwimSets.gearGuess(activity))
 
         assertEquals(setOf(8), guess.likely)

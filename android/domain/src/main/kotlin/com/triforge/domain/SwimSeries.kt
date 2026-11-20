@@ -91,15 +91,11 @@ object SwimSets {
     private const val MAX_BETWEEN = 2
 
     /**
-     * A length timed under this share of the middle length of its repeat
-     * was not swum: the watch counted a turn that was not there, and the
-     * repeat looks longer and faster than it was, with fewer strokes a
-     * length. Just what equipment looks like.
+     * Lengths with their times needed in a repeat before a pace that cannot
+     * be right is read all the same: with them [SwimAnalysis.recounted] has
+     * already taken away a length counted twice.
      */
-    private const val MISCOUNTED_LENGTH_SHARE = 0.7
-
-    /** Lengths needed in a repeat before one of them can be told miscounted. */
-    private const val MIN_LENGTHS_FOR_MISCOUNT = 3
+    private const val MIN_LENGTHS_TO_READ_DOUBT = 3
 
     /** Repeats with strokes needed before one can be told apart from the others. */
     private const val MIN_REFERENCE = 4
@@ -122,17 +118,14 @@ object SwimSets {
         repeat.lengths.size.takeIf { it > 0 }
             ?: poolLengthMeters?.takeIf { it > 0 }?.let { (repeat.distanceMeters / it).roundToInt() }?.takeIf { it > 0 }
 
-    /** What the guess reads of a repeat, over the lengths that can be believed. */
-    private class Measure(val repeat: SwimRepeat, val lengths: Int, val paceSecPer100: Double, val strokesPerLength: Double)
+    /** What the guess reads of a repeat. */
+    private class Measure(val repeat: SwimRepeat, val lengths: Int, val strokesPerLength: Double) {
+        val paceSecPer100: Double get() = repeat.paceSecPer100
+    }
 
     private fun measure(repeat: SwimRepeat, poolLengthMeters: Double?): Measure? {
-        val strokes = repeat.strokes?.takeIf { it > 0 } ?: return null
-        val counted = lengths(repeat, poolLengthMeters) ?: return null
-        val times = repeat.lengths.map { it.durationSec }.filter { it > 0 }
-        val miscounted = if (times.size < MIN_LENGTHS_FOR_MISCOUNT) 0 else Stats.median(times).let { middle -> times.count { it < middle * MISCOUNTED_LENGTH_SHARE } }
-        val swum = (counted - miscounted).coerceAtLeast(1)
-        val meters = repeat.distanceMeters * swum / counted
-        return Measure(repeat, swum, repeat.durationSec / meters * 100.0, strokes.toDouble() / swum)
+        val perLength = strokesPerLength(repeat, poolLengthMeters) ?: return null
+        return Measure(repeat, lengths(repeat, poolLengthMeters) ?: return null, perLength)
     }
 
     /**
@@ -179,8 +172,7 @@ object SwimSets {
      *
      * The shares come from a real swim the athlete had marked by hand: with
      * fins the 100s went from 1:50 to 1:28 while the strokes went from 13 a
-     * length to 9 on some and 11 on others, and two repeats had a length
-     * the watch counted twice.
+     * length to 9 on some and 11 on others.
      *
      * A pull buoy alone changes little of either: it is never guessed, the
      * athlete marks it.
@@ -188,8 +180,8 @@ object SwimSets {
     fun gearGuess(repeats: List<SwimRepeat>, poolLengthMeters: Double?): SwimGearGuess? {
         val counted = repeats
             // A pace that cannot be right is read all the same when the repeat has the times of its lengths:
-            // they tell a length counted twice, which is taken away, from fins, which are just that fast.
-            .filter { !it.doubtful || it.lengths.size >= MIN_LENGTHS_FOR_MISCOUNT }
+            // a length counted twice has been taken away already, and what is left that fast is fins.
+            .filter { !it.doubtful || it.lengths.size >= MIN_LENGTHS_TO_READ_DOUBT }
             .filter { !it.assisted && it.distanceMeters > 0 && it.durationSec > 0 && it.stroke != "drill" }
             .mapNotNull { measure(it, poolLengthMeters) }
         val free = counted.filter { it.repeat.isFreestyle }

@@ -31,8 +31,16 @@ data class SwimRepeat(
      * and the threshold, like a doubtful repeat.
      */
     val gear: Set<SwimGear> = emptySet(),
+    /**
+     * Lengths the watch counted twice, already taken away: the distance
+     * and the lengths here are the ones swum, not the ones it recorded.
+     */
+    val recounted: Int = 0,
 ) {
     val paceSecPer100: Double get() = durationSec / distanceMeters * 100.0
+
+    /** The distance the watch recorded, with the lengths it counted twice. */
+    val recordedMeters: Double get() = if (lengths.isEmpty()) distanceMeters else distanceMeters * (lengths.size + recounted) / lengths.size
 
     /** Swum with equipment. */
     val assisted: Boolean get() = gear.isNotEmpty()
@@ -179,7 +187,8 @@ object SwimAnalysis {
         var pending: SwimLap? = null
         var rest = 0.0
         fun flush(restAfter: Double?) {
-            val lap = pending ?: return
+            val recorded = pending ?: return
+            val lap = recounted(recorded)
             result += SwimRepeat(
                 number = result.size + 1,
                 distanceMeters = lap.distanceMeters,
@@ -191,6 +200,7 @@ object SwimAnalysis {
                 lengths = lap.lengths,
                 restAfterSec = restAfter,
                 gear = activity.gear?.of(result.size + 1).orEmpty(),
+                recounted = recorded.lengths.size - lap.lengths.size,
             )
         }
         for (lap in activity.laps) {
@@ -204,6 +214,89 @@ object SwimAnalysis {
         }
         flush(null)
         return flagged(result)
+    }
+
+    /** Lengths needed in a repeat before one of them can be told counted twice. */
+    private const val MIN_LENGTHS_TO_RECOUNT = 3
+
+    /**
+     * A piece of a length counted twice lasts under this share of a whole
+     * length of its repeat. Nobody swims one length in nearly half the time
+     * of the others; a sprint at the end or a turn felt late takes off a
+     * third at most.
+     */
+    private const val PIECE_SHARE = 0.55
+
+    /** And with the piece next to it makes no more than this share of a whole one. */
+    private const val JOINED_SHARE = 1.3
+
+    /**
+     * [lap] without the lengths the watch counted twice. When it feels a
+     * turn in the middle of a length it records two short ones, and the
+     * repeat comes out longer and faster than it was: 100 m in 2:02 become
+     * 150 m at 1:21 /100 m, a pace that then enters records and threshold
+     * as the athlete's best.
+     *
+     * A length is a piece of one when it is much shorter than the whole
+     * lengths of its repeat and, joined to the shorter length beside it,
+     * makes about one of them. A short length next to a long one is not:
+     * there the watch only put the turn in the wrong place, and the count
+     * is right. The pieces are joined, and the distance follows the lengths
+     * that are left; the time and the strokes are the repeat's own.
+     */
+    internal fun recounted(lap: SwimLap): SwimLap {
+        val lengths = lap.lengths
+        if (lengths.size < MIN_LENGTHS_TO_RECOUNT || lengths.any { it.durationSec <= 0 }) return lap
+        // A whole length: the middle of the longer half, so that the pieces themselves do not shorten it.
+        val whole = Stats.median(lengths.map { it.durationSec }.sorted().drop(lengths.size / 2))
+        fun piece(length: SwimLength) = length.durationSec < whole * PIECE_SHARE
+        fun joined(one: SwimLength, other: SwimLength) = one.durationSec + other.durationSec <= whole * JOINED_SHARE
+        // Most lengths short against one very long: there the watch missed a turn, and nothing here can count it back.
+        if (lengths.count(::piece) * 2 > lengths.size) return lap
+
+        val swum = mutableListOf<SwimLength>()
+        var index = 0
+        while (index < lengths.size) {
+            val length = lengths[index]
+            val before = swum.lastOrNull()
+            val after = lengths.getOrNull(index + 1)
+            val withAfter = after != null && piece(length) && joined(length, after) && (before == null || after.durationSec <= before.durationSec || !joined(before, length))
+            val withBefore = !withAfter && before != null && piece(length) && joined(before, length)
+            when {
+                withAfter -> {
+                    swum += join(length, after!!)
+                    index += 2
+                }
+                withBefore -> {
+                    swum[swum.lastIndex] = join(before!!, length)
+                    index += 1
+                }
+                else -> {
+                    swum += length
+                    index += 1
+                }
+            }
+        }
+        if (swum.size == lengths.size) return lap
+        return lap.copy(
+            distanceMeters = lap.distanceMeters * swum.size / lengths.size,
+            swolf = lap.strokes?.let { ((lap.durationSec + it) / swum.size).toInt() } ?: lap.swolf,
+            lengths = swum,
+        )
+    }
+
+    /** Two pieces of one length as that length: the longer piece says which stroke it was. */
+    private fun join(one: SwimLength, other: SwimLength): SwimLength {
+        val longer = if (one.durationSec >= other.durationSec) one else other
+        val strokes = if (one.strokes == null && other.strokes == null) null else (one.strokes ?: 0) + (other.strokes ?: 0)
+        val seconds = one.durationSec + other.durationSec
+        return SwimLength(
+            distanceMeters = longer.distanceMeters,
+            durationSec = seconds,
+            strokes = strokes,
+            swolf = strokes?.let { (seconds + it).toInt() },
+            stroke = longer.stroke,
+        )
     }
 
     /** Seconds per 100 m nobody holds in a pool session: under it the watch miscounted. */

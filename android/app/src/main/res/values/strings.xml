@@ -695,6 +695,8 @@
     <string name="swim_doubt_count">%1$d dubbie</string>
     <string name="swim_doubt_faster">Circa %1$d″ ogni 100 m più veloce delle altre.</string>
     <string name="swim_doubt_why">Di solito l\'orologio ha contato una vasca in più o non ha sentito una virata. Non entra in «la più veloce», nelle zone e nella stima della soglia; nel carico conta al tuo passo abituale.</string>
+    <string name="swim_recount_one">Per l\'orologio erano %1$d m: ha contato una vasca due volte.</string>
+    <string name="swim_recount">Per l\'orologio erano %1$d m: ha contato %2$d vasche due volte.</string>
     <string name="swim_doubt_hold">Le ripetute dubbie sono escluse.</string>
     <string name="swim_doubt_gear">Se avevi le pinne o le palette, segnalo in «Attrezzatura», più in alto.</string>
 

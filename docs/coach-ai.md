@@ -258,7 +258,13 @@ dati dell'atleta («Soglia del nuoto da verificare») e propongono il test
 400 + 200. Le ripetute con un passo impossibile (vasche contate male
 dall'orologio) sono marcate «dubbie» e restano fuori da migliori tempi, zone e
 stima; nel dettaglio della nuotata sono tratteggiate nel grafico e spiegate
-nella tabella.
+nella tabella. Una vasca contata due volte si riconosce prima, dai tempi
+delle vasche: un pezzo che dura meno del 55% di una vasca intera della sua
+ripetuta e che, unito alla vasca accanto, ne fa circa una
+(`SwimAnalysis.recounted`). I due pezzi vengono riuniti e la distanza della
+ripetuta segue le vasche rimaste: 150 m a 1:21 tornano 100 m in 2:02, e la
+tabella dice quanti metri aveva contato l'orologio. Una vasca breve accanto
+a una lunga è solo una virata sentita tardi, e resta com'è.
 
 La stima dai migliori tempi (`SwimAnalysis.estimateCss`, card «CSS stimata
 dalle tue nuotate» in Attività, Nuoto) è giusta solo se quelle ripetute erano
@@ -296,9 +302,8 @@ lavorano le gambe e le braccia girano quasi come sempre. Tutte e due le
 cose, perché la sola velocità è uno sprint e le sole bracciate in meno
 sono un esercizio. Le soglie vengono da una nuotata vera segnata a mano
 dall'atleta (100 m da 1:50 a 1:28 con le pinne, bracciate da 13 a 9–11).
-Una vasca molto più breve delle altre della sua ripetuta è una virata
-contata due volte: per la proposta non conta come vasca, altrimenti una
-ripetuta contata lunga sembrerebbe veloce e con poche bracciate. Le
+Le vasche contate due volte sono già state tolte (vedi sopra): altrimenti
+una ripetuta contata lunga sembrerebbe veloce e con poche bracciate. Le
 ripetute dal passo dubbio si leggono lo stesso quando hanno i tempi delle
 vasche. Fino a due ripetute in mezzo a ripetute proposte (uno stile
 diverso, un tratto lento) sono un «forse» a parte: l'attrezzatura si
