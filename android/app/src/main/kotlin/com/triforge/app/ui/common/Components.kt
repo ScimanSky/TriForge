@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -52,6 +53,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -88,60 +91,114 @@ fun TriCard(
     )
 }
 
+/**
+ * A title with a note: beside it, at the end of the line, when the two fit on
+ * one line, and under it when they don't.
+ *
+ * A Row cannot do this: it measures the note first, and a long note leaves
+ * the title a few pixels, which it fills one letter per line.
+ */
+@Composable
+fun TitleWithNote(
+    modifier: Modifier = Modifier,
+    gap: Dp = 12.dp,
+    title: @Composable () -> Unit,
+    note: (@Composable () -> Unit)?,
+) {
+    Layout(
+        content = {
+            Box { title() }
+            if (note != null) Box { note() }
+        },
+        modifier = modifier,
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val titleBox = measurables[0]
+        val noteBox = measurables.getOrNull(1)
+        if (noteBox == null) {
+            val placed = titleBox.measure(loose)
+            val width = if (constraints.hasBoundedWidth) constraints.maxWidth else placed.width
+            val height = constraints.constrainHeight(placed.height)
+            return@Layout layout(width, height) { placed.placeRelative(0, (height - placed.height) / 2) }
+        }
+
+        val between = gap.roundToPx()
+        val oneLine = titleBox.maxIntrinsicWidth(Constraints.Infinity) + between +
+            noteBox.maxIntrinsicWidth(Constraints.Infinity)
+        if (!constraints.hasBoundedWidth || oneLine <= constraints.maxWidth) {
+            val notePlaced = noteBox.measure(loose)
+            val width = if (constraints.hasBoundedWidth) constraints.maxWidth else oneLine
+            val titlePlaced = titleBox.measure(loose.copy(maxWidth = (width - between - notePlaced.width).coerceAtLeast(0)))
+            val height = constraints.constrainHeight(maxOf(titlePlaced.height, notePlaced.height))
+            layout(width, height) {
+                titlePlaced.placeRelative(0, (height - titlePlaced.height) / 2)
+                notePlaced.placeRelative(width - notePlaced.width, (height - notePlaced.height) / 2)
+            }
+        } else {
+            val titlePlaced = titleBox.measure(loose)
+            val notePlaced = noteBox.measure(loose)
+            val under = 2.dp.roundToPx()
+            val height = constraints.constrainHeight(titlePlaced.height + under + notePlaced.height)
+            layout(constraints.maxWidth, height) {
+                titlePlaced.placeRelative(0, 0)
+                notePlaced.placeRelative(0, titlePlaced.height + under)
+            }
+        }
+    }
+}
+
 /** Card title on the left, a quiet note such as the period on the right. */
 @Composable
 fun CardHeader(title: String, trailing: String? = null, modifier: Modifier = Modifier) {
-    Row(
+    TitleWithNote(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier
-                .weight(1f)
-                .semantics { heading() },
-        )
-        if (trailing != null) {
+        title = {
             Text(
-                text = trailing,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { heading() },
             )
-        }
-    }
+        },
+        note = trailing?.let {
+            {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+    )
 }
 
 /** Small uppercase heading between groups of cards. */
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: String? = null) {
-    Row(
+    TitleWithNote(
         modifier = modifier
             .fillMaxWidth()
             .padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = text.uppercase(),
-            fontFamily = SpaceGrotesk,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 13.sp,
-            letterSpacing = 0.8.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .weight(1f)
-                .semantics { heading() },
-        )
-        if (trailing != null) {
+        title = {
             Text(
-                text = trailing,
-                style = MaterialTheme.typography.bodySmall,
+                text = text.uppercase(),
+                fontFamily = SpaceGrotesk,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                letterSpacing = 0.8.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { heading() },
             )
-        }
-    }
+        },
+        note = trailing?.let {
+            {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+    )
 }
 
 /** One figure with its label underneath. */
@@ -289,19 +346,24 @@ fun CollapsibleCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.weight(1f),
+            TitleWithNote(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 10.dp),
+                gap = 8.dp,
+                title = { Text(text = title, style = MaterialTheme.typography.titleSmall) },
+                note = summary?.let {
+                    {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
             )
-            if (summary != null) {
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            }
             Icon(
                 imageVector = TriIcons.ChevronDown,
                 contentDescription = null,
@@ -420,21 +482,19 @@ fun ListRow(
 /** Label on the left, value on the right: one line of a metrics list. */
 @Composable
 fun KeyValueRow(label: String, value: String, modifier: Modifier = Modifier) {
-    Row(
+    TitleWithNote(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        Text(text = value, style = MaterialTheme.typography.titleSmall)
-    }
+        title = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        note = { Text(text = value, style = MaterialTheme.typography.titleSmall) },
+    )
 }
 
 /** The app's text field: outlined, 14 dp corners, optional unit on the right. */
