@@ -72,8 +72,7 @@ object CoachMapper {
             // A step is by distance or by time; with both, the distance is what the athlete counts.
             distanceM = metres,
             durationSec = seconds.takeIf { metres == null },
-            // A plan saved with the old swim codes (A1–C3) is read as zones.
-            zone = Zones.current(text(fields["zone"], 20).uppercase()),
+            zone = text(fields["zone"], 20).uppercase(),
             recoverySec = number(fields["recoverySec"])?.toInt()?.coerceIn(0, 900) ?: 0,
             text = text(fields["text"], 120),
             target = text(fields["target"], 60),
@@ -142,14 +141,17 @@ object CoachMapper {
         fields ?: return null
         val title = text(fields["title"], 80).ifBlank { return null }
         val minutes = number(fields["durationMin"])?.toInt()?.coerceIn(0, MAX_SESSION_MIN) ?: 0
+        val sport = sport(fields["sport"])
         return PlannedSession(
-            sport = sport(fields["sport"]),
+            sport = sport,
             title = title,
             durationMin = minutes,
             intensity = Intensity.of(fields["intensity"] as? String) ?: Intensity.EASY,
             details = text(fields["details"], 400),
             focus = text(fields["focus"], 40),
-            steps = list(fields["steps"]).mapNotNull { step(it as? Map<*, *>) }.take(Workouts.MAX_STEPS),
+            // A swim saved when its zones were named Z1–Z5 is read with the swim codes.
+            steps = list(fields["steps"]).mapNotNull { step(it as? Map<*, *>) }.take(Workouts.MAX_STEPS)
+                .map { step -> step.copy(zone = Zones.read(sport, step.zone) ?: step.zone) },
             why = text(fields["why"], 500),
             own = fields["own"] as? Boolean ?: false,
         )

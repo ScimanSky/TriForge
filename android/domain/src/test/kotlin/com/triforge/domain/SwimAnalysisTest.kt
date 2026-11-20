@@ -60,19 +60,27 @@ class SwimAnalysisTest {
 
     @Test
     fun `zones follow the CSS speed`() {
-        assertEquals(4, SwimAnalysis.zoneOf(108.0, 108))
-        assertEquals(4, SwimAnalysis.zoneOf(110.0, 108))
-        assertEquals(5, SwimAnalysis.zoneOf(104.0, 108))
-        assertEquals(3, SwimAnalysis.zoneOf(115.0, 108))
-        assertEquals(2, SwimAnalysis.zoneOf(119.0, 108))
+        // B2 is the threshold zone and ends at the CSS itself.
+        assertEquals("B2", SwimAnalysis.zoneCode(108.0, 108))
+        assertEquals("B2", SwimAnalysis.zoneCode(110.0, 108))
+        assertEquals(SwimAnalysis.THRESHOLD_ZONE, SwimAnalysis.zoneOf(110.0, 108))
+        assertEquals("C1", SwimAnalysis.zoneCode(104.0, 108))
+        assertEquals("C2", SwimAnalysis.zoneCode(100.0, 108))
+        assertEquals("C3", SwimAnalysis.zoneCode(95.0, 108))
+        assertEquals("B1", SwimAnalysis.zoneCode(115.0, 108))
+        assertEquals("A2", SwimAnalysis.zoneCode(124.0, 108))
+        assertEquals("A1", SwimAnalysis.zoneCode(130.0, 108))
         assertEquals(1, SwimAnalysis.zoneOf(130.0, 108))
+        assertEquals(7, SwimAnalysis.zoneOf(95.0, 108))
     }
 
     @Test
     fun `metres per zone add up to the swum distance`() {
         val meters = assertNotNull(SwimAnalysis.zoneMeters(session, 108))
 
-        assertContentEquals(doubleArrayOf(200.0, 400.0, 400.0, 1000.0, 0.0), meters)
+        // A1 to C3: the backstroke in A1, the warm-up in B1, 200s and 100s around the threshold in B2,
+        // and the two fastest 200s, a second or two under it, in C1.
+        assertContentEquals(doubleArrayOf(200.0, 0.0, 400.0, 1000.0, 400.0, 0.0, 0.0), meters)
         assertNull(SwimAnalysis.zoneMeters(session, null))
         assertNull(SwimAnalysis.zoneMeters(swim(emptyList()), 108))
     }

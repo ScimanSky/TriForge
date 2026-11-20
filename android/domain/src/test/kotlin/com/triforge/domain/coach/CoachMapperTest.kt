@@ -79,6 +79,32 @@ class CoachMapperTest {
     }
 
     @Test
+    fun `a swim saved with Z1 to Z5 is read with the codes of the pool`() {
+        fun session(sport: Sport) = PlannedSession(
+            sport, "Serie", 40, Intensity.EASY,
+            steps = listOf(
+                WorkoutStep(WorkoutBlock.WARMUP, distanceM = 400, zone = "Z1"),
+                WorkoutStep(WorkoutBlock.MAIN, reps = 10, distanceM = 100, zone = "Z2", recoverySec = 20),
+                WorkoutStep(WorkoutBlock.MAIN, reps = 4, distanceM = 100, zone = "Z4", recoverySec = 30),
+                WorkoutStep(WorkoutBlock.MAIN, reps = 4, distanceM = 50, zone = "C3", recoverySec = 40),
+            ),
+        )
+        val plan = WeekPlan(
+            weekStart = monday,
+            phase = "Base",
+            days = (0L until 7L).map { PlannedDay(monday.plusDays(it), if (it == 0L) listOf(session(Sport.SWIM), session(Sport.RUN)) else emptyList()) },
+            rationale = "r",
+            noteForNutriAi = "n",
+        )
+
+        val read = assertNotNull(CoachMapper.weekPlanFromFields(CoachMapper.weekPlanToFields(plan))).days.first().sessions
+
+        assertEquals(listOf("A1", "A2", "B2", "C3"), read.first { it.sport == Sport.SWIM }.steps.map { it.zone })
+        // The run keeps its zones; a code that is not one of its own is left as it was written.
+        assertEquals(listOf("Z1", "Z2", "Z4", "C3"), read.first { it.sport == Sport.RUN }.steps.map { it.zone })
+    }
+
+    @Test
     fun `nutrition day round trips and rejects absurd targets`() {
         val day = NutritionDay(
             date = monday,

@@ -215,11 +215,21 @@ defaticamento, ciascuno con ripetute, distanza o tempo, zona e recupero. Come
 in SwimForge, il modello sceglie e spiega, l'app fa i conti (`Workouts`,
 `Zones`):
 
-- le zone sono Z1–Z5 per tutti gli sport: nuoto dal passo soglia (CSS, con i
-  confini di `SwimAnalysis.ZONE_SPEED_BOUNDS`), bici dall'FTP, corsa dal passo
-  soglia; senza soglia, bici e corsa passano ai battiti dalla frequenza
-  massima. I vecchi nomi del nuoto (A1–C3) nei piani già salvati vengono
-  tradotti alla lettura (`Zones.read`);
+- il nuoto usa le sigle che si usano in vasca, come ha chiesto Shard: A1
+  recupero, A2 aerobico, B1 medio, B2 soglia (fino alla CSS), C1 sopra soglia,
+  C2 VO2max, C3 sprint, dal passo soglia (CSS) con i confini di
+  `SwimAnalysis.ZONE_SPEED_BOUNDS` (85, 90, 95, 100, 104 e 110% della velocità
+  di soglia, come in SwimForge). Sono le stesse nelle sedute scritte dal coach
+  e nell'analisi delle nuotate fatte: un B1 previsto e un B1 nuotato sono lo
+  stesso passo;
+- bici e corsa usano Z1–Z5, dall'FTP e dal passo soglia; senza soglia passano
+  ai battiti dalla frequenza massima;
+- `Zones.level` mette tutte le sigle su una scala sola da 1 a 5 (B2 e C1
+  valgono 4, C2 e C3 valgono 5): è quella che usano la regia e i colori;
+- una nuotata salvata quando le zone del nuoto si chiamavano Z1–Z5 viene letta
+  con le sigle della vasca (`Zones.read`: Z1→A1, Z2→A2, Z3→B1, Z4→B2, Z5→C2),
+  e i ritmi dei passi si ricalcolano dalle soglie di oggi quando la seduta
+  viene mostrata (`Workouts.withTargets`);
 - i ritmi di ogni zona sono scritti nei dati dell'atleta («Zone dell'atleta»):
   in chat il coach cita solo quelli, così chat e sedute dicono gli stessi
   numeri;

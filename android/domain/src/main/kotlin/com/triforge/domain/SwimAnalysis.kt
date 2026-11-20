@@ -98,12 +98,12 @@ enum class CssConfidence { MEDIUM, LOW }
 /**
  * Swim metrics read from the laps of a session, chosen for a triathlete:
  * pace against the CSS, how the pace and the stroke hold in the main set,
- * stroke efficiency, pace zones on the same five levels as bike and run,
+ * stroke efficiency, pace zones as swimmers name them (A1 to C3),
  * the load lap by lap and a CSS estimated from the athlete's best efforts.
  *
  * Adapted from the swim metrics of SwimForge (pace zones on CSS, pacing
  * variation and fade, stroke length drop in repeats, CSS from best efforts),
- * reduced to freestyle and to five zones.
+ * reduced to freestyle.
  */
 object SwimAnalysis {
 
@@ -111,11 +111,23 @@ object SwimAnalysis {
     const val MIN_SET_REPEATS = 3
 
     /**
-     * Upper bounds of zones 1 to 4 as a fraction of CSS speed; above the last
-     * is zone 5. Z1 recovery, Z2 aerobic, Z3 tempo, Z4 threshold (the CSS
-     * itself, give or take a couple of seconds), Z5 above threshold.
+     * The swim zones as coaches name them at the pool, slowest first: A1
+     * recovery, A2 aerobic, B1 tempo, B2 threshold (up to the CSS), C1 just
+     * above it, C2 VO2max, C3 sprint. Recorded swims and planned sessions
+     * both use them, so a planned B1 and a swum B1 are the same pace.
      */
-    val ZONE_SPEED_BOUNDS = doubleArrayOf(0.86, 0.92, 0.97, 1.02)
+    val ZONE_CODES = listOf("A1", "A2", "B1", "B2", "C1", "C2", "C3")
+
+    /**
+     * Upper bounds of A1 to C2 as a fraction of CSS speed, as in SwimForge;
+     * above the last is C3. B2 ends at the CSS itself, with half a percent
+     * of slack so that a repeat swum on the threshold does not fall in C1
+     * for a few tenths of a second.
+     */
+    val ZONE_SPEED_BOUNDS = doubleArrayOf(0.85, 0.90, 0.95, 1.005, 1.04, 1.10)
+
+    /** The place of B2, the threshold zone, among the zones, counted from 1. */
+    const val THRESHOLD_ZONE = 4
 
     /** Intensity factor cap: anything above is a lap button pressed late or early. */
     private const val MAX_IF = 1.3
@@ -190,19 +202,22 @@ object SwimAnalysis {
     fun usualPace(repeats: List<SwimRepeat>): Double? =
         repeats.filter { !it.doubtful && it.distanceMeters > 0 && it.durationSec > 0 }.map { it.paceSecPer100 }.takeIf { it.isNotEmpty() }?.let(Stats::median)
 
-    /** Zone 1 to 5 of a pace against the CSS. */
+    /** The zone of a pace against the CSS, counted from 1 (A1) to 7 (C3): its place in [ZONE_CODES]. */
     fun zoneOf(paceSecPer100: Double, cssSecPer100: Int): Int {
         val relativeSpeed = cssSecPer100 / paceSecPer100
         val index = ZONE_SPEED_BOUNDS.indexOfFirst { relativeSpeed < it }
-        return if (index < 0) 5 else index + 1
+        return if (index < 0) ZONE_CODES.size else index + 1
     }
 
-    /** Metres swum in each zone (index 0 is Z1), doubtful repeats left out. Null without laps or CSS. */
+    /** The code of the zone of a pace against the CSS: «B1». */
+    fun zoneCode(paceSecPer100: Double, cssSecPer100: Int): String = ZONE_CODES[zoneOf(paceSecPer100, cssSecPer100) - 1]
+
+    /** Metres swum in each zone (index 0 is A1, as in [ZONE_CODES]), doubtful repeats left out. Null without laps or CSS. */
     fun zoneMeters(activity: Activity, cssSecPer100: Int?): DoubleArray? {
         val css = cssSecPer100?.takeIf { it > 0 } ?: return null
         val repeats = repeats(activity).filter { !it.doubtful }
         if (repeats.isEmpty()) return null
-        val meters = DoubleArray(5)
+        val meters = DoubleArray(ZONE_CODES.size)
         repeats.forEach { meters[zoneOf(it.paceSecPer100, css) - 1] += it.distanceMeters }
         return meters
     }

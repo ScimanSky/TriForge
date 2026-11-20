@@ -27,16 +27,21 @@ class CoachTableTest {
     @Test
     fun `zones are read and turned into the athlete's numbers`() {
         assertEquals("Z4", Zones.read(Sport.RUN, "z4 soglia"))
-        assertEquals("Z4", Zones.read(Sport.SWIM, "Z4"))
-        // The swim codes of older plans are read as zones.
-        assertEquals("Z4", Zones.read(Sport.SWIM, "zona B2"))
-        assertEquals("Z5", Zones.read(Sport.SWIM, "C3"))
+        // The swim has the codes of the pool, and a swim step written with Z1–Z5 becomes one of them.
+        assertEquals("B2", Zones.read(Sport.SWIM, "zona B2"))
+        assertEquals("C3", Zones.read(Sport.SWIM, "C3"))
+        assertEquals("B2", Zones.read(Sport.SWIM, "Z4"))
+        assertEquals("A2", Zones.read(Sport.SWIM, "z2 fondo"))
         assertEquals(null, Zones.read(Sport.RUN, "B2"))
-        assertEquals("Z2", Zones.current("A2"))
+        assertEquals(Zones.SWIM, Zones.keys(Sport.SWIM))
+        assertEquals(Zones.LAND, Zones.keys(Sport.BIKE))
         assertEquals("223 – 257 W", Zones.target(Sport.BIKE, "Z4", profile))
         assertEquals("4:22 – 4:38 /km", Zones.target(Sport.RUN, "Z4", profile))
-        assertEquals("1:36 – 1:41 /100 m", Zones.target(Sport.SWIM, "Z4", profile))
-        assertEquals("1:47 – 1:54 /100 m", Zones.target(Sport.SWIM, "Z2", profile))
+        // B2 ends at the threshold itself; A1 and C3 have one side only.
+        assertEquals("1:38 – 1:43 /100 m", Zones.target(Sport.SWIM, "B2", profile))
+        assertEquals("1:49 – 1:55 /100 m", Zones.target(Sport.SWIM, "A2", profile))
+        assertEquals("più lento di 1:55 /100 m", Zones.target(Sport.SWIM, "A1", profile))
+        assertEquals("più veloce di 1:29 /100 m", Zones.target(Sport.SWIM, "C3", profile))
         assertEquals("152 – 167 bpm", Zones.target(Sport.BIKE, "Z4", profile.copy(ftpWatts = null)))
         assertEquals("", Zones.target(Sport.RUN, "Z2", AthleteProfile()))
         assertTrue(Zones.isHigh("C1") && Zones.isHigh("Z4") && !Zones.isHigh("B1"))
@@ -66,6 +71,24 @@ class CoachTableTest {
         assertEquals(listOf("Z1", "Z2", "Z4"), Workouts.zoneMinutes(done, profile).keys.toList())
         assertTrue(Workouts.distanceM(done, profile)!! in 9_000..10_500)
         assertEquals("6 × 800 m Z4, rec. 2′", Workouts.describe(done.steps[1]))
+    }
+
+    @Test
+    fun `targets follow the thresholds of today, not those of the day the plan was written`() {
+        val saved = PlannedSession(
+            Sport.SWIM, "Aerobico", 40,
+            steps = listOf(
+                step(WorkoutBlock.MAIN, 10, "A2", metres = 100, recovery = 20).copy(target = "1:47 – 1:54 /100 m"),
+                step(WorkoutBlock.MAIN, 4, "??", metres = 50).copy(target = "come viene"),
+            ),
+        )
+        val shown = Workouts.withTargets(saved, profile.copy(cssSecPer100m = 126)).steps
+
+        assertEquals("2:20 – 2:28 /100 m", shown[0].target)
+        assertEquals("1:49 – 1:55 /100 m", Workouts.withTargets(saved, profile).steps[0].target)
+        // Without a threshold there is nothing better to say than what was saved.
+        assertEquals("1:47 – 1:54 /100 m", Workouts.withTargets(saved, AthleteProfile()).steps[0].target)
+        assertTrue(shown[1].target.isNotBlank())
     }
 
     @Test

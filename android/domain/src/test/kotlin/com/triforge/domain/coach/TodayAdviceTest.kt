@@ -134,16 +134,16 @@ class TodayAdviceTest {
         val profile = AthleteProfile(cssSecPer100m = 120)
         val session = swim.copy(
             steps = listOf(
-                WorkoutStep(WorkoutBlock.WARMUP, distanceM = 400, zone = "Z1"),
-                WorkoutStep(WorkoutBlock.MAIN, reps = 10, distanceM = 100, zone = "Z2", recoverySec = 20),
-                WorkoutStep(WorkoutBlock.MAIN, reps = 4, distanceM = 50, zone = "Z4", recoverySec = 30),
+                WorkoutStep(WorkoutBlock.WARMUP, distanceM = 400, zone = "A1"),
+                WorkoutStep(WorkoutBlock.MAIN, reps = 10, distanceM = 100, zone = "A2", recoverySec = 20),
+                WorkoutStep(WorkoutBlock.MAIN, reps = 4, distanceM = 50, zone = "B2", recoverySec = 30),
             ),
         )
-        assertEquals("10 × 100 m Z2, rec. 20″", TodayAdvice.mainSet(session, profile))
+        assertEquals("10 × 100 m A2, rec. 20″", TodayAdvice.mainSet(session, profile))
         val line = TodayAdvice.summary(session, profile)
         assertTrue(line.startsWith("1 h 00′ · 1.600 m") || line.startsWith("1 h 00′ · 1600 m"), line)
         assertFalse(line.contains("quasi tutta"), "a third of the work is in other zones")
-        assertTrue(TodayAdvice.summary(session.copy(steps = session.steps.take(2).drop(1)), profile).endsWith("quasi tutta in Z2"))
+        assertTrue(TodayAdvice.summary(session.copy(steps = session.steps.take(2).drop(1)), profile).endsWith("quasi tutta in A2"))
         assertNull(TodayAdvice.mainSet(gym, profile))
         assertEquals("1 h 30′", TodayAdvice.summary(gym, profile))
     }

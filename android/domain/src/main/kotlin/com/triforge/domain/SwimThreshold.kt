@@ -27,9 +27,9 @@ data class CssCheck(
     val sessions: Int,
     /** Metres swum in them without stopping: intervals of [SwimAnalysis.CONTINUOUS_METERS] and more. */
     val meters: Int,
-    /** Share of those metres swum at threshold pace or faster (Z4 and Z5). */
+    /** Share of those metres swum in the threshold zone or faster (B2 and above). */
     val highShare: Double,
-    /** Share of those metres faster than the threshold zone (Z5 alone). */
+    /** Share of those metres faster than the threshold zone (C1 and above). */
     val topShare: Double = 0.0,
     /** Swims whose continuous intervals, half an hour and more of them, were faster than the threshold. */
     val fasterSessions: Int,
@@ -116,14 +116,14 @@ object SwimThreshold {
         val repeats = continuous(activity)
         if (repeats.isNotEmpty()) {
             val meters = repeats.sumOf { it.distanceMeters }
-            val high = repeats.filter { SwimAnalysis.zoneOf(it.paceSecPer100, css) >= 4 }.sumOf { it.distanceMeters }
-            val top = repeats.filter { SwimAnalysis.zoneOf(it.paceSecPer100, css) >= 5 }.sumOf { it.distanceMeters }
+            val high = repeats.filter { SwimAnalysis.zoneOf(it.paceSecPer100, css) >= SwimAnalysis.THRESHOLD_ZONE }.sumOf { it.distanceMeters }
+            val top = repeats.filter { SwimAnalysis.zoneOf(it.paceSecPer100, css) > SwimAnalysis.THRESHOLD_ZONE }.sumOf { it.distanceMeters }
             return Swim(meters, repeats.sumOf { it.durationSec }, high, top, activity.avgHr)
         }
         if (!oneBlock(activity)) return null
         val pace = activity.movingSec / activity.distanceMeters * 100.0
-        val high = if (SwimAnalysis.zoneOf(pace, css) >= 4) activity.distanceMeters else 0.0
-        val top = if (SwimAnalysis.zoneOf(pace, css) >= 5) activity.distanceMeters else 0.0
+        val high = if (SwimAnalysis.zoneOf(pace, css) >= SwimAnalysis.THRESHOLD_ZONE) activity.distanceMeters else 0.0
+        val top = if (SwimAnalysis.zoneOf(pace, css) > SwimAnalysis.THRESHOLD_ZONE) activity.distanceMeters else 0.0
         return Swim(activity.distanceMeters, activity.movingSec.toDouble(), high, top, activity.avgHr)
     }
 

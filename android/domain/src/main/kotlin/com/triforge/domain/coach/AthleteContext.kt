@@ -127,7 +127,7 @@ object AthleteContext {
 
     /** The zones of each sport with a threshold, in the athlete's own numbers: the only paces a coach may quote. */
     fun zones(profile: AthleteProfile): List<String> = TriRegia.SPORTS.mapNotNull { sport ->
-        val targets = Zones.ALL.map { zone -> zone to Zones.target(sport, zone, profile) }.filter { it.second.isNotEmpty() }
+        val targets = Zones.keys(sport).map { zone -> zone to Zones.target(sport, zone, profile) }.filter { it.second.isNotEmpty() }
         if (targets.isEmpty()) null
         else sportName(sport).replaceFirstChar { c -> c.uppercase() } + ": " + targets.joinToString("; ") { (zone, target) -> "$zone ${Zones.label(zone).lowercase()} $target" }
     }

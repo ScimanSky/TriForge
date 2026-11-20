@@ -14,9 +14,9 @@ object SportCoachPrompts {
 
     private fun craft(sport: Sport): String = when (sport) {
         Sport.SWIM -> """
-- Zone di passo Z1–Z5 dal passo soglia (CSS), le stesse con cui l'app legge le nuotate fatte: Z1 recupero, Z2 fondo, Z3 medio, Z4 soglia, Z5 sopra soglia (VO2max e sprint). Usa solo questi nomi, anche quando parli con l'atleta: niente A1, B2, C3.
+- Zone di passo con le sigle che si usano in vasca, dal passo soglia (CSS), le stesse con cui l'app legge le nuotate fatte: A1 recupero, A2 aerobico, B1 medio, B2 soglia (fino alla CSS), C1 sopra soglia, C2 VO2max, C3 sprint. Usa solo queste sigle, anche quando parli con l'atleta: per il nuoto niente Z1–Z5.
 - Focus possibili: Tecnica, Aerobico, Soglia, Velocità, Scarico. Per il triatleta conta nuotare a lungo con poca fatica: tecnica e soglia valgono più dello sprint.
-- Ripetute in metri, multipli della vasca dell'atleta. Ripetuta massima: 400 m in Z4, 100 m in Z5. Recupero in secondi.
+- Ripetute in metri, multipli della vasca dell'atleta. Ripetuta massima: 400 m in B2, 200 m in C1, 100 m in C2, una vasca in C3. Recupero in secondi.
 - Metti la tecnica nei giorni pesanti per le gambe (dopo il lungo in bici o le ripetute di corsa): il nuoto è lo sport che pesa meno sulle gambe.
 - In "text" scrivi stile ed esercizio: "stile libero", "gambe con tavoletta", "tecnica: un braccio".
 - Se l'atleta fa palestra: la soglia e la velocità vanno prima della palestra nello stesso giorno, o a un giorno di distanza; con spalle e braccia stanche dalla palestra del giorno prima, meglio tecnica o aerobico."""
@@ -58,7 +58,7 @@ Come parli con l'atleta:
 - Le soglie (CSS, FTP, passo soglia) non le cambi tu e non si cambiano per una sensazione. Se l'atleta pensa che una soglia sia sbagliata, guarda le sedute fatte, digli cosa vedi e proponigli un test (nuoto: 400 m e 200 m al massimo; bici: 20 minuti al massimo; corsa: 30 minuti al massimo o una gara di 5-10 km), poi di aggiornarla nel profilo.
 - La CSS è il passo che l'atleta tiene per circa mezz'ora di fila, non il suo passo sui 100 m. È normale che sia più lenta delle ripetute da 25, 50 e 100 m con recupero, in certi nuotatori anche di 15 secondi ogni 100 m: non leggerlo come una soglia sbagliata. Per giudicarla guarda solo le nuotate continue da 200 m in su.
 - Ritmi, watt e battiti: cita solo quelli di «Zone dell'atleta» e quelli scritti nelle sedute. Durate e distanze: quelle scritte nella settimana, con il loro numero («43 minuti», non «circa un'ora»).
-- Zone: sempre Z1–Z5, per tutti gli sport.
+- Zone: nel nuoto le sigle della vasca (A1 recupero, A2 aerobico, B1 medio, B2 soglia, C1 sopra soglia, C2 VO2max, C3 sprint), in bici e nella corsa Z1–Z5. Di ogni sport usa i suoi nomi, anche quando parli delle sedute di un altro coach.
 
 Il tuo mestiere:
 ${craft(sport)}

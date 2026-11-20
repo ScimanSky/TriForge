@@ -32,7 +32,7 @@ data class WorkoutStep(
     val distanceM: Int? = null,
     /** Seconds of one rep, or null for a step by distance. */
     val durationSec: Int? = null,
-    /** Zone code, Z1–Z5 for every sport. */
+    /** Zone code: A1–C3 for the swim, Z1–Z5 for bike and run. */
     val zone: String,
     val recoverySec: Int = 0,
     /** What to do, e.g. "corsa facile", "stile libero", "allunghi". */
@@ -44,48 +44,64 @@ data class WorkoutStep(
 )
 
 /**
- * Training zones, one scale for the three sports: Z1 recovery, Z2 endurance,
- * Z3 tempo, Z4 threshold, Z5 above. They are tied to the athlete's
- * thresholds: the swim to the threshold pace (CSS), with the same bounds the
- * app reads a recorded swim with ([SwimAnalysis.ZONE_SPEED_BOUNDS]), so a
- * planned Z2 and a swum Z2 are the same pace; the run to the threshold pace,
- * the bike to the FTP. Without a threshold, bike and run fall back to heart
- * rate from the maximum.
+ * Training zones, tied to the athlete's thresholds. The swim uses the codes
+ * swimmers and their coaches use at the pool, A1 to C3, from the threshold
+ * pace (CSS), with the same bounds the app reads a recorded swim with
+ * ([SwimAnalysis.ZONE_SPEED_BOUNDS]): a planned B1 and a swum B1 are the
+ * same pace. Bike and run use Z1 to Z5, from the FTP and the threshold pace;
+ * without a threshold they fall back to heart rate from the maximum.
+ *
+ * Whatever the codes, [level] puts every zone on one scale of five, which is
+ * what the regia and the colours go by.
  */
 object Zones {
 
-    val ALL = listOf("Z1", "Z2", "Z3", "Z4", "Z5")
+    val SWIM = SwimAnalysis.ZONE_CODES
+    val LAND = listOf("Z1", "Z2", "Z3", "Z4", "Z5")
 
     /**
-     * The swim codes the app used before (A1–C3, as swimmers name them) and
-     * the zone each one is now. Plans written with them are read as zones.
+     * The swim zone a Z1–Z5 code stands for. For a while the app named the
+     * swim zones like the others: plans saved then are read with these.
      */
-    private val OLD_SWIM = mapOf("A1" to "Z1", "A2" to "Z2", "B1" to "Z3", "B2" to "Z4", "C1" to "Z4", "C2" to "Z5", "C3" to "Z5")
+    private val LAND_TO_SWIM = mapOf("Z1" to "A1", "Z2" to "A2", "Z3" to "B1", "Z4" to "B2", "Z5" to "C2")
 
-    @Suppress("UNUSED_PARAMETER")
-    fun keys(sport: Sport?): List<String> = ALL
+    fun keys(sport: Sport?): List<String> = if (sport == Sport.SWIM) SWIM else LAND
 
     /** The easy zone a step falls back to when its code cannot be read. */
-    @Suppress("UNUSED_PARAMETER")
-    fun easy(sport: Sport?): String = "Z2"
+    fun easy(sport: Sport?): String = if (sport == Sport.SWIM) "A2" else "Z2"
 
-    /** Reads "z4", "Z4 soglia", and for the swim also the old "zona B2"; null when there is no zone inside. */
+    /**
+     * Reads "z4", "Z4 soglia", "zona B2" as a zone of [sport]; null when
+     * there is none inside. A swim step written with Z1–Z5 becomes the swim
+     * zone it stands for.
+     */
     fun read(sport: Sport?, raw: Any?): String? {
         val text = (raw as? String)?.trim()?.uppercase() ?: return null
         fun find(codes: Collection<String>): String? = codes.firstOrNull { it == text } ?: codes.firstOrNull { Regex("\\b$it\\b").containsMatchIn(text) }
-        return find(ALL) ?: if (sport == Sport.SWIM) find(OLD_SWIM.keys)?.let(OLD_SWIM::getValue) else null
+        return if (sport == Sport.SWIM) find(SWIM) ?: find(LAND)?.let(LAND_TO_SWIM::getValue) else find(LAND)
     }
 
-    /** [zone] as the app names it now: an old swim code becomes its zone. */
-    fun current(zone: String): String = OLD_SWIM[zone] ?: zone
-
     /** How hard a zone is, 1 (recovery) to 5 (above threshold), the same scale for every sport. */
-    fun level(zone: String): Int = ALL.indexOf(current(zone)).takeIf { it >= 0 }?.plus(1) ?: 2
+    fun level(zone: String): Int = when (zone) {
+        "A1", "Z1" -> 1
+        "A2", "Z2" -> 2
+        "B1", "Z3" -> 3
+        "B2", "C1", "Z4" -> 4
+        "C2", "C3", "Z5" -> 5
+        else -> 2
+    }
 
     /** Threshold work and above: what the regia counts as hard. */
     fun isHigh(zone: String): Boolean = level(zone) >= 4
 
-    fun label(zone: String): String = when (current(zone)) {
+    fun label(zone: String): String = when (zone) {
+        "A1" -> "Recupero"
+        "A2" -> "Aerobico"
+        "B1" -> "Medio"
+        "B2" -> "Soglia"
+        "C1" -> "Sopra soglia"
+        "C2" -> "VO2max"
+        "C3" -> "Sprint"
         "Z1" -> "Recupero"
         "Z2" -> "Fondo"
         "Z3" -> "Medio"
@@ -94,16 +110,16 @@ object Zones {
         else -> ""
     }
 
-    /** How fast the fastest zone of the swim goes, as a share of the threshold speed: short reps only. */
-    private const val SWIM_TOP = 1.12
+    /** How fast a sprint goes, as a share of the threshold speed: what C3 is planned at. */
+    private const val SWIM_TOP = 1.20
 
     /** The slowest pace still written as a target for the recovery zone. */
     private const val SWIM_BOTTOM = 0.78
 
-    /** Swim zones as a share of the threshold speed: from, to. */
+    /** Swim zones as a share of the threshold speed: from, to. A code that is not a swim zone is read as the easy one. */
     private fun swimSpeed(zone: String): Pair<Double, Double> {
         val bounds = SwimAnalysis.ZONE_SPEED_BOUNDS
-        val index = level(zone) - 1
+        val index = SWIM.indexOf(zone).takeIf { it >= 0 } ?: SWIM.indexOf(easy(Sport.SWIM))
         return (bounds.getOrNull(index - 1) ?: SWIM_BOTTOM) to (bounds.getOrNull(index) ?: SWIM_TOP)
     }
 
@@ -152,9 +168,9 @@ object Zones {
     fun target(sport: Sport?, zone: String, profile: AthleteProfile): String = when (sport) {
         Sport.SWIM -> profile.cssSecPer100m?.let { css ->
             val (from, to) = swimSpeed(zone)
-            when (level(zone)) {
-                5 -> "più veloce di ${pace(css / from)} /100 m"
-                1 -> "più lento di ${pace(css / to)} /100 m"
+            when (zone) {
+                SWIM.last() -> "più veloce di ${pace(css / from)} /100 m"
+                SWIM.first() -> "più lento di ${pace(css / to)} /100 m"
                 else -> "${pace(css / to)} – ${pace(css / from)} /100 m"
             }
         }
@@ -179,15 +195,16 @@ object Zones {
     private fun pace(seconds: Double): String = Formatters.minutesAndSeconds(seconds)
 
     /**
-     * The longest single rep in [zone]: metres in the pool (400 at
-     * threshold, 100 above), seconds on land (20 minutes at threshold, 5
+     * The longest single rep in [zone]: metres in the pool (B2 400, C1 200,
+     * C2 100, C3 one sprint), seconds on land (20 minutes at threshold, 5
      * above).
      */
-    @Suppress("UNUSED_PARAMETER")
     fun maxRep(sport: Sport, zone: String, poolLengthM: Int): Int? = when (sport) {
-        Sport.SWIM -> when (level(zone)) {
-            4 -> 400
-            5 -> 100
+        Sport.SWIM -> when (zone) {
+            "B2" -> 400
+            "C1" -> 200
+            "C2" -> 100
+            "C3" -> if (poolLengthM >= 50) 50 else 25
             else -> null
         }
         Sport.BIKE, Sport.RUN -> when (zone) {
@@ -385,7 +402,18 @@ object Workouts {
         return built.copy(durationMin = totalMin(built, profile), intensity = intensity(built, profile))
     }
 
-    /** One step in words, for the requests and the coaches' briefs: "6 × 800 m Z4, rec. 2′". */
+    /**
+     * [session] with the target of every step in the athlete's numbers of
+     * today: a saved plan carries the targets of the day it was written,
+     * and thresholds and zones may have changed since. A step whose zone has
+     * no target now keeps the one it had.
+     */
+    fun withTargets(session: PlannedSession, profile: AthleteProfile): PlannedSession {
+        val sport = session.sport ?: return session
+        return session.copy(steps = session.steps.map { step -> step.copy(target = Zones.target(sport, step.zone, profile).ifBlank { step.target }) })
+    }
+
+    /** One step in words, for the requests and the coaches' briefs: "6 × 800 m Z4, rec. 2′", "8 × 100 m stile libero B2, rec. 20″". */
     fun describe(step: WorkoutStep): String {
         val size = step.distanceM?.let { "$it m" } ?: step.durationSec?.let(::clock).orEmpty()
         val head = if (step.reps > 1) "${step.reps} × $size" else size

@@ -54,13 +54,15 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Zone 1 to 5 colours, the same steps as the bike and run zones. */
+/** The colours of the swim zones, A1 to C3: grey when easy, the swim's blue up to the threshold, warm above it. */
 internal val SwimZoneColors = listOf(
     Color(0xFF5E6672),
     Color(0xFF8C95A3),
     Color(0xFF2E86B3),
     SportColors.swim,
-    Color(0xFFFF5B2E),
+    Color(0xFFFF8A4C),
+    Color(0xFFFF5C64),
+    Color(0xFFE0457B),
 )
 
 private fun pace(seconds: Double): String = Formatters.minutesAndSeconds(seconds)
@@ -180,10 +182,10 @@ private fun RepeatPaceCard(repeats: List<SwimRepeat>, css: Int?) {
         if (css != null) {
             Row(
                 modifier = Modifier.padding(top = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 SwimZoneColors.forEachIndexed { index, color ->
-                    LegendDot(color, "Z${index + 1}")
+                    LegendDot(color, SwimAnalysis.ZONE_CODES[index])
                 }
             }
         }
@@ -383,14 +385,14 @@ private fun ZonesCard(activity: Activity, css: Int?) {
     val top = meters.indices.maxBy { meters[it] }
     CollapsibleCard(
         title = stringResource(R.string.swim_zones_title),
-        summary = stringResource(R.string.swim_zones_summary, wholeMeters(meters[top]), top + 1),
+        summary = stringResource(R.string.swim_zones_summary, wholeMeters(meters[top]), SwimAnalysis.ZONE_CODES[top]),
         initiallyExpanded = true,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             meters.forEachIndexed { index, value ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Z${index + 1}",
+                        SwimAnalysis.ZONE_CODES[index],
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,
                         color = TriColors.textDim,
