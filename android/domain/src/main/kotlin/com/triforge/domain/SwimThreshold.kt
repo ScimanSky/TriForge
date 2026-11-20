@@ -57,6 +57,9 @@ data class CssCheck(
  * and by how much depends on the swimmer: one who holds 1:49 over 100 m may
  * have a threshold of 2:05. Their pace says nothing about it.
  *
+ * What the athlete marked as swum with fins, a pull buoy or paddles is not
+ * read either: that speed is the equipment's.
+ *
  * Only a threshold that is too slow is looked for: swimming mostly easy,
  * well under the threshold, is what a triathlete's week looks like.
  */
@@ -99,12 +102,17 @@ object SwimThreshold {
         val pace: Double get() = seconds / meters * 100.0
     }
 
-    /** The intervals of a swim that say something about the threshold: trusted, and swum without stopping for long enough. */
+    /**
+     * The intervals of a swim that say something about the threshold: the
+     * athlete's own pace (trusted, without equipment), swum without stopping
+     * for long enough.
+     */
     private fun continuous(activity: Activity): List<SwimRepeat> = SwimAnalysis.repeats(activity)
-        .filter { !it.doubtful && it.durationSec > 0 && it.distanceMeters >= SwimAnalysis.CONTINUOUS_METERS }
+        .filter { it.own && it.durationSec > 0 && it.distanceMeters >= SwimAnalysis.CONTINUOUS_METERS }
 
-    /** A swim without laps that was one block, or close to it. */
+    /** A swim without laps that was one block, or close to it, and swum without equipment. */
     private fun oneBlock(activity: Activity): Boolean = activity.laps.isEmpty() && activity.distanceMeters > 0 &&
+        activity.gear?.any != true &&
         activity.movingSec > 0 && activity.movingSec >= activity.durationSec * CONTINUOUS_SHARE
 
     /**

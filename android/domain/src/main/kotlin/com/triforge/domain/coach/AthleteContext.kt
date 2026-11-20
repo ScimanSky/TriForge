@@ -15,6 +15,9 @@ import com.triforge.domain.RecoveryPhase
 import com.triforge.domain.RecoveryReport
 import com.triforge.domain.SessionLoad
 import com.triforge.domain.Sport
+import com.triforge.domain.SwimAnalysis
+import com.triforge.domain.SwimGear
+import com.triforge.domain.SwimGearUse
 import com.triforge.domain.TrainingStats
 import java.time.LocalDate
 import java.time.LocalTime
@@ -201,11 +204,35 @@ object AthleteContext {
         }
         if (a.distanceMeters > 0) parts += Formatters.distance(a.sport, a.distanceMeters)
         Formatters.pace(a.sport, a.distanceMeters, a.paceSec)?.let { parts += it }
+        if (a.sport == Sport.SWIM) SwimAnalysis.gearUse(a)?.let { parts += gear(it) }
         a.avgHr?.let { parts += "FC media $it" }
         (a.normPowerWatts ?: a.avgPowerWatts)?.let { parts += "$it W" }
         data.loads[a.id]?.let { parts += "carico ${it.tss.roundToInt()} TSS" }
         a.aerobicTe?.let { parts += "TE aerobico ${num(it)}" }
         return parts.joinToString(" · ")
+    }
+
+    /** What the coaches must know of a swim with equipment: which part, and the pace that is the athlete's own. */
+    fun gear(use: SwimGearUse): String {
+        fun pace(seconds: Double) = "${Formatters.minutesAndSeconds(seconds)}/100 m"
+        val names = gearNames(use.gear)
+        val own = use.ownPaceSecPer100
+            ?: return "tutta con $names: quel passo non è il suo, non confrontarlo con la soglia né con le altre nuotate"
+        return "di cui ${Formatters.distance(Sport.SWIM, use.meters)} con $names" +
+            (use.paceSecPer100?.let { " a ${pace(it)}" } ?: "") +
+            "; senza attrezzatura ${pace(own)}, ed è questo il suo passo"
+    }
+
+    /** «pinne, pull buoy e palette». */
+    fun gearNames(gear: Set<SwimGear>): String {
+        val names = gear.sortedBy { it.ordinal }.map {
+            when (it) {
+                SwimGear.FINS -> "pinne"
+                SwimGear.PULL_BUOY -> "pull buoy"
+                SwimGear.PADDLES -> "palette"
+            }
+        }
+        return if (names.size < 2) names.joinToString() else names.dropLast(1).joinToString(", ") + " e " + names.last()
     }
 
     private fun recovery(data: AthleteData): List<String> = buildList {

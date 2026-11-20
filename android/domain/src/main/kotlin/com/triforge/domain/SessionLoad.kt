@@ -122,10 +122,13 @@ object SessionLoadModel {
                     // the real load.
                     val swimSec = activity.movingSec
                     val speed = activity.distanceMeters / swimSec
-                    val intensity = (speed / (100.0 / css)).coerceAtMost(MAX_IF)
+                    // A swim the athlete marked as all with equipment: its
+                    // speed is the fins', so it counts as an ordinary swim.
+                    val assisted = activity.gear?.any == true
+                    val intensity = if (assisted) typicalIntensity(Sport.SWIM) else (speed / (100.0 / css)).coerceAtMost(MAX_IF)
                     // Medium without a measured swimming time: the pauses are
                     // then inside the duration.
-                    val quality = if (activity.movingDurationSec != null) LoadQuality.HIGH else LoadQuality.MEDIUM
+                    val quality = if (activity.movingDurationSec != null && !assisted) LoadQuality.HIGH else LoadQuality.MEDIUM
                     return SessionLoad(
                         activity, swimSec / 3600.0 * intensity.pow(3) * 100, LoadMethod.SWIM_PACE, quality,
                     )

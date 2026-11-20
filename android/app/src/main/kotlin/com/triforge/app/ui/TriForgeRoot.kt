@@ -296,6 +296,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
                         navController.openTab(Tab.COACH)
                     },
                     onSnoozeCss = coachViewModel::snoozeCssCheck,
+                    onSwimGear = trainingViewModel::markSwimGear,
                 )
             }
             composable(Tab.ACTIVITIES.route) {
@@ -403,6 +404,7 @@ private fun SignedIn(uid: String, container: AppContainer) {
                         cssSecPer100 = profile.stored.cssSecPer100m,
                         load = id?.let { loads[it] },
                         weightKg = profile.stored.weightKg,
+                        onSwimGear = { marks -> id?.let { trainingViewModel.markSwimGear(it, marks) } },
                     )
                 }
             }

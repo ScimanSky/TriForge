@@ -68,6 +68,7 @@ import com.triforge.app.ui.common.StackedWeekBars
 import com.triforge.app.ui.common.TriCard
 import com.triforge.app.ui.common.WeekStrip
 import com.triforge.app.ui.common.labelRes
+import com.triforge.app.ui.detail.SwimGearPage
 import com.triforge.app.ui.recovery.LinkRow
 import com.triforge.app.ui.recovery.RecoveryCard
 import com.triforge.app.ui.theme.SportColors
@@ -83,12 +84,15 @@ import com.triforge.domain.LoadQuality
 import com.triforge.domain.SessionLoad
 import com.triforge.domain.Sport
 import com.triforge.domain.SportWeekGlance
+import com.triforge.domain.SwimAnalysis
+import com.triforge.domain.SwimGearMarks
 import com.triforge.domain.TrainingStats
 import com.triforge.domain.WeekGlance
 import com.triforge.domain.WeekGlanceModel
 import com.triforge.domain.coach.SportMode
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
@@ -131,7 +135,25 @@ fun TodayScreen(
     onUseCss: (Int) -> Unit = {},
     onAskSwimTest: (String) -> Unit = {},
     onSnoozeCss: () -> Unit = {},
+    /** What the athlete says a swim was swum with: its id, and the equipment or none. */
+    onSwimGear: (String, SwimGearMarks) -> Unit = { _, _ -> },
 ) {
+    // Board 5e: the page of a swim's equipment opens over Oggi, from the question about the latest swim.
+    var gearFor by rememberSaveable { mutableStateOf<String?>(null) }
+    val gearSwim = gearFor?.let { id -> (state as? TrainingState.Loaded)?.activities?.firstOrNull { it.id == id } }
+    if (gearSwim != null) {
+        BackHandler { gearFor = null }
+        SwimGearPage(
+            activity = gearSwim,
+            onSave = {
+                onSwimGear(gearSwim.id, it)
+                gearFor = null
+            },
+            onBack = { gearFor = null },
+            modifier = modifier,
+        )
+        return
+    }
     // Board 4f: the page of the swim threshold opens over Oggi and closes by itself once the threshold fits.
     var threshold by rememberSaveable { mutableStateOf(false) }
     val check = advice.cssCheck
@@ -176,6 +198,8 @@ fun TodayScreen(
             onOpenCoach = onOpenCoach,
             onOpenNutri = onOpenNutri,
             onVerifyCss = { threshold = true },
+            onMarkGear = { gearFor = it },
+            onNoGear = { onSwimGear(it, SwimGearMarks.NONE) },
         )
     }
 }
@@ -204,8 +228,11 @@ private fun Dashboard(
     onOpenCoach: () -> Unit = {},
     onOpenNutri: () -> Unit = {},
     onVerifyCss: () -> Unit = {},
+    onMarkGear: (String) -> Unit = {},
+    onNoGear: (String) -> Unit = {},
 ) {
     val zone = ZoneId.systemDefault()
+    val gearSwim = remember(activities, today) { SwimAnalysis.gearToAsk(activities, today, zone) }
     val glance = remember(activities, today) { WeekGlanceModel.compute(activities, today, zone) }
     val volume = remember(activities, today) { TrainingStats.weeklyTrend(activities, VOLUME_WEEKS, today, zone) }
     val loaded = recovery as? RecoveryState.Loaded
@@ -227,6 +254,13 @@ private fun Dashboard(
         // What to do comes first: the numbers below are its reasons.
         advice.card?.let { card ->
             item(key = "advice") { TodayAdviceCard(card, profile, onOpenCoach, onOpenNutri) }
+        }
+        // Board 5e: asked once about the latest pool swim, while it is fresh in the memory.
+        gearSwim?.let { swim ->
+            item(key = "gear") {
+                val days = ChronoUnit.DAYS.between(swim.startTime.atZone(zone).toLocalDate(), today)
+                SwimGearQuestionCard(swim, days, onYes = { onMarkGear(swim.id) }, onNo = { onNoGear(swim.id) })
+            }
         }
         val check = advice.cssCheck
         if (check != null && !advice.cssSnoozed) {

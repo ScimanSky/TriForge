@@ -217,7 +217,7 @@ private fun KpiGrid(report: SportReport) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             KpiCard(
                 label = stringResource(if (sport == Sport.BIKE) R.string.sport_kpi_speed else R.string.sport_kpi_pace),
-                value = Formatters.paceValue(sport, report.distanceMeters, report.paceSec) ?: none,
+                value = Formatters.paceValue(sport, report.paceMeters, report.paceSec) ?: none,
                 note = Formatters.paceUnit(sport),
                 modifier = Modifier.weight(1f),
             )
@@ -332,7 +332,7 @@ private fun PaceTrendCard(report: SportReport) {
     if (trained.size < 2) return
 
     fun text(week: WeekVolume): String =
-        Formatters.pace(sport, week.distanceMeters, week.paceSec).orEmpty()
+        Formatters.pace(sport, week.paceMeters, week.paceSec).orEmpty()
 
     val from = text(trained.first())
     val to = text(trained.last())

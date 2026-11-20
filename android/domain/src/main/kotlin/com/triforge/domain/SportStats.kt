@@ -5,6 +5,7 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.time.temporal.IsoFields
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 /** One week of one sport. */
 data class WeekVolume(
@@ -14,12 +15,14 @@ data class WeekVolume(
     val durationSec: Long,
     /** Seconds the week's pace is measured over, see [Activity.paceSec]. */
     val paceSec: Long = durationSec,
+    /** Metres the week's pace is measured over: less than [distanceMeters] when some were swum with equipment. */
+    val paceMeters: Double = distanceMeters,
 ) {
     /** ISO week number, the label athletes know from their watch. */
     val weekNumber: Int get() = weekStart.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
 
     /** Seconds per metre over the whole week, or null without distance. */
-    val secondsPerMeter: Double? get() = if (distanceMeters > 0 && paceSec > 0) paceSec / distanceMeters else null
+    val secondsPerMeter: Double? get() = if (paceMeters > 0 && paceSec > 0) paceSec / paceMeters else null
 }
 
 enum class RecordKind { LONGEST_DISTANCE, LONGEST_DURATION, FASTEST }
@@ -35,6 +38,8 @@ data class SportReport(
     val durationSec: Long,
     /** Seconds the period's pace is measured over, see [Activity.paceSec]. */
     val paceSec: Long,
+    /** Metres the period's pace is measured over, see [SwimAnalysis.ownPace]. */
+    val paceMeters: Double,
     val elevationGainMeters: Double,
     /**
      * Volume of the same stretch of the period before: as many days as have
@@ -119,6 +124,7 @@ object SportStats {
                 distanceMeters = inWeek.sumOf { it.distanceMeters },
                 durationSec = inWeek.sumOf { it.durationSec },
                 paceSec = paceSeconds(inWeek),
+                paceMeters = paceMeters(inWeek),
             )
         }
 
@@ -130,6 +136,7 @@ object SportStats {
             distanceMeters = current.sumOf { it.distanceMeters },
             durationSec = current.sumOf { it.durationSec },
             paceSec = paceSeconds(current),
+            paceMeters = paceMeters(current),
             elevationGainMeters = current.sumOf { it.elevationGainMeters ?: 0.0 },
             previousDistanceMeters = previous?.sumOf { it.distanceMeters },
             previousDurationSec = previous?.sumOf { it.durationSec },
@@ -148,7 +155,14 @@ object SportStats {
      * indoor ride with no speed sensor) would slow the average for nothing.
      */
     private fun paceSeconds(activities: List<Activity>): Long =
-        activities.filter { it.distanceMeters > 0 }.sumOf { it.paceSec }
+        activities.sumOf { SwimAnalysis.ownPace(it)?.seconds ?: 0.0 }.roundToLong()
+
+    /**
+     * The metres that go with [paceSeconds]. What was swum with fins, a pull
+     * buoy or paddles counts in the volume, not in the pace.
+     */
+    private fun paceMeters(activities: List<Activity>): Double =
+        activities.sumOf { SwimAnalysis.ownPace(it)?.meters ?: 0.0 }
 
     /** Best efforts among all loaded activities of the sport. */
     private fun records(activities: List<Activity>, sport: Sport): List<PersonalRecord> {
@@ -158,7 +172,7 @@ object SportStats {
             withDistance.maxByOrNull { it.distanceMeters }?.let { PersonalRecord(RecordKind.LONGEST_DISTANCE, it) },
             activities.filter { it.durationSec > 0 }.maxByOrNull { it.durationSec }
                 ?.let { PersonalRecord(RecordKind.LONGEST_DURATION, it) },
-            withDistance.filter { it.distanceMeters >= minimum && it.paceSec > 0 && comparableForSpeed(it) }
+            withDistance.filter { it.distanceMeters >= minimum && it.paceSec > 0 && comparableForSpeed(it) && it.gear?.any != true }
                 .minByOrNull { it.paceSec / it.distanceMeters }
                 ?.let { PersonalRecord(RecordKind.FASTEST, it) },
         )
@@ -168,6 +182,8 @@ object SportStats {
      * A pool swim is timed on a known length; open water distance comes from
      * GPS and the conditions change, so its pace does not race a pool record.
      * When there are only open water swims they compete among themselves.
+     * A swim with equipment (see [Activity.gear]) races nobody: it is left
+     * out where the record is looked for.
      */
     private fun comparableForSpeed(activity: Activity): Boolean = activity.sport != Sport.SWIM || activity.openWater != true
 
