@@ -9,8 +9,10 @@ import com.triforge.domain.coach.ChatMessage
 import com.triforge.domain.coach.CoachBrief
 import com.triforge.domain.coach.CoachMapper
 import com.triforge.domain.coach.CoachRole
+import com.triforge.domain.coach.NoticeLine
 import com.triforge.domain.coach.NutritionDay
 import com.triforge.domain.coach.NutritionProfile
+import com.triforge.domain.coach.PlanUndo
 import com.triforge.domain.coach.WeekPlan
 import java.time.Instant
 import java.time.LocalDate
@@ -21,7 +23,16 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** The training coach's own state: its plan and what it told NutriAI. */
-data class CoachDesk(val plan: WeekPlan? = null, val brief: CoachBrief? = null)
+data class CoachDesk(
+    val plan: WeekPlan? = null,
+    val brief: CoachBrief? = null,
+    /** The week before the last change the athlete accepted in a chat, while it can still be put back. */
+    val undo: PlanUndo? = null,
+    /** What the app changed when the profile changed, until the athlete has read it. */
+    val notice: List<NoticeLine> = emptyList(),
+    /** Until when the athlete asked not to be told again that the swim threshold is to check. */
+    val cssSnoozedUntil: LocalDate? = null,
+)
 
 /** NutriAI's own state: the athlete's eating profile, the days it wrote and its brief. */
 data class NutriDesk(
@@ -42,7 +53,10 @@ data class ChatEntry(
 )
 
 enum class ProposalStatus(val key: String) {
-    NONE("none"), PENDING("pending"), APPLIED("applied"), DISMISSED("dismissed");
+    NONE("none"), PENDING("pending"), APPLIED("applied"), DISMISSED("dismissed"),
+
+    /** Accepted and then taken back: it can be accepted again. */
+    UNDONE("undone");
 
     companion object {
         fun of(key: Any?) = entries.firstOrNull { it.key == key } ?: NONE
@@ -75,6 +89,9 @@ class CoachRepository(private val firestore: FirebaseFirestore) {
         CoachDesk(
             plan = (fields["plan"] as? Map<*, *>)?.let { CoachMapper.weekPlanFromFields(it.strings() + ("createdAt" to fields["planAt"])) },
             brief = brief(CoachRole.COACH, fields),
+            undo = CoachMapper.undoFromFields(fields["undo"] as? Map<*, *>),
+            notice = CoachMapper.noticeFromFields(fields["notice"]),
+            cssSnoozedUntil = (fields["cssSnoozedUntil"] as? String)?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
         )
     }
 
@@ -137,16 +154,33 @@ class CoachRepository(private val firestore: FirebaseFirestore) {
         awaitClose { registration.remove() }
     }
 
-    suspend fun saveWeekPlan(uid: String, plan: WeekPlan, brief: CoachBrief) = write(
+    /**
+     * Writes the week. Every change of the week is a new start: the week
+     * kept to go back to and the notice of what the app changed are those
+     * of this change ([undo], [notice]) or are forgotten.
+     */
+    suspend fun saveWeekPlan(uid: String, plan: WeekPlan, brief: CoachBrief, undo: PlanUndo? = null, notice: List<NoticeLine> = emptyList()) = write(
         desk(uid, CoachRole.COACH).set(
             mapOf(
                 "plan" to CoachMapper.weekPlanToFields(plan),
                 "planAt" to FieldValue.serverTimestamp(),
                 "brief" to CoachMapper.briefToFields(brief),
                 "briefAt" to FieldValue.serverTimestamp(),
+                "undo" to (undo?.let(CoachMapper::undoToFields) ?: FieldValue.delete()),
+                "notice" to (notice.takeIf { it.isNotEmpty() }?.let(CoachMapper::noticeToFields) ?: FieldValue.delete()),
             ),
             SetOptions.merge(),
         ),
+    )
+
+    /** «Va bene» on the notice of what the app changed: it is not shown again. */
+    suspend fun dismissNotice(uid: String) = write(
+        desk(uid, CoachRole.COACH).set(mapOf("notice" to FieldValue.delete()), SetOptions.merge()),
+    )
+
+    /** «Lascia per ora» on the swim threshold to check: the app says it again from [until]. */
+    suspend fun snoozeCssCheck(uid: String, until: LocalDate) = write(
+        desk(uid, CoachRole.COACH).set(mapOf("cssSnoozedUntil" to until.toString()), SetOptions.merge()),
     )
 
     /**

@@ -10,7 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.triforge.app.R
 import com.triforge.app.data.ChatEntry
 import com.triforge.app.data.ProposalStatus
+import com.triforge.app.ui.common.BackButton
 import com.triforge.app.ui.common.LegendDot
 import com.triforge.app.ui.common.LoadingBox
 import com.triforge.app.ui.common.ProgressBar
@@ -128,9 +128,41 @@ fun NutriScreen(
         return
     }
 
+    // Board 7j: the food profile is a page of its own, with the arrow to come back and «Salva» always in view.
+    val stored = state.profile
+    if (editing && stored != null && aiAllowed && state.loaded) {
+        BackHandler { editing = false }
+        KeyboardBack()
+        Column(modifier.fillMaxSize().imePadding()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                BackButton(onBack = { editing = false })
+                Text(
+                    stringResource(R.string.nutri_profile_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.semantics { heading() },
+                )
+            }
+            NutriProfileEditor(
+                initial = stored,
+                first = false,
+                saving = false,
+                onKeep = viewModel::keepProfile,
+                onSave = {
+                    viewModel.saveProfile(it)
+                    editing = false
+                },
+                page = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        return
+    }
+
     KeyboardBack()
-    // The food profile opens at the top of the list: from further down the tap would seem to do nothing.
-    LaunchedEffect(editing) { if (editing) listState.animateScrollToItem(0) }
     Column(modifier.fillMaxSize().imePadding()) {
         CoachHeader(
             title = stringResource(R.string.nutri_title),
@@ -147,16 +179,6 @@ fun NutriScreen(
             return@Column
         }
         val profile = state.profile
-        if (profile != null) {
-            FlowRow(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                profile.chips().forEach { ProfileChip(it) }
-                OutlineChip(stringResource(R.string.nutri_profile), onClick = { editing = !editing })
-            }
-        }
         // Follows the chat when a message arrives, not when the screen opens on a chat already there.
         var chatSeen by remember { mutableIntStateOf(-1) }
         LaunchedEffect(state.chat.size) {
@@ -174,21 +196,18 @@ fun NutriScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            if (profile == null || editing) {
+            if (profile == null) {
+                // The first profile is filled here, before anything else of NutriAI. Nothing is kept
+                // until «Salva»: keeping a choice would close this form half filled.
                 item {
                     NutriProfileEditor(
-                        initial = profile ?: NutritionProfile(),
-                        first = profile == null,
+                        initial = NutritionProfile(),
+                        first = true,
                         saving = false,
-                        // Not on the first profile: saving it would close this form half filled.
-                        onKeep = if (profile != null) viewModel::keepProfile else null,
-                        onSave = {
-                            viewModel.saveProfile(it)
-                            editing = false
-                        },
+                        onSave = viewModel::saveProfile,
                     )
                 }
-                if (profile == null) return@LazyColumn
+                return@LazyColumn
             }
             state.error?.let { reason ->
                 item {
@@ -256,6 +275,7 @@ fun NutriScreen(
                     }
                 }
             }
+            item { ProfileRow(profile.summary(), onOpen = { editing = true }) }
             if (state.coachNote.isNotBlank()) {
                 item {
                     HighlightCard(stringResource(R.string.nutri_from_coach), CoachPalette.Coach) {
@@ -271,8 +291,7 @@ fun NutriScreen(
             }
         }
         state.undo?.let { undo -> UndoBar(undo, onUndo = viewModel::undoChange, onGone = viewModel::dismissUndo) }
-        // Not while the food profile is open: above the keyboard the chat bar covered its fields and buttons.
-        if (profile != null && !editing) {
+        if (profile != null) {
             Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
                 Composer(stringResource(R.string.nutri_composer), palette, enabled = !busy, onSend = viewModel::send)
             }
@@ -350,21 +369,21 @@ internal fun NutriTag(text: String, color: Color = palette.softText, background:
     }
 }
 
+/** The row that opens the food profile, with what is inside in a line. */
 @Composable
-private fun ProfileChip(text: String) {
-    Box(
-        Modifier.clip(RoundedCornerShape(16.dp)).background(palette.soft).padding(horizontal = 12.dp, vertical = 7.dp),
-    ) { Text(text, style = MaterialTheme.typography.labelLarge, color = palette.softText) }
-}
-
-@Composable
-private fun OutlineChip(text: String, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(16.dp))
-            .border(1.dp, TriColors.borderStrong, RoundedCornerShape(16.dp))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-    ) { Text(text, style = MaterialTheme.typography.labelLarge, color = Color(0xFFD5DAE1)) }
+private fun ProfileRow(summary: String, onOpen: () -> Unit) {
+    TriCard(onClick = onOpen, padding = 14.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(40.dp).clip(CircleShape).background(palette.soft), contentAlignment = Alignment.Center) {
+                Icon(TriIcons.Nutrition, contentDescription = null, tint = palette.softText, modifier = Modifier.size(20.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.nutri_profile), style = MaterialTheme.typography.titleSmall)
+                Text(summary, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Icon(TriIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        }
+    }
 }
 
 // ---- The week --------------------------------------------------------------
@@ -815,7 +834,7 @@ private fun NutriMessage(entry: ChatEntry, state: NutriUiState, viewModel: Nutri
                 ProposalStatus.PENDING -> ProposalActions(palette, { viewModel.apply(entry) }, { viewModel.dismiss(entry) }, enabled = state.task == null)
                 ProposalStatus.APPLIED -> StatusLine(stringResource(R.string.coach_applied))
                 ProposalStatus.DISMISSED -> StatusLine(stringResource(R.string.coach_dismissed))
-                ProposalStatus.NONE -> Unit
+                ProposalStatus.NONE, ProposalStatus.UNDONE -> Unit
             }
         }
     }

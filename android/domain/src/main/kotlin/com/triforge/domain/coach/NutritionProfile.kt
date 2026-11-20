@@ -127,6 +127,25 @@ data class NutritionProfile(
         add("$mealsPerDay pasti")
     }
 
+    /**
+     * The profile in a line, for the row that opens it: «Onnivoro · 1
+     * allergia · 4 cibi esclusi · creatina 3 g».
+     */
+    fun summary(): String = buildList {
+        fun count(n: Int, one: String, many: String) = if (n == 1) "1 $one" else "$n $many"
+        add(diet.label)
+        val allergic = allergies.size + parseList(otherAllergies).size
+        if (allergic > 0) add(count(allergic, "allergia", "allergie"))
+        val intolerant = intolerances.size + parseList(otherIntolerances).size
+        if (intolerant > 0) add(count(intolerant, "intolleranza", "intolleranze"))
+        if (dislikes.isNotEmpty()) add(count(dislikes.size, "cibo escluso", "cibi esclusi"))
+        when (supplements.size) {
+            0 -> Unit
+            1 -> add(supplements.single().let { listOf(it.name.lowercase(), it.dose).filter(String::isNotBlank).joinToString(" ") })
+            else -> add("${supplements.size} integratori")
+        }
+    }.joinToString(" · ")
+
     companion object {
         const val MIN_MEALS = 2
         const val MAX_MEALS = 6

@@ -23,9 +23,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -84,7 +86,7 @@ private fun signedPercent(value: Double): String {
 fun SwimSections(activity: Activity, history: List<Activity>, cssSecPer100: Int?) {
     val repeats = remember(activity.id, activity.laps) { SwimAnalysis.repeats(activity) }
     if (repeats.isNotEmpty()) RepeatPaceCard(repeats, cssSecPer100)
-    SetHoldCards(activity)
+    SetHoldCards(activity, doubtful = repeats.any { it.doubtful })
     EfficiencyCard(activity, history)
     if (repeats.isNotEmpty()) ZonesCard(activity, cssSecPer100)
     if (repeats.isNotEmpty()) RepeatsCard(repeats)
@@ -96,17 +98,27 @@ private fun zoneColor(repeat: SwimRepeat, css: Int?): Color =
 /** One bar per repeat: width is the distance, height the speed, colour the zone. */
 @Composable
 private fun RepeatPaceCard(repeats: List<SwimRepeat>, css: Int?) {
-    val paces = repeats.map { it.paceSecPer100 } + listOfNotNull(css?.toDouble())
+    // A doubtful repeat is drawn apart (board 5d): on the scale it would flatten every other bar.
+    val doubtful = repeats.filter { it.doubtful }
+    val sound = repeats.filter { !it.doubtful }.ifEmpty { repeats }
+    // With nothing else to compare them to, they are drawn like any other.
+    val apart = doubtful.isNotEmpty() && doubtful.size < repeats.size
+    val paces = sound.map { it.paceSecPer100 } + listOfNotNull(css?.toDouble())
     // Slowest at the bottom, fastest at the top, with some room on both sides.
     val slow = (paces.max() + 5).coerceAtMost(paces.min() + 90)
     val fast = paces.min() - 5
     fun barHeight(secPer100: Double): Float = ((slow - secPer100) / (slow - fast)).toFloat().coerceIn(0.08f, 1f)
+    val doubtNote = when (doubtful.size) {
+        0 -> null
+        1 -> stringResource(R.string.swim_doubt_chart_one, doubtful.single().number)
+        else -> stringResource(R.string.swim_doubt_chart_many, doubtful.joinToString(", ") { it.number.toString() })
+    }
     val description = stringResource(
         R.string.swim_repeats_chart,
-        repeats.size,
-        pace(repeats.minOf { it.paceSecPer100 }),
-        pace(repeats.maxOf { it.paceSecPer100 }),
-    )
+        sound.size,
+        pace(sound.minOf { it.paceSecPer100 }),
+        pace(sound.maxOf { it.paceSecPer100 }),
+    ) + doubtNote?.takeIf { apart }?.let { " $it" }.orEmpty()
 
     TriCard {
         CardHeader(
@@ -137,13 +149,32 @@ private fun RepeatPaceCard(repeats: List<SwimRepeat>, css: Int?) {
             verticalAlignment = Alignment.Bottom,
         ) {
             repeats.forEach { repeat ->
-                Box(
-                    Modifier
-                        .weight(repeat.distanceMeters.toFloat())
-                        .fillMaxHeight(barHeight(repeat.paceSecPer100))
-                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 1.dp, bottomEnd = 1.dp))
-                        .background(zoneColor(repeat, css)),
-                )
+                if (repeat.doubtful && apart) {
+                    // No height and no zone: its time is not one to read. A dashed outline with a question mark.
+                    Box(
+                        Modifier
+                            .weight(repeat.distanceMeters.toFloat())
+                            .fillMaxHeight()
+                            .drawBehind {
+                                drawRoundRect(
+                                    color = DoubtColor,
+                                    cornerRadius = CornerRadius(4.dp.toPx()),
+                                    style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 5f))),
+                                )
+                            },
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        Text("?", style = numberStyle(13.sp), color = DoubtColor, modifier = Modifier.padding(top = 4.dp))
+                    }
+                } else {
+                    Box(
+                        Modifier
+                            .weight(repeat.distanceMeters.toFloat())
+                            .fillMaxHeight(barHeight(repeat.paceSecPer100))
+                            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 1.dp, bottomEnd = 1.dp))
+                            .background(zoneColor(repeat, css)),
+                    )
+                }
             }
         }
         if (css != null) {
@@ -162,12 +193,18 @@ private fun RepeatPaceCard(repeats: List<SwimRepeat>, css: Int?) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
+        if (doubtNote != null && apart) {
+            Text(doubtNote, style = MaterialTheme.typography.bodySmall, color = DoubtColor, modifier = Modifier.padding(top = 4.dp))
+        }
     }
 }
 
+/** The colour of what the app does not trust: the outline of a doubtful repeat, its tag. */
+private val DoubtColor = Color(0xFFFFB59C)
+
 /** Two tiles: does the pace hold in the main set, and does the stroke. */
 @Composable
-private fun SetHoldCards(activity: Activity) {
+private fun SetHoldCards(activity: Activity, doubtful: Boolean = false) {
     val hold = remember(activity.id, activity.laps) { SwimAnalysis.setHold(activity) } ?: return
     val setName = "${hold.repeats} × ${hold.distanceMeters.roundToInt()}"
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -192,7 +229,7 @@ private fun SetHoldCards(activity: Activity) {
                 setName,
                 "%.1f".format(Locale.ITALY, hold.variationPct),
                 "${abs(hold.fadeSecPer100.roundToInt())}″",
-            ),
+            ) + if (doubtful) " " + stringResource(R.string.swim_doubt_hold) else "",
             modifier = Modifier.weight(1f),
         )
         val change = hold.strokeLengthChangePct
@@ -405,10 +442,16 @@ private fun RepeatsCard(repeats: List<SwimRepeat>) {
     var showAll by rememberSaveable { mutableStateOf(false) }
     var showLengths by rememberSaveable { mutableStateOf(false) }
     val lengthsCount = repeats.sumOf { it.lengths.size }
+    val doubtful = repeats.count { it.doubtful }
+    val usual = remember(repeats) { SwimAnalysis.usualPace(repeats) }
     val summary = if (lengthsCount > 0) {
         stringResource(R.string.swim_table_summary_lengths, repeats.size, lengthsCount)
     } else {
         stringResource(R.string.swim_table_summary, repeats.size)
+    } + when (doubtful) {
+        0 -> ""
+        1 -> " · " + stringResource(R.string.swim_doubt_count_one)
+        else -> " · " + stringResource(R.string.swim_doubt_count, doubtful)
     }
 
     CollapsibleCard(title = stringResource(R.string.swim_table_title), summary = summary, initiallyExpanded = true) {
@@ -432,7 +475,27 @@ private fun RepeatsCard(repeats: List<SwimRepeat>) {
                     repeat.swolf?.toString() ?: "",
                     repeat.restAfterSec?.takeIf { it >= 1 }?.let { pace(it) } ?: "",
                 ),
+                dim = repeat.doubtful,
+                tag = if (repeat.doubtful) stringResource(R.string.swim_doubt_tag) else null,
             )
+            if (repeat.doubtful) {
+                // Board 5d: why it is doubtful, and what it is kept out of.
+                val faster = usual?.let { (it - repeat.paceSecPer100).roundToInt() }?.takeIf { it > 0 }
+                Text(
+                    text = listOfNotNull(
+                        faster?.let { stringResource(R.string.swim_doubt_faster, it) },
+                        stringResource(R.string.swim_doubt_why),
+                    ).joinToString(" "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFE6D5CD),
+                    modifier = Modifier
+                        .padding(bottom = 8.dp)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF2A1811))
+                        .padding(12.dp),
+                )
+            }
             if (showLengths) {
                 repeat.lengths.forEachIndexed { index, length ->
                     TableRow(
@@ -469,8 +532,11 @@ private fun RepeatsCard(repeats: List<SwimRepeat>) {
 
 private val COLUMN_WEIGHTS = listOf(1.6f, 1f, 1f, 0.9f, 0.8f)
 
+/** The columns a tag takes the place of: SWOLF and rest. */
+private const val TAG_FROM = 3
+
 @Composable
-private fun TableRow(cells: List<String>, header: Boolean = false, dim: Boolean = false) {
+private fun TableRow(cells: List<String>, header: Boolean = false, dim: Boolean = false, tag: String? = null) {
     Column {
         if (!header) {
             Box(
@@ -480,8 +546,10 @@ private fun TableRow(cells: List<String>, header: Boolean = false, dim: Boolean 
                     .background(TriColors.border),
             )
         }
-        Row(Modifier.padding(vertical = 8.dp)) {
-            cells.forEachIndexed { index, cell ->
+        Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // A tagged row gives its last two columns to the tag.
+            val shown = if (tag != null) cells.take(TAG_FROM) else cells
+            shown.forEachIndexed { index, cell ->
                 Text(
                     text = cell,
                     style = MaterialTheme.typography.bodySmall,
@@ -492,6 +560,18 @@ private fun TableRow(cells: List<String>, header: Boolean = false, dim: Boolean 
                     maxLines = 1,
                     modifier = Modifier.weight(COLUMN_WEIGHTS[index]),
                 )
+            }
+            if (tag != null) {
+                Box(Modifier.weight(COLUMN_WEIGHTS.drop(TAG_FROM).sum())) {
+                    Text(
+                        tag,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = DoubtColor,
+                        maxLines = 1,
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF3A1D14)).padding(horizontal = 9.dp, vertical = 3.dp),
+                    )
+                }
             }
         }
     }

@@ -7,11 +7,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -30,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -47,6 +51,8 @@ import com.triforge.app.ui.theme.TriIcons
 import com.triforge.domain.Activity
 import com.triforge.domain.AthleteProfile
 import com.triforge.domain.Sport
+import com.triforge.domain.coach.NoticeLine
+import com.triforge.domain.coach.SportMode
 import com.triforge.domain.coach.TableVoice
 import com.triforge.domain.coach.TrainingAvailability
 import com.triforge.domain.coach.TriRegia
@@ -57,6 +63,7 @@ import java.time.temporal.ChronoUnit
 
 private val palette = CoachPalette.Coach
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CoachScreen(
     viewModel: CoachViewModel,
@@ -84,6 +91,16 @@ fun CoachScreen(
 
     LaunchedEffect(aiAllowed) { if (aiAllowed) viewModel.ensurePlan() }
 
+    // Another screen asked for a coach's chat (the swim test, from Oggi).
+    LaunchedEffect(state.openChat) {
+        state.openChat?.let { sport ->
+            chatSport = sport
+            chat = true
+            openSession = null
+            viewModel.chatOpened()
+        }
+    }
+
     val opened = openSession?.takeIf { aiAllowed }?.let { state.plan?.session(it) }
     if (opened != null) {
         BackHandler { openSession = null }
@@ -102,37 +119,66 @@ fun CoachScreen(
         return
     }
 
+    // Board 6g: while the athlete writes, everything above the chat is one line. The chat itself
+    // stays where it is in the tree, or the field being typed in would lose the keyboard.
+    val typing = aiAllowed && chat && state.loaded && WindowInsets.isImeVisible
+    val keyboard = LocalSoftwareKeyboardController.current
+
     Column(modifier.fillMaxSize()) {
-        CoachHeader(
-            title = stringResource(R.string.coach_title),
-            subtitle = subtitle(profile, availability),
-            icon = TriIcons.Sparkle,
-            palette = palette,
-        )
+        if (typing) {
+            ChatBar(
+                sport = chatSport,
+                onSelect = { chatSport = it },
+                availability = availability,
+                onShowWeek = {
+                    keyboard?.hide()
+                    chat = false
+                },
+            )
+        } else {
+            CoachHeader(
+                title = stringResource(R.string.coach_title),
+                subtitle = if (chat && aiAllowed) chatSubtitle(chatSport, availability) else subtitle(profile, availability),
+                icon = TriIcons.Sparkle,
+                palette = palette,
+            )
+        }
         if (!aiAllowed) {
             Column(Modifier.padding(16.dp)) { AiConsentCard(palette, onEnableAi) }
             return@Column
         }
-        if (!weekSetupDone) {
-            TriCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Text(
-                    stringResource(R.string.week_setup_coach_prompt),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SecondaryButton(
-                    stringResource(R.string.week_setup_open),
-                    onClick = onOpenWeekSetup,
-                    compact = true,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
+        if (!typing) {
+            if (!weekSetupDone) {
+                TriCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Text(
+                        stringResource(R.string.week_setup_coach_prompt),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    SecondaryButton(
+                        stringResource(R.string.week_setup_open),
+                        onClick = onOpenWeekSetup,
+                        compact = true,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
             }
+            Tabs(chat = chat, onSelect = { chat = it })
         }
-        Tabs(chat = chat, onSelect = { chat = it })
         if (!state.loaded) {
             LoadingBox()
         } else if (chat) {
-            CoachChat(state, viewModel, sport = chatSport, onSelect = { chatSport = it }, onOpenNutri = onOpenNutri)
+            CoachChat(
+                state,
+                viewModel,
+                sport = chatSport,
+                onSelect = { chatSport = it },
+                onOpenNutri = onOpenNutri,
+                profile = profile,
+                availability = availability,
+                typing = typing,
+                onShowWeek = { chat = false },
+            )
         } else {
             WeekTab(state, viewModel, profile, activities, availability, weekList, onOpenSession = { openSession = it }, onAskChange = { chat = true })
         }
@@ -156,6 +202,17 @@ private fun subtitle(profile: AthleteProfile, availability: TrainingAvailability
         stringResource(R.string.coach_subtitle_race, profile.raceName.ifBlank { stringResource(R.string.coach_race_default) }, weeks)
     } else {
         stringResource(R.string.coach_subtitle)
+    }
+}
+
+/** In the chat the header is about the coach the athlete is talking to. */
+@Composable
+private fun chatSubtitle(sport: Sport, availability: TrainingAvailability): String {
+    val name = TriRegia.sportName(sport)
+    return when (availability.mode(sport)) {
+        SportMode.AI -> stringResource(R.string.coach_subtitle_ai, name)
+        SportMode.OWN -> stringResource(R.string.coach_chat_subtitle_own, name)
+        SportMode.PAUSED -> stringResource(R.string.coach_chat_subtitle_paused, name)
     }
 }
 
@@ -256,6 +313,16 @@ private fun WeekTab(
             }
             return@LazyColumn
         }
+        if (state.notice.isNotEmpty()) {
+            item {
+                ProfileNotice(
+                    lines = state.notice,
+                    enabled = state.task == null,
+                    onOk = viewModel::dismissNotice,
+                    onReplan = viewModel::planWeek,
+                )
+            }
+        }
         item { WeekSummary(plan, review, availability) }
         item { WeekDays(plan, profile, onOpenSession, review ?: WeekReview(emptyList()), availability) }
         if (plan.fromTable) {
@@ -298,6 +365,29 @@ private fun WeekTab(
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
+        }
+    }
+}
+
+/**
+ * Board 6i: the week followed a change of the profile without being asked.
+ * Said once, with what was taken off and put in and why; «Va bene» closes it.
+ */
+@Composable
+private fun ProfileNotice(lines: List<NoticeLine>, enabled: Boolean, onOk: () -> Unit, onReplan: () -> Unit) {
+    HighlightCard(stringResource(R.string.coach_notice_title), palette) {
+        Text(stringResource(R.string.coach_notice_body), style = MaterialTheme.typography.bodyMedium, color = Color(0xFFE6E9EE))
+        Column {
+            lines.forEach { NoticeRow(it) }
+        }
+        Text(
+            stringResource(R.string.coach_notice_rest),
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PrimaryButton(stringResource(R.string.coach_notice_ok), onOk, compact = true, modifier = Modifier.weight(1f))
+            SecondaryButton(stringResource(R.string.coach_replan), onReplan, enabled = enabled, compact = true, modifier = Modifier.weight(1f))
         }
     }
 }

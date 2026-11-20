@@ -15,6 +15,7 @@ object CoachMapper {
     private const val MAX_SESSION_MIN = 600
     private const val MAX_TEXT = 1_200
     private const val MAX_INGREDIENTS = 12
+    private const val MAX_NOTICE = 20
 
     // ---- Week plan ---------------------------------------------------------
 
@@ -343,6 +344,37 @@ object CoachMapper {
     fun messageFromFields(fields: Map<String, Any?>): ChatMessage? {
         val body = (fields["text"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         return ChatMessage(fromAthlete = fields["from"] == "athlete", text = body, at = fields["at"] as? Instant)
+    }
+
+    // ---- What a change did, and the week before it --------------------------
+
+    fun noticeToFields(lines: List<NoticeLine>): List<Map<String, Any?>> =
+        lines.map { mapOf("sport" to sportKey(it.sport), "text" to it.text) }
+
+    fun noticeFromFields(value: Any?): List<NoticeLine> = list(value).mapNotNull { raw ->
+        val line = raw as? Map<*, *> ?: return@mapNotNull null
+        text(line["text"], 400).takeIf { it.isNotBlank() }?.let { NoticeLine(sport(line["sport"]), it) }
+    }.take(MAX_NOTICE)
+
+    fun undoToFields(undo: PlanUndo): Map<String, Any?> = mapOf(
+        "plan" to weekPlanToFields(undo.plan),
+        "sport" to sportKey(undo.sport),
+        "messageId" to undo.messageId,
+        "summary" to noticeToFields(undo.summary),
+        "nutri" to undo.nutri,
+    )
+
+    /** Null when the week it holds cannot be read: there is nothing to go back to. */
+    fun undoFromFields(fields: Map<*, *>?): PlanUndo? {
+        fields ?: return null
+        val plan = (fields["plan"] as? Map<*, *>)?.let { stored -> weekPlanFromFields(stored.entries.associate { (key, value) -> key.toString() to value }) }
+        return PlanUndo(
+            plan = plan ?: return null,
+            sport = sport(fields["sport"]) ?: return null,
+            messageId = text(fields["messageId"], 80).ifBlank { return null },
+            summary = noticeFromFields(fields["summary"]),
+            nutri = text(fields["nutri"], 400),
+        )
     }
 
     // ---- Helpers -----------------------------------------------------------
