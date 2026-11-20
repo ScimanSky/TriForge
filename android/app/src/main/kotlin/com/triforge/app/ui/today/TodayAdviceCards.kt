@@ -91,7 +91,7 @@ internal fun TodayAdviceCard(card: TodayCard, profile: AthleteProfile, onOpenCoa
         card.sessions.forEach { session -> SessionRow(session, profile, onOpenCoach) }
         card.meal?.let { MealRow(it, onOpenNutri) }
         card.next?.let { next ->
-            Text(next, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(next, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -104,9 +104,9 @@ private fun SessionRow(session: PlannedSession, profile: AthleteProfile, onOpen:
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(session.title, style = MaterialTheme.typography.titleSmall)
             val line = TodayAdvice.summary(session, profile) + if (session.own) " · " + stringResource(R.string.today_card_own) else ""
-            Text(line, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(line, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TodayAdvice.mainSet(session, profile)?.let { set ->
-                Text(stringResource(R.string.today_card_main_set, set), fontSize = 13.sp, color = Color(0xFFD5DAE1))
+                Text(stringResource(R.string.today_card_main_set, set), fontSize = 13.sp, lineHeight = 18.sp, color = Color(0xFFD5DAE1))
             }
         }
         Chevron()
@@ -122,7 +122,7 @@ private fun MealRow(meal: KeyMeal, onOpen: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(stringResource(R.string.today_card_meal), fontSize = 12.sp, color = CoachPalette.Nutri.softText)
             Text(meal.title, style = MaterialTheme.typography.titleSmall)
-            Text(meal.text, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(meal.text, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
         Chevron()
     }

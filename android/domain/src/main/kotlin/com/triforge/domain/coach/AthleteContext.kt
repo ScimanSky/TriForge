@@ -281,7 +281,7 @@ object AthleteContext {
         LoadResponsePattern.ABSORBING -> "carico alto ma il corpo lo assorbe bene"
         LoadResponsePattern.LOAD_FATIGUE -> "fatica spiegata dal carico recente"
         LoadResponsePattern.UNEXPLAINED -> "segni di fatica che il carico non spiega (stress, sonno, malattia?)"
-        LoadResponsePattern.PERSISTING_AFTER_TAPER -> "ancora affaticato dopo una settimana di scarico"
+        LoadResponsePattern.PERSISTING_AFTER_TAPER -> "la fatica resta anche dopo una settimana di scarico"
         LoadResponsePattern.ATYPICAL_HIGH_HRV -> "HRV insolitamente alta con altri segni di fatica"
         LoadResponsePattern.ILLNESS -> "si è dichiarato malato"
     }

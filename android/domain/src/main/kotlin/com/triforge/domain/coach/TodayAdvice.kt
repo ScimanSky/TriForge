@@ -36,7 +36,7 @@ data class TodayCard(
 
 /**
  * The card on top of Oggi. Recovery and form are two cards a screen apart
- * and can seem to say opposite things («recuperato» and «Sovraccarico»):
+ * and can seem to say opposite things («Nella norma» and «Sovraccarico»):
  * here they are read together, once, with what follows for the day.
  */
 object TodayAdvice {
@@ -173,31 +173,31 @@ object TodayAdvice {
             }
             light == RecoveryLight.GREEN -> when (form) {
                 FormZone.OVERLOAD -> say(
-                    "Sei recuperato, ma il carico delle ultime settimane $high",
+                    "Hai recuperato bene, ma il carico delle ultime settimane $high",
                     "fai la seduta prevista e non aggiungere altro",
                     "oggi non aggiungere allenamenti",
                 )
                 FormZone.PRODUCTIVE -> say(
-                    "Sei recuperato e il carico è quello che costruisce",
+                    "Hai recuperato bene e il carico è quello giusto per migliorare",
                     "fai la seduta come è scritta",
                     "il giorno libero ci sta",
                 )
                 FormZone.NEUTRAL -> say(
-                    "Sei recuperato e il carico è leggero",
+                    "Hai recuperato bene e il carico è leggero",
                     "la seduta di oggi puoi farla con convinzione",
                     "c'è spazio per allenarti, se ne hai voglia",
                 )
                 FormZone.FRESH -> say(
-                    "Sei fresco e riposato",
+                    "Hai recuperato del tutto e hai energie da spendere",
                     "è il momento giusto per una seduta di qualità",
                     "c'è spazio per allenarti, se ne hai voglia",
                 )
                 FormZone.DETRAINING -> say(
-                    "Sei molto riposato e la forma comincia a scendere",
+                    "Hai riposato molto e la forma comincia a scendere",
                     "fai la seduta prevista e riprendi con regolarità",
                     "riprendi ad allenarti con regolarità",
                 )
-                null -> say("Sei recuperato", "fai la seduta prevista", "il giorno libero ci sta")
+                null -> say("Hai recuperato bene", "fai la seduta prevista", "il giorno libero ci sta")
             }
             // No recovery reading yet: only the load can speak.
             form == FormZone.OVERLOAD -> say(
