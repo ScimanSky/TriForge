@@ -16,6 +16,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +37,9 @@ import com.triforge.app.ui.common.SportIconBox
 import com.triforge.app.ui.common.TriCard
 import com.triforge.app.ui.detail.GearColor
 import com.triforge.app.ui.detail.QuietButton
+import com.triforge.app.ui.detail.gearGuessTitle
+import com.triforge.app.ui.detail.gearGuessWhy
+import com.triforge.app.ui.detail.proposal
 import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.TriIcons
 import com.triforge.domain.Activity
@@ -194,6 +198,8 @@ internal fun SwimGearQuestionCard(swim: Activity, daysAgo: Long, onYes: () -> Un
         1L -> R.string.gear_question_kicker_yesterday
         else -> R.string.gear_question_kicker_before
     }
+    // Board 5f: when some repeats look swum with equipment the card says so, and the page opens with them ticked.
+    val guess = remember(swim.id, swim.laps) { proposal(swim) }
     TriCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
@@ -213,12 +219,12 @@ internal fun SwimGearQuestionCard(swim: Activity, daysAgo: Long, onYes: () -> Un
             )
         }
         Text(
-            stringResource(R.string.gear_question_title),
+            guess?.let { gearGuessTitle(it) } ?: stringResource(R.string.gear_question_title),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(top = 8.dp).semantics { heading() },
         )
         Text(
-            stringResource(R.string.gear_question_body),
+            guess?.let { gearGuessWhy(it) } ?: stringResource(R.string.gear_question_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
@@ -228,7 +234,12 @@ internal fun SwimGearQuestionCard(swim: Activity, daysAgo: Long, onYes: () -> Un
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            SecondaryButton(stringResource(R.string.gear_question_yes), onYes, modifier = Modifier.weight(1f), compact = true)
+            SecondaryButton(
+                stringResource(if (guess != null) R.string.gear_check else R.string.gear_question_yes),
+                onYes,
+                modifier = Modifier.weight(1f),
+                compact = true,
+            )
             QuietButton(stringResource(R.string.gear_question_no), onNo)
         }
     }

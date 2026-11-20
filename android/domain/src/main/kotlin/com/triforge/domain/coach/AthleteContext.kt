@@ -18,7 +18,9 @@ import com.triforge.domain.SessionLoad
 import com.triforge.domain.Sport
 import com.triforge.domain.SwimAnalysis
 import com.triforge.domain.SwimGear
+import com.triforge.domain.SwimGearGuess
 import com.triforge.domain.SwimGearUse
+import com.triforge.domain.SwimSets
 import com.triforge.domain.TrainingStats
 import java.time.LocalDate
 import java.time.LocalTime
@@ -205,7 +207,10 @@ object AthleteContext {
         }
         if (a.distanceMeters > 0) parts += Formatters.distance(a.sport, a.distanceMeters)
         Formatters.pace(a.sport, a.distanceMeters, a.paceSec)?.let { parts += it }
-        if (a.sport == Sport.SWIM) SwimAnalysis.gearUse(a)?.let { parts += gear(it) }
+        if (a.sport == Sport.SWIM) {
+            SwimAnalysis.gearUse(a)?.let { parts += gear(it) }
+            if (a.gear == null) SwimSets.gearGuess(a)?.takeIf { it.likely.isNotEmpty() }?.let { parts += gearGuess(it) }
+        }
         a.avgHr?.let { parts += "FC media $it" }
         (a.normPowerWatts ?: a.avgPowerWatts)?.let { parts += "$it W" }
         data.loads[a.id]?.let { parts += "carico ${it.tss.roundToInt()} TSS" }
@@ -222,6 +227,13 @@ object AthleteContext {
         return "di cui ${Formatters.distance(Sport.SWIM, use.meters)} con $names" +
             (use.paceSecPer100?.let { " a ${pace(it)}" } ?: "") +
             "; senza attrezzatura ${pace(own)}, ed è questo il suo passo"
+    }
+
+    /** A swim nobody has answered about, with repeats that look swum with equipment: the coaches must not read them as progress. */
+    fun gearGuess(guess: SwimGearGuess): String {
+        val repeats = if (guess.likely.size == 1) "1 ripetuta" else "${guess.likely.size} ripetute"
+        return "$repeats (${Formatters.distance(Sport.SWIM, guess.meters)}) molto più veloci del resto e con meno bracciate: " +
+            "forse con pinne o palette, l'atleta non l'ha ancora detto. Non leggerle come un progresso"
     }
 
     /** «pinne, pull buoy e palette». */

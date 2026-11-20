@@ -42,6 +42,7 @@ import com.triforge.domain.Formatters
 import com.triforge.domain.Sport
 import com.triforge.domain.SwimAnalysis
 import com.triforge.domain.SwimGearMarks
+import com.triforge.domain.SwimSets
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -83,6 +84,7 @@ fun ActivityDetailScreen(
             },
             onBack = { editingGear = false },
             modifier = modifier,
+            lastGear = remember(history, activity.id) { SwimSets.lastGear(history, activity.startTime) },
         )
         return
     }

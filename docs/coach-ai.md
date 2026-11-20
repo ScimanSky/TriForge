@@ -283,9 +283,29 @@ Con l'attrezzatura si nuota più veloce del proprio passo, e nessun orologio
 la registra (il Garmin sa solo se una vasca era un «drill»). La segna
 l'atleta (tavola 5e): nel dettaglio della nuotata la card «Attrezzatura», e
 in Oggi una domanda sull'ultima nuotata in piscina degli ultimi due giorni,
-finché non ha una risposta (`SwimAnalysis.gearToAsk`). Nella pagina si
-sceglie che cosa si è usato e si toccano le ripetute; una nuotata senza
-vasche registrate si segna tutta intera. «Niente» è una risposta anche lei.
+finché non ha una risposta (`SwimAnalysis.gearToAsk`). «Niente» è una
+risposta anche lei.
+
+Come in SwimForge, l'app propone e l'atleta conferma (tavola 5f,
+`SwimSets`). `gearGuess` cerca nella nuotata le ripetute che sembrano con
+attrezzatura: più veloci del 10% del passo abituale **e** con almeno il 15%
+di bracciate a vasca in meno (il 25% sulla vasca singola, dove anche uno
+sprint con una spinta lunga ne ha meno). Tutte e due le cose, perché la
+sola velocità è uno sprint e le sole bracciate in meno sono un esercizio.
+Il passo e le bracciate abituali sono quelli della nuotata stessa, presi
+sopra la metà, così mezza nuotata con le pinne si misura ancora sull'altra
+metà. Se l'orologio dà a una di queste ripetute uno stile diverso è solo
+un «forse», non spuntato. Il pull buoy da solo cambia poco passo e
+bracciate: non viene mai proposto. Quando c'è una proposta, la card e la
+domanda in Oggi la dicono («12 ripetute sembrano con attrezzatura»); non
+viene segnato niente finché l'atleta non salva.
+
+Nella pagina si sceglie per serie (`SwimSets.series`: ripetute uguali di
+fila, divise da una pausa lunga), ognuna con la sua attrezzatura; le serie
+proposte sono già spuntate, con l'attrezzatura dell'ultima nuotata segnata
+(`lastGear`). Una serie si apre per togliere una ripetuta. «Tutta la
+nuotata» segna la nuotata intera, ed è la sola scelta per una nuotata senza
+vasche registrate.
 
 I segni stanno in `coaching/swim`, campo `gear`, per id dell'attività
 (`session`: elenco di chiavi; `repeats`: numero della ripetuta → chiavi;
@@ -306,7 +326,10 @@ nuotata tutta con attrezzatura conta come una nuotata qualunque
 (`SessionLoadModel.typicalIntensity`). I coach leggono in ogni nuotata
 quale parte era con attrezzatura e qual è il passo senza
 (`AthleteContext.gear`), e se un passo molto più veloce del solito non ha
-attrezzatura segnata lo chiedono prima di parlare di progressi.
+attrezzatura segnata lo chiedono prima di parlare di progressi. Di una
+nuotata senza risposta leggono anche quante ripetute sembrano con
+attrezzatura (`AthleteContext.gearGuess`); quelle ripetute restano però nei
+conti finché l'atleta non le conferma.
 
 ### La regia non scrive nel passato
 

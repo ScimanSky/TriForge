@@ -86,6 +86,7 @@ import com.triforge.domain.Sport
 import com.triforge.domain.SportWeekGlance
 import com.triforge.domain.SwimAnalysis
 import com.triforge.domain.SwimGearMarks
+import com.triforge.domain.SwimSets
 import com.triforge.domain.TrainingStats
 import com.triforge.domain.WeekGlance
 import com.triforge.domain.WeekGlanceModel
@@ -151,6 +152,9 @@ fun TodayScreen(
             },
             onBack = { gearFor = null },
             modifier = modifier,
+            lastGear = remember(gearSwim.id) {
+                SwimSets.lastGear((state as? TrainingState.Loaded)?.activities.orEmpty(), gearSwim.startTime)
+            },
         )
         return
     }
