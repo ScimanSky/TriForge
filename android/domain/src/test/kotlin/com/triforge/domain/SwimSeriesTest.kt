@@ -19,6 +19,10 @@ class SwimSeriesTest {
 
     private fun rest(seconds: Double) = SwimLap(distanceMeters = 0.0, durationSec = seconds)
 
+    /** A freestyle repeat with the time of each of its lengths, as the watch counted them. */
+    private fun counted(meters: Double, seconds: Double, strokes: Int, vararg lengths: Double) =
+        SwimLap(meters, seconds, strokes = strokes, stroke = "free", lengths = lengths.map { SwimLength(25.0, it) })
+
     private fun swim(laps: List<SwimLap>, gear: SwimGearMarks? = null, daysAgo: Long = 0, pool: Double? = 25.0) = Activity(
         id = "swim-$daysAgo", source = ActivitySource.GARMIN, sport = Sport.SWIM, name = "",
         startTime = day.minusDays(daysAgo).atTime(13, 20).toInstant(ZoneOffset.UTC),
@@ -126,6 +130,64 @@ class SwimSeriesTest {
 
         val fins = swim(set(6, 100.0, 115.0, 13) + set(4, 25.0, 80.0, 8))
         assertEquals((7..10).toSet(), SwimSets.gearGuess(fins)?.likely)
+    }
+
+    @Test
+    fun `much faster with somewhat fewer strokes is equipment too but not over one length`() {
+        // With fins the legs do the work: 1:29 against 1:55, and eleven strokes and a half a length against thirteen.
+        val activity = swim(
+            set(6, 100.0, 115.0, 13) + listOf(
+                lap(100.0, 89.0, strokes = 46), rest(20.0),
+                // Faster, not much faster: the strokes have to drop further.
+                lap(100.0, 100.0, strokes = 46), rest(20.0),
+                // One length this fast is a sprint.
+                lap(25.0, 22.0, strokes = 11), rest(20.0),
+            ),
+        )
+        assertEquals(setOf(7), SwimSets.gearGuess(activity)?.likely)
+    }
+
+    @Test
+    fun `a length the watch counted twice is not equipment`() {
+        // 100 m in 2:02 read as 150 m, two lengths split in two: it looks fast and short of strokes, and is neither.
+        val twice = counted(150.0, 122.0, 54, 29.3, 27.5, 12.6, 19.3, 20.1, 13.2)
+        // 100 m with fins read as 125 m: still with fins once the length that was not swum is taken away.
+        val fins = counted(125.0, 97.5, 41, 18.8, 20.5, 25.3, 20.1, 12.8)
+        val activity = swim(listOf(twice, rest(20.0)) + set(6, 100.0, 115.0, 13) + listOf(fins, rest(20.0)))
+        val guess = assertNotNull(SwimSets.gearGuess(activity))
+
+        assertEquals(setOf(8), guess.likely)
+        assertEquals(13.0, guess.usualStrokesPerLength, 0.01)
+        assertEquals(115.0, guess.usualPaceSecPer100, 0.01)
+    }
+
+    @Test
+    fun `a pace too fast to be right is fins when the lengths are even and nothing without them`() {
+        // 100 m in 1:18 against 1:55: the app doubts it. Four even lengths say the watch counted right.
+        val even = swim(set(6, 100.0, 115.0, 13) + listOf(counted(100.0, 78.0, 34, 19.0, 19.5, 20.0, 19.5), rest(20.0)))
+        assertTrue(SwimAnalysis.repeats(even).last().doubtful)
+        assertEquals(setOf(7), SwimSets.gearGuess(even)?.likely)
+
+        val unknown = swim(set(6, 100.0, 115.0, 13) + set(1, 100.0, 78.0, 8))
+        assertNull(SwimSets.gearGuess(unknown))
+    }
+
+    @Test
+    fun `what lies between repeats with equipment is proposed apart`() {
+        val activity = swim(
+            set(6, 100.0, 115.0, 13) +
+                // 7 and 8 with fins, 9 breaststroke at an easy pace, 10 with fins.
+                set(2, 100.0, 86.0, 8) + set(1, 100.0, 114.0, 11, stroke = "breast") + set(1, 100.0, 86.0, 8) +
+                // 11 and 12 easy, 13 with fins.
+                set(1, 100.0, 114.0, 13) + set(1, 200.0, 106.0, 13) + set(1, 100.0, 86.0, 8) +
+                // Three in a row are the athlete's own, whatever comes after.
+                set(3, 100.0, 115.0, 13) + set(1, 100.0, 86.0, 8),
+        )
+        val guess = assertNotNull(SwimSets.gearGuess(activity))
+
+        assertEquals(setOf(7, 8, 10, 13, 17), guess.likely)
+        assertEquals(setOf(9, 11, 12), guess.between)
+        assertTrue(guess.maybe.isEmpty())
     }
 
     @Test

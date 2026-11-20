@@ -290,8 +290,19 @@ Come in SwimForge, l'app propone e l'atleta conferma (tavola 5f,
 `SwimSets`). `gearGuess` cerca nella nuotata le ripetute che sembrano con
 attrezzatura: più veloci del 10% del passo abituale **e** con almeno il 15%
 di bracciate a vasca in meno (il 25% sulla vasca singola, dove anche uno
-sprint con una spinta lunga ne ha meno). Tutte e due le cose, perché la
-sola velocità è uno sprint e le sole bracciate in meno sono un esercizio.
+sprint con una spinta lunga ne ha meno), oppure più veloci del 17% con
+almeno il 10% di bracciate in meno su più di una vasca: con le pinne
+lavorano le gambe e le braccia girano quasi come sempre. Tutte e due le
+cose, perché la sola velocità è uno sprint e le sole bracciate in meno
+sono un esercizio. Le soglie vengono da una nuotata vera segnata a mano
+dall'atleta (100 m da 1:50 a 1:28 con le pinne, bracciate da 13 a 9–11).
+Una vasca molto più breve delle altre della sua ripetuta è una virata
+contata due volte: per la proposta non conta come vasca, altrimenti una
+ripetuta contata lunga sembrerebbe veloce e con poche bracciate. Le
+ripetute dal passo dubbio si leggono lo stesso quando hanno i tempi delle
+vasche. Fino a due ripetute in mezzo a ripetute proposte (uno stile
+diverso, un tratto lento) sono un «forse» a parte: l'attrezzatura si
+tiene per un tratto della seduta.
 Il passo e le bracciate abituali sono quelli della nuotata stessa, presi
 sopra la metà, così mezza nuotata con le pinne si misura ancora sull'altra
 metà. Se l'orologio dà a una di queste ripetute uno stile diverso è solo

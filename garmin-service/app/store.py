@@ -48,6 +48,12 @@ class Store(Protocol):
         """Garmin ids of the swims whose laps are already stored."""
         ...
 
+    def swims_without_laps(self, uid: str, since: datetime) -> Iterable[str]:
+        """Garmin ids of the swims from ``since`` on whose laps were never
+        read, newest first: the swims stored before the service read laps,
+        or older than the window of the syncs that came after."""
+        ...
+
     def disconnect(self, uid: str) -> None: ...
 
     def connected_uids(self) -> Iterable[str]: ...
@@ -55,6 +61,25 @@ class Store(Protocol):
     def delete_health_data(self, uid: str) -> None: ...
 
     def delete_user(self, uid: str) -> None: ...
+
+
+def _newest_first_without_laps(docs: Iterable[dict[str, Any]]) -> list[str]:
+    """Garmin ids of the swims among ``docs`` that have no ``hasLaps`` field.
+
+    A swim whose laps were read carries the field even when Garmin had none
+    to give, so it is not asked for again.
+    """
+    swims = [
+        doc
+        for doc in docs
+        if doc.get("source") == "garmin"
+        and doc.get("sport") == "swim"
+        and doc.get("externalId")
+        and isinstance(doc.get("startTime"), datetime)
+        and "hasLaps" not in doc
+    ]
+    swims.sort(key=lambda doc: doc["startTime"], reverse=True)
+    return [str(doc["externalId"]) for doc in swims]
 
 
 class MemoryStore:
@@ -102,6 +127,13 @@ class MemoryStore:
             for doc in self.activities.get(uid, {}).values()
             if doc.get("hasLaps") and doc.get("externalId")
         ]
+
+    def swims_without_laps(self, uid: str, since: datetime) -> Iterable[str]:
+        return _newest_first_without_laps(
+            doc
+            for doc in self.activities.get(uid, {}).values()
+            if isinstance(doc.get("startTime"), datetime) and doc["startTime"] >= since
+        )
 
     def upsert_wellness(self, uid: str, docs: dict[str, dict[str, Any]]) -> None:
         bucket = self.wellness.setdefault(uid, {})
@@ -186,6 +218,22 @@ class FirestoreStore:
             external_id = (snapshot.to_dict() or {}).get("externalId")
             if external_id:
                 yield str(external_id)
+
+    def swims_without_laps(self, uid: str, since: datetime) -> Iterable[str]:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        # Firestore cannot ask for a missing field, and filtering on the
+        # sport too would need a composite index: the few months of
+        # activities are read with the fields that decide, and chosen here.
+        query = (
+            self._user(uid)
+            .collection("activities")
+            .where(filter=FieldFilter("startTime", ">=", since))
+            .select(["externalId", "source", "sport", "startTime", "hasLaps"])
+        )
+        return _newest_first_without_laps(
+            snapshot.to_dict() or {} for snapshot in query.stream()
+        )
 
     def _upsert(self, uid: str, name: str, docs: dict[str, dict[str, Any]]) -> None:
         collection = self._user(uid).collection(name)

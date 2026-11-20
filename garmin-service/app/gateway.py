@@ -86,6 +86,39 @@ def is_swim(raw: dict[str, Any]) -> bool:
     return "swimming" in (key or "").lower()
 
 
+def swims_to_read(
+    activities: list[Any],
+    swims_with_laps: frozenset[str] = frozenset(),
+    swims_without_laps: tuple[str, ...] = (),
+) -> list[str]:
+    """Garmin ids of the swims whose laps one sync reads, in order.
+
+    First the swims among ``activities`` that have none stored, newest
+    first: the ones the athlete is about to open. Then the older swims in
+    ``swims_without_laps``, in the order given. No more than
+    ``MAX_SWIM_SPLITS_PER_SYNC`` in all: the rest follow on the next syncs.
+    """
+    swims = [
+        raw
+        for raw in activities
+        if isinstance(raw, dict)
+        and raw.get("activityId") is not None
+        and is_swim(raw)
+        and str(raw.get("activityId")) not in swims_with_laps
+    ]
+    swims.sort(key=lambda raw: str(raw.get("startTimeGMT") or ""), reverse=True)
+    pending = [str(raw["activityId"]) for raw in swims]
+    recent = {
+        str(raw.get("activityId")) for raw in activities if isinstance(raw, dict)
+    }
+    pending += [
+        activity_id
+        for activity_id in swims_without_laps
+        if activity_id not in recent and activity_id not in swims_with_laps
+    ]
+    return pending[:MAX_SWIM_SPLITS_PER_SYNC]
+
+
 class GarminGateway(Protocol):
     def login(self, email: str, password: str) -> Session | MfaChallenge: ...
 
@@ -97,6 +130,7 @@ class GarminGateway(Protocol):
         start: date,
         end: date,
         swims_with_laps: frozenset[str] = frozenset(),
+        swims_without_laps: tuple[str, ...] = (),
     ) -> GarminData: ...
 
 
@@ -125,6 +159,7 @@ class GarminConnectGateway:
         start: date,
         end: date,
         swims_with_laps: frozenset[str] = frozenset(),
+        swims_without_laps: tuple[str, ...] = (),
     ) -> GarminData:
         """Activities and daily recovery data between ``start`` and ``end``.
 
@@ -132,7 +167,11 @@ class GarminConnectGateway:
         effort: an endpoint that fails for any reason other than auth or rate
         limiting is skipped, so a Garmin change there never blocks the
         activity sync. ``swims_with_laps`` are the swims whose laps are
-        already stored, so they are not read again.
+        already stored, so they are not read again. ``swims_without_laps``
+        are older swims, outside these dates, stored without their laps:
+        their laps are read with what is left of the limit for one sync,
+        after the swims between the dates, and come back in ``swim_splits``
+        like the others.
         """
         from garminconnect import Garmin
 
@@ -165,18 +204,9 @@ class GarminConnectGateway:
         )
         activities = list(activities or [])
         swim_splits: dict[str, dict[str, Any]] = {}
-        swims = [
-            raw
-            for raw in activities
-            if isinstance(raw, dict)
-            and raw.get("activityId") is not None
-            and is_swim(raw)
-            and str(raw.get("activityId")) not in swims_with_laps
-        ]
-        # Newest first: the swims the athlete is about to open.
-        swims.sort(key=lambda raw: str(raw.get("startTimeGMT") or ""), reverse=True)
-        pending = [str(raw["activityId"]) for raw in swims]
-        for activity_id in pending[:MAX_SWIM_SPLITS_PER_SYNC]:
+        for activity_id in swims_to_read(
+            activities, swims_with_laps, swims_without_laps
+        ):
             splits = self._optional_dict(
                 lambda i=activity_id: self._call(client.get_activity_splits, i)
             )

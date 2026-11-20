@@ -749,6 +749,8 @@
     <string name="gear_repeat_strokes">%1$d bracciate</string>
     <string name="gear_maybe_note_one">L\'orologio la segna %1$s: se lo era, lasciala così.</string>
     <string name="gear_maybe_note">L\'orologio le segna %1$s: se lo erano, lasciale così.</string>
+    <string name="gear_between_note_one">È in mezzo a ripetute che sembrano con attrezzatura: se l\'avevi anche qui, spuntala.</string>
+    <string name="gear_between_note">Sono in mezzo a ripetute che sembrano con attrezzatura: se l\'avevi anche qui, spuntale.</string>
     <string name="gear_stroke_breast">a rana</string>
     <string name="gear_stroke_back">a dorso</string>
     <string name="gear_stroke_fly">a delfino</string>

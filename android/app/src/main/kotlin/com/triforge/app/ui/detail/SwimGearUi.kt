@@ -248,8 +248,12 @@ private fun decodeMarks(text: String): Map<Int, Set<SwimGear>> = text.split(';')
     entry.substringBefore(':').toIntOrNull()?.let { it to decode(entry.substringAfter(':')) }
 }.toMap()
 
-/** What the app thinks of a series: nothing, that it looks swum with equipment, or that it may have been. */
-private enum class Look { PLAIN, LIKELY, MAYBE }
+/**
+ * What the app thinks of a series: nothing, that it looks swum with
+ * equipment, that it may have been (the watch gave it another stroke), or
+ * that it lies between series that look it.
+ */
+private enum class Look { PLAIN, LIKELY, MAYBE, BETWEEN }
 
 /**
  * Board 5f, the page where the athlete says what a swim was swum with, by
@@ -278,6 +282,7 @@ internal fun SwimGearPage(
         guess == null -> Look.PLAIN
         repeat.number in guess.likely -> Look.LIKELY
         repeat.number in guess.maybe -> Look.MAYBE
+        repeat.number in guess.between -> Look.BETWEEN
         else -> Look.PLAIN
     }
     // What was marked, or what the app guessed, stays in series of its own: one tick takes it all.
@@ -343,7 +348,7 @@ internal fun SwimGearPage(
                 .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (proposed && guess != null) {
+            if (proposed) {
                 Text(
                     stringResource(R.string.gear_page_proposed, pace(guess.usualPaceSecPer100), guess.usualStrokesPerLength.roundToInt()),
                     style = MaterialTheme.typography.bodyMedium,
@@ -388,8 +393,8 @@ internal fun SwimGearPage(
             }
             if (!whole) {
                 @Composable
-                fun group(label: String?, kind: Look) {
-                    val rows = series.filter { look(it.repeats.first()) == kind }
+                fun group(label: String?, vararg kinds: Look) {
+                    val rows = series.filter { look(it.repeats.first()) in kinds }
                     if (rows.isEmpty()) return
                     if (label != null) SectionLabel(label)
                     rows.forEach { one ->
@@ -399,7 +404,11 @@ internal fun SwimGearPage(
                             marks = marks,
                             gear = gearOf(one),
                             open = first in open,
-                            note = if (kind == Look.MAYBE) maybeNote(one) else null,
+                            note = when (look(one.repeats.first())) {
+                                Look.MAYBE -> maybeNote(one)
+                                Look.BETWEEN -> stringResource(if (one.count == 1) R.string.gear_between_note_one else R.string.gear_between_note)
+                                else -> null
+                            },
                             onTick = { tick(one) },
                             onGear = { gear, on -> choose(one, gear, on) },
                             onOpen = { openText = (if (first in open) open - first else open + first).joinToString(",") },
@@ -407,9 +416,9 @@ internal fun SwimGearPage(
                         )
                     }
                 }
-                val maybe = series.count { look(it.repeats.first()) == Look.MAYBE }
+                val maybe = series.count { look(it.repeats.first()).let { kind -> kind == Look.MAYBE || kind == Look.BETWEEN } }
                 group(stringResource(R.string.gear_section_likely), Look.LIKELY)
-                group(stringResource(if (maybe == 1) R.string.gear_section_maybe_one else R.string.gear_section_maybe), Look.MAYBE)
+                group(stringResource(if (maybe == 1) R.string.gear_section_maybe_one else R.string.gear_section_maybe), Look.MAYBE, Look.BETWEEN)
                 group(stringResource(if (guess == null) R.string.gear_section_all else R.string.gear_section_rest), Look.PLAIN)
             }
             QuietButton(stringResource(R.string.gear_none_long), { onSave(SwimGearMarks.NONE) }, Modifier.fillMaxWidth())
