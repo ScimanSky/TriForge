@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -77,6 +79,9 @@ fun CoachScreen(
     // The coach the athlete is talking to in the Chat tab (board 6d).
     var chatSport by rememberSaveable { mutableStateOf(Sport.SWIM) }
 
+    // Kept here, above the session's page, so that coming back finds the week where it was.
+    val weekList = rememberLazyListState()
+
     LaunchedEffect(aiAllowed) { if (aiAllowed) viewModel.ensurePlan() }
 
     val opened = openSession?.takeIf { aiAllowed }?.let { state.plan?.session(it) }
@@ -129,7 +134,7 @@ fun CoachScreen(
         } else if (chat) {
             CoachChat(state, viewModel, sport = chatSport, onSelect = { chatSport = it }, onOpenNutri = onOpenNutri)
         } else {
-            WeekTab(state, viewModel, profile, activities, availability, onOpenSession = { openSession = it }, onAskChange = { chat = true })
+            WeekTab(state, viewModel, profile, activities, availability, weekList, onOpenSession = { openSession = it }, onAskChange = { chat = true })
         }
     }
 }
@@ -203,6 +208,7 @@ private fun WeekTab(
     profile: AthleteProfile,
     activities: List<Activity>?,
     availability: TrainingAvailability,
+    listState: LazyListState,
     onOpenSession: (String) -> Unit,
     onAskChange: () -> Unit,
 ) {
@@ -213,11 +219,19 @@ private fun WeekTab(
         if (plan == null || activities == null) null else WeekReview.of(plan, activities, today, ZoneId.systemDefault())
     }
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         state.error?.let { reason ->
-            item { ErrorCard(reason, onRetry = if (plan == null) viewModel::planWeek else null, onDismiss = viewModel::clearError) }
+            item {
+                ErrorCard(
+                    reason,
+                    who = stringResource(R.string.coach_error_who_coaches),
+                    onRetry = if (state.task == null) viewModel::planWeek else null,
+                    onDismiss = viewModel::clearError,
+                )
+            }
         }
         if (state.task == CoachTask.PLANNING) {
             item {

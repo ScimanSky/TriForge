@@ -5,6 +5,7 @@ import com.triforge.domain.AthleteProfile
 import com.triforge.domain.Formatters
 import com.triforge.domain.Sport
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 
 /** What one sport coach brings to the table: its sessions and its notes. */
@@ -17,6 +18,31 @@ data class SportProposal(
     val noteForNutriAi: String = "",
     val rationale: String = "",
 )
+
+/** One thing a change does to the week: a session added, removed or rewritten. */
+data class PlanChange(
+    val date: LocalDate,
+    val kind: Kind,
+    val sport: Sport?,
+    val before: PlannedSession? = null,
+    val after: PlannedSession? = null,
+) {
+    enum class Kind { ADDED, REMOVED, CHANGED }
+
+    /** The session the change is about: the new one, or the one that goes. */
+    val session: PlannedSession get() = after ?: before!!
+}
+
+/**
+ * What accepting a coach's proposal does to the week, worked out before the
+ * athlete accepts it: the week as it would be, every session that changes
+ * (the coach's own and any other the regia has to touch) and the regia's
+ * reasons. Nothing changes that is not listed here.
+ */
+data class Revision(val plan: WeekPlan, val changes: List<PlanChange>, val notes: List<String>) {
+    /** The changes outside the sessions the coach of [sport] rewrote: what the athlete did not ask for. */
+    fun sideEffects(sport: Sport): List<PlanChange> = changes.filter { it.sport != sport || it.session.own }
+}
 
 /**
  * The table where the three sport coaches agree on the week. Nobody at the
@@ -42,6 +68,28 @@ object CoachTable {
 
     /** How the regia's first line of the minutes begins, see [opening]. */
     const val OPENING = "Punto di partenza: "
+
+    /** From this hour on, today is over for training: the week is planned from tomorrow. */
+    val DAY_OVER: LocalTime = LocalTime.of(21, 0)
+
+    /**
+     * The first day a week can still be written for at [now]: [today], or
+     * tomorrow once the evening is gone. Nothing is ever planned in a time
+     * already past, so a session never appears on a day that is over.
+     */
+    fun planningDay(today: LocalDate, now: LocalTime): LocalDate = if (now.isBefore(DAY_OVER)) today else today.plusDays(1)
+
+    /**
+     * Whether the athlete's own [session] of today can no longer start at
+     * [now]: its usual time is gone. One without a usual time can still be
+     * done until the evening.
+     */
+    fun isGone(session: PlannedSession, availability: TrainingAvailability, now: LocalTime?): Boolean {
+        now ?: return false
+        val sport = session.sport ?: return false
+        val time = if (sport == Sport.STRENGTH) availability.gym.time else availability.slot(sport)?.time
+        return time != null && !now.isBefore(time)
+    }
 
     /**
      * The regia's first line of the minutes when part of the week is not the
@@ -122,6 +170,8 @@ object CoachTable {
         profile: AthleteProfile,
         availability: TrainingAvailability,
         withGym: Boolean = true,
+        now: LocalTime? = null,
+        keptToday: List<PlannedSession> = emptyList(),
     ): WeekPlan {
         val days = (0L until 7L).map { offset ->
             val date = weekStart.plusDays(offset)
@@ -129,7 +179,9 @@ object CoachTable {
             val sessions = proposals.filter { it.sport in budget.coached }.flatMap { proposal ->
                 proposal.days.filter { it.date == date }.flatMap { it.sessions }.map { it.copy(sport = proposal.sport, own = false) }
             }
-            val fixed = if (withGym) TriRegia.fixedSessions(availability, budget, date) else emptyList()
+            val fixed = (if (withGym) TriRegia.fixedSessions(availability, budget, date) else emptyList()).filter { session ->
+                date != today || !isGone(session, availability, now) || keptToday.any { it.own && it.sport == session.sport }
+            }
             PlannedDay(date, order(sessions.map { Workouts.finalize(it, profile, availability.poolLengthM) } + fixed, availability))
         }
         return WeekPlan(
@@ -186,28 +238,145 @@ object CoachTable {
         profile: AthleteProfile,
         availability: TrainingAvailability,
         done: List<PlannedDay>? = null,
-    ): WeekPlan {
-        if (proposal.sport !in budget.coached) return current
+        now: LocalTime? = null,
+    ): WeekPlan = revision(current, proposal, today, budget, profile, availability, done, now).plan
+
+    /**
+     * [revise] with everything it changes spelled out, so the athlete reads
+     * it before accepting: see [Revision]. [today] is the first day that can
+     * still change ([planningDay]).
+     */
+    fun revision(
+        current: WeekPlan,
+        proposal: SportProposal,
+        today: LocalDate,
+        budget: WeekBudget,
+        profile: AthleteProfile,
+        availability: TrainingAvailability,
+        done: List<PlannedDay>? = null,
+        now: LocalTime? = null,
+    ): Revision {
+        if (proposal.sport !in budget.coached) return Revision(current, emptyList(), emptyList())
         val upcoming = current.days.filter { !it.date.isBefore(today) }
         val others = TriRegia.SPORTS.filter { it != proposal.sport }.map { sport ->
             SportProposal(sport, upcoming.map { day -> day.copy(sessions = day.sessions.filter { it.sport == sport && !it.own }) }.filter { it.sessions.isNotEmpty() })
         }
         val mine = proposal.copy(days = proposal.days.filter { !it.date.isBefore(today) })
         val past = done ?: current.days.filter { it.date.isBefore(today) }
-        val joined = merge(current.weekStart, today, past, others + mine, budget, profile, availability)
+        val keptToday = current.day(today)?.sessions.orEmpty().filter { it.own }
+        val joined = merge(current.weekStart, today, past, others + mine, budget, profile, availability, now = now, keptToday = keptToday)
         val (checked, fixes) = settle(joined, budget, availability, profile, today)
         val settled = keepPlanned(checked, current.copy(plannedFrom = current.plannedFrom ?: current.weekStart), today)
         val line = TableVoice.of(proposal.sport)?.let { voice ->
             TableNote(voice, "Modifica chiesta in chat" + (proposal.note.ifBlank { proposal.rationale }.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "."))
         }
-        return settled.copy(
+        val changes = changes(current, settled, today)
+        // What changed without the regia settling anything follows from the profile: say that too.
+        val profileNotes = profileNotes(changes.filter { it.sport != proposal.sport || it.session.own }, availability)
+        val plan = settled.copy(
             plannedFrom = current.plannedFrom,
             phase = current.phase,
             rationale = current.rationale,
             noteForNutriAi = proposal.noteForNutriAi.ifBlank { current.noteForNutriAi },
-            table = (current.table + listOfNotNull(line) + fixes).takeLast(MAX_TABLE),
+            table = (current.table + listOfNotNull(line) + profileNotes.map { TableNote(TableVoice.REGIA, it) } + fixes).takeLast(MAX_TABLE),
             rounds = current.rounds.coerceAtLeast(1),
         )
+        return Revision(plan, changes, profileNotes + fixes.map { it.text })
+    }
+
+    /**
+     * Every session from [today] on that differs between [before] and
+     * [after], day by day. Sessions are matched by sport and by whose they
+     * are (a coach's, or the athlete's own), in the order of the day.
+     */
+    fun changes(before: WeekPlan, after: WeekPlan, today: LocalDate): List<PlanChange> {
+        fun sessions(plan: WeekPlan, date: LocalDate) = plan.day(date)?.sessions.orEmpty().filter { it.sport != null && it.durationMin > 0 }
+        return after.days.map { it.date }.filter { !it.isBefore(today) }.sorted().flatMap { date ->
+            val old = sessions(before, date).groupBy { it.sport to it.own }
+            val new = sessions(after, date).groupBy { it.sport to it.own }
+            (old.keys + new.keys).flatMap { key ->
+                val was = old[key].orEmpty()
+                val now = new[key].orEmpty()
+                (0 until maxOf(was.size, now.size)).mapNotNull { index ->
+                    val a = was.getOrNull(index)
+                    val b = now.getOrNull(index)
+                    when {
+                        a == null -> PlanChange(date, PlanChange.Kind.ADDED, key.first, after = b)
+                        b == null -> PlanChange(date, PlanChange.Kind.REMOVED, key.first, before = a)
+                        !same(a, b) -> PlanChange(date, PlanChange.Kind.CHANGED, key.first, a, b)
+                        else -> null
+                    }
+                }
+            }
+        }
+    }
+
+    /** Whether two sessions are the same to the athlete: what, how long, how hard, which sets. */
+    private fun same(a: PlannedSession, b: PlannedSession): Boolean =
+        a.title == b.title && a.durationMin == b.durationMin && a.intensity == b.intensity &&
+            a.steps.map { it.copy(target = "", note = "") } == b.steps.map { it.copy(target = "", note = "") } && a.details == b.details
+
+    /**
+     * Why sessions outside a coach's change appear or go although no rule
+     * of the regia was broken: the profile says so (a sport in pause or with
+     * the trainer, the gym days). One line per reason.
+     */
+    private fun profileNotes(changes: List<PlanChange>, availability: TrainingAvailability): List<String> {
+        val notes = mutableListOf<String>()
+        TriRegia.SPORTS.forEach { sport ->
+            val gone = changes.filter { it.sport == sport && it.kind == PlanChange.Kind.REMOVED && !it.session.own }
+            if (gone.isEmpty()) return@forEach
+            val name = TriRegia.sportName(sport).lowercase()
+            when (availability.mode(sport)) {
+                SportMode.PAUSED -> notes += "Tolte le sedute di $name: nel profilo è in pausa."
+                SportMode.OWN -> notes += "Tolte le sedute di $name scritte dal coach: nel profilo lo segui con il tuo allenatore."
+                SportMode.AI -> Unit
+            }
+        }
+        val own = changes.filter { it.session.own }
+        if (own.any { it.kind == PlanChange.Kind.ADDED }) notes += "Aggiunte le tue sedute fisse dei giorni che hai indicato nel profilo."
+        if (own.any { it.kind == PlanChange.Kind.REMOVED }) notes += "Tolte le tue sedute fisse dei giorni che non sono più nel profilo."
+        if (own.any { it.kind == PlanChange.Kind.CHANGED }) notes += "Aggiornata la durata delle tue sedute fisse, come nel profilo."
+        return notes
+    }
+
+    /**
+     * The week brought in line with the profile without asking any coach,
+     * when the athlete changes "Giorni, orari e gara": the sessions of a
+     * sport now in pause or with the trainer go, the athlete's own sessions
+     * follow their new days, and the regia settles what that breaks. The
+     * coaches' other sessions stay as written; null when nothing changes.
+     */
+    fun realign(
+        current: WeekPlan,
+        today: LocalDate,
+        budget: WeekBudget,
+        profile: AthleteProfile,
+        availability: TrainingAvailability,
+        now: LocalTime? = null,
+    ): Revision? {
+        val upcoming = current.days.filter { !it.date.isBefore(today) }
+        val kept = TriRegia.SPORTS.map { sport ->
+            SportProposal(sport, upcoming.map { day -> day.copy(sessions = day.sessions.filter { it.sport == sport && !it.own }) }.filter { it.sessions.isNotEmpty() })
+        }
+        val keptToday = current.day(today)?.sessions.orEmpty().filter { it.own }
+        val joined = merge(current.weekStart, today, current.days.filter { it.date.isBefore(today) }, kept, budget, profile, availability, now = now, keptToday = keptToday)
+        val changes = changes(current, joined, today)
+        if (changes.isEmpty()) return null
+        val notes = profileNotes(changes, availability)
+        val (settled, fixes) = settle(joined, budget, availability, profile, today)
+        val plan = settled.copy(
+            plannedFrom = current.plannedFrom,
+            phase = current.phase,
+            rationale = current.rationale,
+            noteForNutriAi = current.noteForNutriAi,
+            createdAt = current.createdAt,
+            table = (current.table + notes.map { TableNote(TableVoice.REGIA, it) } + fixes).takeLast(MAX_TABLE),
+            rounds = current.rounds,
+            availableMin = budget.availableMinutes,
+            maxHard = budget.maxHardSessions,
+        )
+        return Revision(plan, changes(current, plan, today), notes + fixes.map { it.text })
     }
 
     /** By the athlete's usual time when every sport of the day has one, else swim, bike, run, and the gym last. */

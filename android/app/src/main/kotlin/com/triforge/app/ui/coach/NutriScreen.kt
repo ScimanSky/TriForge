@@ -128,6 +128,9 @@ fun NutriScreen(
         return
     }
 
+    KeyboardBack()
+    // The food profile opens at the top of the list: from further down the tap would seem to do nothing.
+    LaunchedEffect(editing) { if (editing) listState.animateScrollToItem(0) }
     Column(modifier.fillMaxSize().imePadding()) {
         CoachHeader(
             title = stringResource(R.string.nutri_title),
@@ -188,7 +191,15 @@ fun NutriScreen(
                 if (profile == null) return@LazyColumn
             }
             state.error?.let { reason ->
-                item { ErrorCard(reason, onRetry = null, onDismiss = viewModel::clearError) }
+                item {
+                    ErrorCard(
+                        reason,
+                        who = stringResource(R.string.nav_nutri),
+                        onRetry = if (state.retryable && state.task == null) viewModel::retry else null,
+                        onDismiss = viewModel::clearError,
+                        hint = if (state.unanswered != null) stringResource(R.string.coach_error_retry_message) else null,
+                    )
+                }
             }
             item { WeekStrip(state, viewModel::select) }
             if (view != null) {
@@ -230,11 +241,17 @@ fun NutriScreen(
                         )
                     }
                 }
-                if (day != null && day.rationale.isNotBlank()) {
+                // NutriAI's reasons hold for the numbers they were written for; after a change of plan the app gives its own.
+                val targets = view.targets
+                val written = day?.rationale?.takeIf { it.isNotBlank() && !view.outdated }
+                if (day != null && (written != null || targets != null)) {
                     item {
+                        val why = written ?: targets?.let {
+                            stringResource(R.string.nutri_why_app, nutriNumbers.format(it.kcal), nutriNumbers.format(it.bmrKcal), nutriNumbers.format(it.trainingKcal))
+                        }.orEmpty()
                         TriCard {
                             Text(stringResource(R.string.nutri_why), style = MaterialTheme.typography.titleSmall)
-                            Text(day.rationale, style = MaterialTheme.typography.bodyMedium, color = TriColors.textDim, modifier = Modifier.padding(top = 6.dp))
+                            Text(why, style = MaterialTheme.typography.bodyMedium, color = TriColors.textDim, modifier = Modifier.padding(top = 6.dp))
                         }
                     }
                 }
@@ -248,6 +265,10 @@ fun NutriScreen(
             }
             items(state.chat, key = { it.id }) { entry -> NutriMessage(entry, state, viewModel) }
             if (state.task == CoachTask.REPLYING) item { ThinkingRow(stringResource(R.string.nutri_thinking), palette) }
+            // A message left without an answer, e.g. the app was closed while NutriAI was writing.
+            if (state.unanswered != null && state.error == null && state.task == null) {
+                item { UnansweredCard(stringResource(R.string.nav_nutri), onRetry = viewModel::retry) }
+            }
         }
         state.undo?.let { undo -> UndoBar(undo, onUndo = viewModel::undoChange, onGone = viewModel::dismissUndo) }
         // Not while the food profile is open: above the keyboard the chat bar covered its fields and buttons.
@@ -423,18 +444,18 @@ private fun TargetsCard(view: NutriDayView, today: LocalDate) {
     val fat = targets?.fatG ?: day?.fatG ?: 0
     val eaten = day?.let { NutriMeals.totals(it) }
     TriCard {
-        Row(verticalAlignment = Alignment.Bottom) {
-            // The title keeps its line; a long headline wraps beside it instead of squeezing it.
-            Text(dayTitle(view.date, today), style = MaterialTheme.typography.titleMedium, maxLines = 1, softWrap = false, modifier = Modifier.semantics { heading() })
-            Text(
-                text = day?.headline?.takeIf { it.isNotBlank() } ?: dayTypeLabel(targets?.dayType ?: day?.dayType ?: DayType.MODERATE),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TriColors.caution,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f).padding(start = 12.dp),
-            )
-        }
+        // The title and, under it, what kind of day it is: beside the title a long headline ran over three short lines.
+        Text(dayTitle(view.date, today), style = MaterialTheme.typography.titleMedium, maxLines = 1, softWrap = false, modifier = Modifier.semantics { heading() })
+        Text(
+            // NutriAI's headline was written for the day as it was: once the plan changes, the app's label says what the day is.
+            text = day?.headline?.takeIf { it.isNotBlank() && !view.outdated } ?: dayTypeLabel(targets?.dayType ?: day?.dayType ?: DayType.MODERATE),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = TriColors.caution,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp),
+        )
         Text(
             text = view.sessions.takeIf { it.isNotEmpty() }?.joinToString(" · ") { if (it.durationMin > 0) "${it.title} ${it.durationMin}′" else it.title }
                 ?: stringResource(R.string.nutri_rest),
@@ -599,6 +620,7 @@ private fun MealsCard(
                     meal = meal,
                     index = index,
                     flags = view.flags,
+                    supplements = view.supplements,
                     expanded = key in open,
                     busy = busy,
                     onToggle = { onToggle(key) },
@@ -630,6 +652,7 @@ private fun MealBlock(
     meal: MealSuggestion,
     index: Int,
     flags: Map<DishKey, BanHit>,
+    supplements: Set<DishKey>,
     expanded: Boolean,
     busy: Boolean,
     onToggle: () -> Unit,
@@ -684,7 +707,7 @@ private fun MealBlock(
             Column(Modifier.padding(bottom = 8.dp)) {
                 meal.dishes.forEachIndexed { d, dish ->
                     val key = DishKey(index, d)
-                    DishRow(dish, flags[key], busy, onChange = { onChange(key) }, onRestore = { onRestore(key) })
+                    DishRow(dish, flags[key], busy, supplement = key in supplements, onChange = { onChange(key) }, onRestore = { onRestore(key) })
                 }
             }
         }
@@ -693,7 +716,7 @@ private fun MealBlock(
 
 /** One dish: what and how much, who chose it, and «Cambia». */
 @Composable
-private fun DishRow(dish: Dish, hit: BanHit?, busy: Boolean, onChange: () -> Unit, onRestore: () -> Unit) {
+private fun DishRow(dish: Dish, hit: BanHit?, busy: Boolean, supplement: Boolean, onChange: () -> Unit, onRestore: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 36.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -713,6 +736,8 @@ private fun DishRow(dish: Dish, hit: BanHit?, busy: Boolean, onChange: () -> Uni
                     fontWeight = FontWeight.SemiBold,
                     color = TriColors.alert,
                 )
+                // A supplement is the athlete's, in the athlete's dose: it changes in the food profile, not here.
+                supplement -> NutriTag(stringResource(R.string.nutri_tag_supplement))
                 dish.origin == DishOrigin.ADDED -> NutriTag(stringResource(R.string.nutri_tag_added))
                 dish.origin.fixed -> NutriTag(stringResource(R.string.nutri_tag_yours))
             }
@@ -729,6 +754,7 @@ private fun DishRow(dish: Dish, hit: BanHit?, busy: Boolean, onChange: () -> Uni
                 )
             }
         }
+        if (supplement && hit == null) return@Row
         val color = if (hit != null) TriColors.alert else MaterialTheme.colorScheme.onSurface
         OutlinedButton(
             onClick = onChange,

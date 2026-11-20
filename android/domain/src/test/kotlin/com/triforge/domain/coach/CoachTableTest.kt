@@ -27,11 +27,16 @@ class CoachTableTest {
     @Test
     fun `zones are read and turned into the athlete's numbers`() {
         assertEquals("Z4", Zones.read(Sport.RUN, "z4 soglia"))
-        assertEquals("B2", Zones.read(Sport.SWIM, "zona B2"))
-        assertEquals(null, Zones.read(Sport.SWIM, "Z4"))
+        assertEquals("Z4", Zones.read(Sport.SWIM, "Z4"))
+        // The swim codes of older plans are read as zones.
+        assertEquals("Z4", Zones.read(Sport.SWIM, "zona B2"))
+        assertEquals("Z5", Zones.read(Sport.SWIM, "C3"))
+        assertEquals(null, Zones.read(Sport.RUN, "B2"))
+        assertEquals("Z2", Zones.current("A2"))
         assertEquals("223 – 257 W", Zones.target(Sport.BIKE, "Z4", profile))
         assertEquals("4:22 – 4:38 /km", Zones.target(Sport.RUN, "Z4", profile))
-        assertEquals("1:38 – 1:43 /100 m", Zones.target(Sport.SWIM, "B2", profile))
+        assertEquals("1:36 – 1:41 /100 m", Zones.target(Sport.SWIM, "Z4", profile))
+        assertEquals("1:47 – 1:54 /100 m", Zones.target(Sport.SWIM, "Z2", profile))
         assertEquals("152 – 167 bpm", Zones.target(Sport.BIKE, "Z4", profile.copy(ftpWatts = null)))
         assertEquals("", Zones.target(Sport.RUN, "Z2", AthleteProfile()))
         assertTrue(Zones.isHigh("C1") && Zones.isHigh("Z4") && !Zones.isHigh("B1"))
@@ -65,10 +70,10 @@ class CoachTableTest {
 
     @Test
     fun `a rep too long for its zone is split`() {
-        val swim = PlannedSession(Sport.SWIM, "Soglia", 0, steps = listOf(step(WorkoutBlock.MAIN, 4, "C1", metres = 300, recovery = 20)))
+        val swim = PlannedSession(Sport.SWIM, "Soglia", 0, steps = listOf(step(WorkoutBlock.MAIN, 4, "Z5", metres = 300, recovery = 20)))
         val split = Workouts.finalize(swim, profile).steps.single()
-        assertEquals(8, split.reps)
-        assertEquals(150, split.distanceM)
+        assertEquals(12, split.reps)
+        assertEquals(100, split.distanceM)
         assertTrue(split.note.isNotBlank())
         val bike = PlannedSession(Sport.BIKE, "Soglia", 0, steps = listOf(step(WorkoutBlock.MAIN, 1, "Z4", seconds = 2400)))
         val halves = Workouts.finalize(bike, profile).steps.single()
@@ -111,10 +116,10 @@ class CoachTableTest {
     private fun hardRun() = session(Sport.RUN, step(WorkoutBlock.WARMUP, 1, "Z2", seconds = 900), step(WorkoutBlock.MAIN, 5, "Z4", seconds = 240, recovery = 120))
     private fun hardBike() = session(Sport.BIKE, step(WorkoutBlock.WARMUP, 1, "Z2", seconds = 1200), step(WorkoutBlock.MAIN, 3, "Z4", seconds = 720, recovery = 240))
     private fun longBike() = session(Sport.BIKE, step(WorkoutBlock.MAIN, 1, "Z2", seconds = 150 * 60))
-    private fun swim(zone: String) = session(Sport.SWIM, step(WorkoutBlock.WARMUP, 1, "A1", metres = 400), step(WorkoutBlock.MAIN, 10, zone, metres = 100, recovery = 20))
+    private fun swim(zone: String) = session(Sport.SWIM, step(WorkoutBlock.WARMUP, 1, "Z1", metres = 400), step(WorkoutBlock.MAIN, 10, zone, metres = 100, recovery = 20))
 
     private fun proposals(runQualityDay: Long) = listOf(
-        SportProposal(Sport.SWIM, listOf(day(0, swim("B2")), day(1, swim("A2"))), note = "Soglia lunedì a gambe fresche."),
+        SportProposal(Sport.SWIM, listOf(day(0, swim("Z4")), day(1, swim("Z2"))), note = "Soglia lunedì a gambe fresche."),
         SportProposal(Sport.BIKE, listOf(day(2, hardBike()), day(5, longBike())), note = "Lungo sabato."),
         SportProposal(Sport.RUN, listOf(day(1, easyRun(40)), day(runQualityDay, hardRun()), day(6, easyRun(70)))),
     )

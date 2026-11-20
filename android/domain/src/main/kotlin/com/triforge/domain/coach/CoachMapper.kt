@@ -71,7 +71,8 @@ object CoachMapper {
             // A step is by distance or by time; with both, the distance is what the athlete counts.
             distanceM = metres,
             durationSec = seconds.takeIf { metres == null },
-            zone = text(fields["zone"], 20).uppercase(),
+            // A plan saved with the old swim codes (A1–C3) is read as zones.
+            zone = Zones.current(text(fields["zone"], 20).uppercase()),
             recoverySec = number(fields["recoverySec"])?.toInt()?.coerceIn(0, 900) ?: 0,
             text = text(fields["text"], 120),
             target = text(fields["target"], 60),

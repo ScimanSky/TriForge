@@ -141,6 +141,29 @@ fun SportTab(
             return@LazyColumn
         }
 
+        if (report.sessions == 0) {
+            // Nothing in the period chosen: one sentence says so, in place of a dashboard of zeros and dashes.
+            item(key = "empty-period") {
+                TriCard {
+                    Text(
+                        stringResource(R.string.sport_empty_period_title, stringResource(sport.labelRes()), weeks),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        stringResource(R.string.sport_empty_period_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+            }
+            item(key = "recent-title") { SectionLabel(stringResource(R.string.today_recent)) }
+            items(recent, key = { it.id }) { activity ->
+                ActivityRow(activity, onClick = { onOpenActivity(activity.id) })
+            }
+            return@LazyColumn
+        }
+
         item(key = "kpi") { KpiGrid(report) }
         item(key = "volume") { VolumeCard(report) }
         if (swim != null) {

@@ -7,11 +7,16 @@
     <string name="coach_consent_title">Attiva il coach AI</string>
     <string name="coach_consent_hint">Puoi spegnerlo quando vuoi da Impostazioni › Privacy e dati. Il Coach e NutriAI non vedono mai il tuo nome, la tua email o la tua foto.</string>
     <string name="coach_consent_action">Acconsento e attivo</string>
-    <string name="coach_error_network">Il coach non risponde. Controlla la connessione e riprova.</string>
+    <string name="coach_error_network">Non riesco a raggiungere %1$s: sembra mancare la connessione. Controllala e riprova.</string>
+    <string name="coach_error_timeout">%1$s non ha risposto in tempo. La tua connessione non c\'entra: riprova, di solito basta.</string>
+    <string name="coach_error_unavailable">In questo momento %1$s non è raggiungibile. Non dipende dalla tua connessione: riprova tra poco.</string>
     <string name="coach_error_busy">Troppe richieste in poco tempo. Riprova tra un minuto.</string>
     <string name="coach_error_not_enabled">Il servizio AI non è ancora attivo sul progetto. Riprova più tardi.</string>
-    <string name="coach_error_bad_answer">La risposta del coach non era utilizzabile. Riprova.</string>
-    <string name="coach_error_blocked">Il coach non può rispondere a questa richiesta. Prova a riformularla.</string>
+    <string name="coach_error_bad_answer">La risposta di %1$s non era utilizzabile. Riprova.</string>
+    <string name="coach_error_blocked">%1$s non può rispondere a questa richiesta. Prova a riformularla.</string>
+    <string name="coach_error_who_coaches">i coach</string>
+    <string name="coach_unanswered">%1$s non ha ancora risposto al tuo ultimo messaggio.</string>
+    <string name="coach_error_retry_message">Riprova: il tuo messaggio è già in chat, non serve riscriverlo.</string>
     <string name="coach_retry">Riprova</string>
     <string name="coach_close">Chiudi</string>
     <string name="coach_send">Invia</string>
@@ -35,7 +40,7 @@
     <string name="coach_no_plan">I coach non hanno ancora preparato questa settimana.</string>
     <string name="coach_plan_week">Prepara la settimana</string>
     <string name="coach_replan">Rifai la settimana</string>
-    <string name="coach_ask_change">Chiedi una modifica</string>
+    <string name="coach_ask_change">Chiedi un cambio</string>
     <string name="coach_sessions_one">1 seduta</string>
     <string name="coach_sessions_many">%1$d sedute</string>
     <string name="coach_week_available">%1$s su %2$s disponibili</string>
@@ -53,6 +58,8 @@
     <string name="coach_review_minutes">Fatti %1$d′ su %2$d′ previsti</string>
     <string name="coach_review_extra">Fuori programma</string>
     <string name="coach_review_missed">Non fatta</string>
+    <string name="coach_review_replaced">Sostituita</string>
+    <string name="coach_review_replaced_by">Sostituita da %1$s</string>
     <string name="coach_week_done_so_far">Fatte %1$s finora</string>
     <string name="coach_week_hint_own">Le sedute con il bordo sono tue: nessun coach le scrive.</string>
     <string name="coach_week_hint">Tocca una seduta per l\'allenamento completo. Ogni colore è un coach: nuoto azzurro, bici giallo, corsa viola.</string>
@@ -149,6 +156,8 @@
     <string name="nutri_changed_keep">Tienili così</string>
     <string name="nutri_changed_note">NutriAI non riscrive i pasti da solo: decidi tu.</string>
     <string name="nutri_why">Perché così</string>
+    <string name="nutri_why_app">L\'obiettivo di %1$s kcal lo calcola l\'app sul piano di adesso: metabolismo a riposo %2$s kcal, per 1,4 per la vita di ogni giorno, più %3$s kcal per le sedute del giorno.</string>
+    <string name="nutri_tag_supplement">Integratore · dose del tuo profilo</string>
     <string name="nutri_from_coach">Nota del Coach</string>
     <string name="nutri_composer">Chiedi a NutriAI…</string>
     <string name="nutri_dish_replaced">Piatto sostituito · %1$s</string>
@@ -162,7 +171,7 @@
     <string name="nutri_alternatives">Alternative simili</string>
     <string name="nutri_alternatives_by">Proposte da NutriAI</string>
     <string name="nutri_alternatives_loading">NutriAI cerca alternative…</string>
-    <string name="nutri_alternatives_none">NutriAI non ha trovato alternative adatte al tuo profilo. Scrivi tu il piatto qui sotto, oppure riprova.</string>
+    <string name="nutri_alternatives_none">Questa volta NutriAI non ha proposto alternative che rispettano il tuo profilo. Riprova, oppure scrivi tu il piatto qui sotto.</string>
     <string name="nutri_alternatives_more">Altre alternative</string>
     <string name="nutri_alternatives_no_more">NutriAI non ne ha altre da proporre.</string>
     <string name="nutri_typed_title">Oppure scrivi tu</string>

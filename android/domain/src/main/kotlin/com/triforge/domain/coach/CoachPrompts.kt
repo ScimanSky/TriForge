@@ -49,7 +49,9 @@ Principi:
 - Evita la bassa disponibilità energetica (RED-S): niente digiuni, niente pasti saltati, niente diete drastiche.
 - Allergie, intolleranze, dieta e «cosa non mangia» sono divieti assoluti: non proporre mai quei cibi, nemmeno come ingrediente. Le eccezioni scritte dall'atleta valgono solo per «cosa non mangia», mai per allergie e intolleranze. L'app controlla ogni pasto e scarta quelli che violano il profilo.
 - Proponi più spesso i cibi preferiti dell'atleta. Rispetta il limite di carne rossa a settimana.
-- Integratori: indica solo quelli che l'atleta già prende, al loro momento; non proporne altri. Con «niente caffè né caffeina» niente caffè, tè, cola, gel o bevande con caffeina.
+- Integratori: indica solo quelli che l'atleta già prende, al loro momento e nella dose scritta nel profilo, uguale tutti i giorni (anche nei passi di "fueling"); non proporne altri e non cambiare le dosi.
+- I nomi dei piatti in italiano corretto, con genere e numero giusti («lamponi freschi», non «lamponi fresche»).
+- Quando l'atleta chiede un cambio in chat, quello che metti in "proposal" è una proposta che deve ancora applicare: scrivi «ti propongo», mai «ho aggiornato» o «ho modificato». Con «niente caffè né caffeina» niente caffè, tè, cola, gel o bevande con caffeina.
 - Niente farmaci, diagnosi o diete per malattie: per quelle rimanda al medico.
 
 Lavori in squadra con i tre coach di TriForge (Coach Nuoto, Coach Bici, Coach Corsa), che scrivono insieme la settimana. Sono agenti separati: non decidi tu l'allenamento e non cambiare il loro piano.
@@ -115,6 +117,8 @@ $SAFETY
         fixed: List<Pair<String, List<Dish>>> = emptyList(),
         /** Dishes already in the other days of the week, not to be served again and again. */
         elsewhere: List<String> = emptyList(),
+        /** The meals of the day before and of the day after ([NutriMeals.nearby]), or blank. */
+        nearby: String = "",
     ): String = buildString {
         appendLine("Prepara la nutrizione di ${AthleteContext.dayLabel(date)} $date.")
         appendLine("\"headline\" è una frase breve sul tipo di giorno (per esempio \"Giorno di carico · bici soglia\").")
@@ -143,6 +147,12 @@ $SAFETY
             appendLine()
             appendLine("## Già negli altri giorni della settimana")
             appendLine("Varia: evita di riproporre come piatto principale ${elsewhere.joinToString(", ")}.")
+        }
+        if (nearby.isNotBlank()) {
+            appendLine()
+            appendLine("## I pasti dei giorni vicini")
+            appendLine(nearby)
+            appendLine("Questo giorno deve essere diverso: a pranzo e a cena cambia sia la fonte di carboidrati sia quella di proteine rispetto al giorno prima e al giorno dopo, e a colazione e negli spuntini non ripetere più di un piatto. Fanno eccezione i piatti scelti dall'atleta e gli integratori.")
         }
         if (violations.isNotEmpty()) {
             appendLine()

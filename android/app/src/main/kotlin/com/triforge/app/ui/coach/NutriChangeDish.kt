@@ -127,7 +127,7 @@ fun NutriChangeDish(
                     color = Bright,
                 )
             }
-            change.error?.let { ErrorCard(it, onRetry = null, onDismiss = viewModel::clearChangeError) }
+            change.error?.let { ErrorCard(it, who = stringResource(R.string.nav_nutri), onRetry = null, onDismiss = viewModel::clearChangeError) }
             Alternatives(change, profile, selectable = ready == null && !change.saving, viewModel = viewModel)
             TriCard {
                 Text(stringResource(R.string.nutri_typed_title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })

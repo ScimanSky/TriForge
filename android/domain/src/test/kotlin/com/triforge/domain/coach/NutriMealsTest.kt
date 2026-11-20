@@ -341,4 +341,38 @@ class NutriMealsTest {
         assertTrue(NutriMeals.liked(spaghetti, profile))
         assertFalse(NutriMeals.liked(chicken, profile))
     }
+
+    // ---- Supplements and variety -------------------------------------------------
+
+    @Test
+    fun `a supplement keeps the dose of the food profile`() {
+        val profile = NutritionProfile(supplements = listOf(Supplement("Creatina", "5 g"), Supplement("Vitamina D", "1 capsula"), Supplement("Magnesio")))
+        val creatine = Dish("Creatina monoidrato", 3.0, DishUnit.GRAM, 0, 0.0, 0.0, 0.0)
+        val vitamin = Dish("Vitamina D", 2.0, DishUnit.GRAM, 0, 0.0, 0.0, 0.0)
+        val magnesium = Dish("Magnesio", 2.0, DishUnit.GRAM, 0, 0.0, 0.0, 0.0)
+        assertEquals("Creatina", NutriMeals.supplementOf(creatine, profile)?.name)
+        assertNull(NutriMeals.supplementOf(chicken, profile))
+        assertNull(NutriMeals.supplementOf(creatine, null))
+        val fixed = NutriMeals.fixSupplements(day(lunch(chicken, creatine, vitamin, magnesium)), profile).meals.single().dishes
+        assertEquals(chicken, fixed[0])
+        assertEquals(5.0 to DishUnit.GRAM, fixed[1].quantity to fixed[1].unit)
+        assertEquals(1.0 to DishUnit.PIECE, fixed[2].quantity to fixed[2].unit)
+        assertEquals(magnesium, fixed[3], "no dose in the profile: nothing to set")
+        assertEquals(0.5 to DishUnit.GRAM, NutriMeals.dose("500 mg"))
+        assertEquals(2.5 to DishUnit.GRAM, NutriMeals.dose("2,5 g al giorno"))
+        assertNull(NutriMeals.dose("un misurino"))
+    }
+
+    @Test
+    fun `the days next to the one being written are told to NutriAI`() {
+        val date = LocalDate.of(2026, 11, 24)
+        val before = monday.copy(date = date.minusDays(1))
+        val after = day(lunch(minestrone, bread)).copy(date = date.plusDays(1))
+        val far = monday.copy(date = date.plusDays(3))
+        val text = NutriMeals.nearby(listOf(after, far, before), date)
+        assertEquals(2, text.lines().size)
+        assertTrue(text.lines()[0].startsWith("Il giorno prima: Pranzo: Spaghetti al pomodoro"))
+        assertTrue(text.lines()[1].startsWith("Il giorno dopo: Pranzo: Minestrone"))
+        assertEquals("", NutriMeals.nearby(listOf(far), date))
+    }
 }

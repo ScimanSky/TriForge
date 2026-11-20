@@ -215,15 +215,53 @@ defaticamento, ciascuno con ripetute, distanza o tempo, zona e recupero. Come
 in SwimForge, il modello sceglie e spiega, l'app fa i conti (`Workouts`,
 `Zones`):
 
-- le zone sono A1–C3 per il nuoto (dal passo soglia, CSS) e Z1–Z5 per bici
-  (dall'FTP) e corsa (dal passo soglia); senza soglia, bici e corsa passano
-  ai battiti dalla frequenza massima;
+- le zone sono Z1–Z5 per tutti gli sport: nuoto dal passo soglia (CSS, con i
+  confini di `SwimAnalysis.ZONE_SPEED_BOUNDS`), bici dall'FTP, corsa dal passo
+  soglia; senza soglia, bici e corsa passano ai battiti dalla frequenza
+  massima. I vecchi nomi del nuoto (A1–C3) nei piani già salvati vengono
+  tradotti alla lettura (`Zones.read`);
+- i ritmi di ogni zona sono scritti nei dati dell'atleta («Zone dell'atleta»):
+  in chat il coach cita solo quelli, così chat e sedute dicono gli stessi
+  numeri;
 - una ripetuta troppo lunga per la sua zona viene spezzata;
 - passo, watt o battiti di ogni passo, durata, distanza, tempo per zona e
   intensità della seduta li calcola l'app: al modello non vengono chiesti;
 - la regia controlla anche il tempo in zona alta (soglia e oltre) per sport.
 
 Il piano resta nel documento `coaching/coach`.
+
+### La soglia del nuoto sotto controllo
+
+`SwimThreshold.check` confronta la soglia del profilo con le nuotate in vasca
+delle ultime tre settimane: se più di metà dei metri esce a ritmo di soglia e
+oltre, o se una nuotata intera di mezz'ora e più è stata più veloce della
+soglia, la soglia è troppo lenta e zone, carico e forma sono gonfiati. L'app
+propone un valore: dai migliori tempi su due distanze quando ci sono,
+altrimenti dal passo abituale delle sedute, dal lato prudente (× 0,95). La
+soglia del profilo non viene mai cambiata di nascosto: i coach lo leggono nei
+dati dell'atleta («Soglia del nuoto da verificare») e propongono il test
+400 + 200. Le ripetute con un passo impossibile (vasche contate male
+dall'orologio) sono marcate «dubbie» e restano fuori da migliori tempi, zone e
+stima.
+
+### La regia non scrive nel passato
+
+Il giorno da cui si pianifica è `CoachTable.planningDay`: oggi, oppure domani
+quando la giornata è finita (`DAY_OVER`, le 21). `merge`, `revise` e `realign`
+non toccano i giorni prima, e una seduta fissa dell'atleta il cui orario è già
+passato non viene più scritta su oggi. Quando l'atleta cambia «Giorni, orari e
+gara», `realign` riallinea la settimana senza richiamare i modelli: tolte le
+sedute di uno sport ora in pausa o seguito dall'allenatore, spostate le sedute
+fisse nei nuovi giorni, e la regia sistema quello che ne consegue.
+
+### Quando un modello non risponde
+
+Ogni chiamata ha un'attesa massima (`AiWait`: 20 secondi per un piatto, 45 per
+una risposta in chat, 90 per una settimana o una giornata di pasti) e un
+numero di tentativi (`geminiJson`). Se non arriva una risposta valida, l'app lo dice con il motivo
+(rete, attesa scaduta, servizio occupato, risposta non leggibile) e un tasto
+«Riprova» che rifà la stessa richiesta: in chat il messaggio dell'atleta
+resta, e nessuna schermata rimane ferma su un caricamento.
 
 ### Una chat per coach
 

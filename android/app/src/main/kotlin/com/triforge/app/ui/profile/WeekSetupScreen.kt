@@ -67,6 +67,7 @@ import com.triforge.app.ui.common.TriTextField
 import com.triforge.app.ui.theme.SportColors
 import com.triforge.app.ui.theme.TriColors
 import com.triforge.app.ui.theme.numberStyle
+import com.triforge.domain.Formatters
 import com.triforge.domain.Activity
 import com.triforge.domain.AthleteProfile
 import com.triforge.domain.ProfileText
@@ -396,7 +397,7 @@ private fun parseTime(text: String): LocalTime? {
 private fun hoursText(hours: Double): String =
     if (hours % 1.0 == 0.0) hours.toInt().toString() else hours.toString().replace('.', ',')
 
-private fun rideText(minutes: Int): String = "${minutes / 60}h" + "%02d".format(minutes % 60)
+private fun rideText(minutes: Int): String = Formatters.duration(minutes * 60L)
 
 @Composable
 private fun sportName(sport: Sport): String = stringResource(

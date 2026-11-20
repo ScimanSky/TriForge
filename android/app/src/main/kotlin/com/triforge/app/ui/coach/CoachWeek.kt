@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -119,13 +120,24 @@ fun WeekSummary(plan: WeekPlan, review: WeekReview? = null, availability: Traini
     val end = plan.weekStart.plusDays(6)
     TriCard {
         Row(verticalAlignment = Alignment.Bottom) {
+            // The dates keep their line whole; a long phase wraps beside them, never the month in two.
             Text(
                 "${plan.weekStart.dayOfMonth} – ${end.format(dayMonth)}",
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f).semantics { heading() },
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.semantics { heading() },
             )
             if (plan.phase.isNotBlank()) {
-                Text(plan.phase, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    plan.phase,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(start = 12.dp),
+                )
             }
         }
         if (minutes > 0) {
@@ -337,6 +349,8 @@ private fun ReviewRow(item: ReviewedSession, profile: AthleteProfile, time: Loca
         ReviewState.EXTRA -> stringResource(R.string.coach_review_extra)
         ReviewState.RECORD -> ""
         ReviewState.MISSED -> base
+        ReviewState.REPLACED ->
+            stringResource(R.string.coach_review_replaced_by, activity?.let { it.name.ifBlank { stringResource(it.kindLabelRes()) } }.orEmpty())
         ReviewState.TODO ->
             if (own && time != null) "$base · ${time.format(clockTime)}" else base
     }
@@ -370,6 +384,7 @@ private fun ReviewRow(item: ReviewedSession, profile: AthleteProfile, time: Loca
             }
         }
         when {
+            item.state == ReviewState.REPLACED -> StatePill(stringResource(R.string.coach_review_replaced))
             recorded -> StatePill(stringResource(R.string.coach_done))
             item.state == ReviewState.MISSED -> StatePill(stringResource(R.string.coach_review_missed))
             session != null && TriRegia.isHard(session) -> HardPill()

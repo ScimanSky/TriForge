@@ -16,11 +16,34 @@ data class ExerciseTotal(
 /** What the gym sessions say when the watch counted sets, repetitions and weights. */
 object StrengthStats {
 
+    /**
+     * The exercises of one session, one line for each name: the watch gives
+     * the variants of an exercise (two kinds of row, say) as separate
+     * entries, and the athlete reads them as the same thing done twice.
+     */
+    fun merged(exercises: List<ExerciseSummary>): List<ExerciseSummary> =
+        exercises.groupBy { exerciseName(it.category) }.values.map { same ->
+            if (same.size == 1) same.single()
+            else ExerciseSummary(
+                category = same.first().category,
+                sets = same.sumOf { it.sets },
+                reps = same.mapNotNull { it.reps }.takeIf { it.isNotEmpty() }?.sum(),
+                volumeKg = same.mapNotNull { it.volumeKg }.takeIf { it.isNotEmpty() }?.sum(),
+            )
+        }
+
+    /** The kilograms on the bar for one repetition, on average: the weight moved over the repetitions. */
+    fun kgPerRep(volumeKg: Double?, reps: Int?): Double? {
+        val volume = volumeKg?.takeIf { it > 0 } ?: return null
+        val count = reps?.takeIf { it > 0 } ?: return null
+        return volume / count
+    }
+
     /** The exercises of the gym sessions from [since] on, the most frequent first. */
     fun frequentExercises(activities: List<Activity>, since: Instant): List<ExerciseTotal> =
         activities
             .filter { it.sport == Sport.STRENGTH && !it.startTime.isBefore(since) }
-            .flatMap { session -> session.exercises.groupBy { it.category }.map { (category, sets) -> category to sets } }
+            .flatMap { session -> merged(session.exercises).groupBy { it.category }.map { (category, sets) -> category to sets } }
             .groupBy({ it.first }, { it.second })
             .map { (category, sessions) ->
                 val all = sessions.flatten()
@@ -67,7 +90,7 @@ object StrengthStats {
         "total_body" to "Corpo intero",
         "triceps_extension" to "Estensioni dei tricipiti",
         "warm_up" to "Riscaldamento",
-        "unknown" to "Altro esercizio",
+        "unknown" to "Esercizio non riconosciuto",
     )
 
     /** The exercise in Italian; a category the app does not know keeps the watch's name, tidied. */

@@ -257,6 +257,13 @@ private fun ComparisonCard(activity: Activity, history: List<Activity>) {
             invert = !isSpeed,
             modifier = Modifier.padding(top = 14.dp),
         )
+        // Which way is better: a pace chart is drawn upside down, and without an axis nobody can tell.
+        Text(
+            text = stringResource(if (isSpeed) R.string.detail_compare_direction_speed else R.string.detail_compare_direction_pace),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()

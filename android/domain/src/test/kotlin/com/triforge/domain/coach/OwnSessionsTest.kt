@@ -15,6 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -278,6 +279,83 @@ class OwnSessionsTest {
         assertEquals(week, CoachTable.revise(week, SportProposal(Sport.SWIM, listOf(day(1, PlannedSession(Sport.SWIM, "Tecnica", 45)))), monday, budget, profile, withTrainer))
     }
 
+    // ---- Nothing in the past, nothing unannounced ----------------------------
+
+    @Test
+    fun `once the evening is gone the week is planned from tomorrow`() {
+        assertEquals(monday, CoachTable.planningDay(monday, LocalTime.of(20, 59)))
+        assertEquals(monday.plusDays(1), CoachTable.planningDay(monday, LocalTime.of(21, 0)))
+        assertEquals(monday.plusDays(1), CoachTable.planningDay(monday, LocalTime.of(23, 5)))
+    }
+
+    @Test
+    fun `the gym is not put on a day whose gym time is already gone`() {
+        val budget = budget(coached)
+        val late = CoachTable.merge(monday, monday, emptyList(), emptyList(), budget, profile, coached, now = LocalTime.of(19, 0))
+        assertTrue(late.days[0].sessions.none { it.sport == Sport.STRENGTH }, "it is 19:00 and the gym was at 18:30")
+        assertEquals(1, late.days[2].sessions.count { it.sport == Sport.STRENGTH }, "Wednesday is still to come")
+        val early = CoachTable.merge(monday, monday, emptyList(), emptyList(), budget, profile, coached, now = LocalTime.of(12, 0))
+        assertEquals(1, early.days[0].sessions.count { it.sport == Sport.STRENGTH })
+        // A gym session that was already on today's calendar stays there.
+        val kept = CoachTable.merge(monday, monday, emptyList(), emptyList(), budget, profile, coached, now = LocalTime.of(19, 0), keptToday = early.days[0].sessions)
+        assertEquals(1, kept.days[0].sessions.count { it.sport == Sport.STRENGTH })
+    }
+
+    @Test
+    fun `accepting a change says everything it does to the week`() {
+        val budget = budget(coached)
+        val week = CoachTable.merge(monday, monday, emptyList(), listOf(SportProposal(Sport.RUN, listOf(day(1, easyRun(40))))), budget, profile, coached).copy(rounds = 1)
+        val shorter = SportProposal(Sport.RUN, listOf(day(1, easyRun(30))), note = "Più corta.")
+        val revision = CoachTable.revision(week, shorter, monday, budget, profile, coached)
+
+        val change = revision.changes.single()
+        assertEquals(PlanChange.Kind.CHANGED, change.kind)
+        assertEquals(40 to 30, change.before!!.durationMin to change.after!!.durationMin)
+        assertTrue(revision.sideEffects(Sport.RUN).isEmpty(), "nothing else moves")
+        assertTrue(revision.notes.isEmpty())
+        assertEquals(revision.plan, CoachTable.revise(week, shorter, monday, budget, profile, coached))
+    }
+
+    @Test
+    fun `a change accepted after the profile changed lists what the profile takes away`() {
+        // The week was written with bike and run; then the athlete put the run in pause.
+        val before = coached.copy(paused = emptySet())
+        val week = CoachTable.merge(
+            monday, monday, emptyList(),
+            listOf(SportProposal(Sport.RUN, listOf(day(1, easyRun(40)))), SportProposal(Sport.SWIM, listOf(day(5, PlannedSession(Sport.SWIM, "Tecnica", 45))))),
+            budget(before), profile, before,
+        ).copy(rounds = 1)
+        val paused = before.copy(paused = setOf(Sport.RUN, Sport.BIKE))
+        val longer = SportProposal(Sport.SWIM, listOf(day(5, PlannedSession(Sport.SWIM, "Tecnica e fondo", 60))))
+        val revision = CoachTable.revision(week, longer, monday, budget(paused), profile, paused)
+
+        val side = revision.sideEffects(Sport.SWIM)
+        assertEquals(listOf(PlanChange.Kind.REMOVED to Sport.RUN), side.map { it.kind to it.sport })
+        assertTrue(revision.notes.any { it.contains("corsa") && it.contains("pausa") }, revision.notes.toString())
+        assertTrue(revision.plan.table.any { it.voice == TableVoice.REGIA && it.text.contains("pausa") })
+    }
+
+    @Test
+    fun `changing the profile brings the week in line without any coach`() {
+        val before = coached.copy(paused = emptySet(), gym = GymSlot())
+        val week = CoachTable.merge(
+            monday, monday, emptyList(),
+            listOf(SportProposal(Sport.RUN, listOf(day(1, easyRun(40)))), SportProposal(Sport.SWIM, listOf(day(5, PlannedSession(Sport.SWIM, "Tecnica", 45))))),
+            budget(before), profile, before,
+        ).copy(rounds = 1)
+        assertNull(CoachTable.realign(week, monday, budget(before), profile, before), "nothing changed, nothing to do")
+
+        val now = coached.copy(paused = setOf(Sport.RUN, Sport.BIKE))
+        val revision = CoachTable.realign(week, monday, budget(now), profile, now, now = LocalTime.of(19, 0))
+        assertNotNull(revision)
+        assertTrue(revision.plan.days.flatMap { it.sessions }.none { it.sport == Sport.RUN })
+        assertEquals(45, revision.plan.days[5].sessions.single { it.sport == Sport.SWIM }.durationMin, "the swim coach's session stays as written")
+        // The gym comes in on its days still to come, not on today at 19:00.
+        assertEquals(listOf(2, 4), revision.plan.days.indices.filter { i -> revision.plan.days[i].sessions.any { it.sport == Sport.STRENGTH } })
+        assertTrue(revision.notes.any { it.contains("corsa") } && revision.notes.any { it.contains("sedute fisse") }, revision.notes.toString())
+        assertNull(CoachTable.realign(revision.plan, monday, budget(now), profile, now, now = LocalTime.of(19, 0)), "once in line it stays so")
+    }
+
     // ---- Planned and done ----------------------------------------------------
 
     private val week = CoachTable.merge(monday, monday, emptyList(), listOf(SportProposal(Sport.RUN, listOf(day(1, easyRun(40))))), budget(withTrainer), profile, withTrainer)
@@ -344,6 +422,27 @@ class OwnSessionsTest {
         val old = late.copy(plannedFrom = null)
         assertEquals(listOf(ReviewState.RECORD), WeekReview.of(old, activities, wednesday, zone).days[0].items.map { it.state })
         assertEquals(listOf(ReviewState.EXTRA), WeekReview.of(old, activities, wednesday, zone).days[1].items.map { it.state }, "nothing was copied there: it reads as a planned rest day")
+    }
+
+    @Test
+    fun `a session missed on a day with another training reads as replaced`() {
+        val wednesday = monday.plusDays(2)
+        val done = listOf(
+            // Tuesday: no run, but an hour and a half in the gym, and a short walk.
+            activity(Sport.STRENGTH, monday.plusDays(1), 88),
+            activity(Sport.OTHER, monday.plusDays(1), 25, OtherKind.WALK, hour = 18),
+        )
+        val tuesday = WeekReview.of(week, done, wednesday, zone).days[1]
+        assertEquals(listOf(ReviewState.REPLACED, ReviewState.EXTRA), tuesday.items.map { it.state })
+        assertEquals(Sport.STRENGTH, tuesday.items[0].activity?.sport)
+        assertEquals(Sport.RUN, tuesday.items[0].sport, "the line stays the planned run")
+        assertFalse(tuesday.items[0].differs)
+        assertTrue("non fatta, al suo posto palestra, 88 min" in WeekReview.of(week, done, wednesday, zone).describe(wednesday))
+        // A walk alone does not stand for a run, and today's session is still to do.
+        val walked = WeekReview.of(week, done.drop(1), wednesday, zone).days[1]
+        assertEquals(listOf(ReviewState.MISSED, ReviewState.EXTRA), walked.items.map { it.state })
+        val today = WeekReview.of(week, done, monday.plusDays(1), zone).days[1]
+        assertEquals(listOf(ReviewState.TODO, ReviewState.EXTRA, ReviewState.EXTRA), today.items.map { it.state })
     }
 
     @Test

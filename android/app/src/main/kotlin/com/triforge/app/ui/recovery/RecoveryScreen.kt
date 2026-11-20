@@ -38,6 +38,7 @@ import com.triforge.app.ui.theme.numberStyle
 import com.triforge.domain.DailyWellness
 import com.triforge.domain.LoadState
 import com.triforge.domain.MarkerBand
+import com.triforge.domain.RecoveryComponent
 import com.triforge.domain.RecoveryDay
 import com.triforge.domain.RecoveryPhase
 import com.triforge.domain.RecoveryReport
@@ -75,7 +76,7 @@ fun RecoveryScreen(
             }
             val report = state.report
             ScoreCard(report, showCheckIn = state.todayCheckIn == null, onCheckIn = onCheckIn)
-            if (report.today.score != null) WhyCard(report.today)
+            if (report.today.score != null) WhyCard(report.today, checkedIn = state.todayCheckIn != null)
             if (report.history.any { it.smoothedScore != null }) TrendCard(report.history)
             if (report.hrvBand.any { it.value != null }) {
                 BandCard(
@@ -180,7 +181,7 @@ private fun deviationColor(value: Double): Color = when {
 
 /** What pushed the score: each part's deviation and the points it adds. */
 @Composable
-private fun WhyCard(today: RecoveryDay) {
+private fun WhyCard(today: RecoveryDay, checkedIn: Boolean) {
     CollapsibleCard(title = stringResource(R.string.recovery_why_title), initiallyExpanded = true) {
         today.contributions.entries.sortedByDescending { it.value }.forEach { (part, points) ->
             val deviation = today.deviations[part] ?: 0.0
@@ -209,7 +210,8 @@ private fun WhyCard(today: RecoveryDay) {
             )
             today.missing.sortedByDescending { it.weight }.forEach { part ->
                 Text(
-                    text = "• " + stringResource(part.missingRes()),
+                    // With today's check-in done there is nothing to do: the signal needs more mornings.
+                    text = "• " + stringResource(if (part == RecoveryComponent.CHECK_IN && checkedIn) R.string.recovery_missing_check_in_done else part.missingRes()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 2.dp),
