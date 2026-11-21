@@ -61,6 +61,13 @@
     <string name="coach_review_replaced">Sostituita</string>
     <string name="coach_review_replaced_by">Sostituita da %1$s</string>
     <string name="coach_week_done_so_far">Fatte %1$s finora</string>
+    <string name="coach_past_days">Giorni passati</string>
+    <string name="coach_past_done_one">1 fatta</string>
+    <string name="coach_past_done_many">%1$d fatte</string>
+    <string name="coach_past_replaced_one">1 sostituita</string>
+    <string name="coach_past_replaced_many">%1$d sostituite</string>
+    <string name="coach_past_missed_one">1 non fatta</string>
+    <string name="coach_past_missed_many">%1$d non fatte</string>
     <string name="coach_week_hint_own">Le sedute con il bordo sono tue: nessun coach le scrive.</string>
     <string name="coach_week_hint">Tocca una seduta per l\'allenamento completo. Ogni colore è un coach: nuoto azzurro, bici giallo, corsa viola.</string>
     <string name="coach_table_title">Come si sono accordati</string>
