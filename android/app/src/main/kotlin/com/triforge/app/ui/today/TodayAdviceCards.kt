@@ -1,7 +1,6 @@
 package com.triforge.app.ui.today
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,69 +48,82 @@ import com.triforge.domain.CssCheck
 import com.triforge.domain.Formatters
 import com.triforge.domain.Sport
 import com.triforge.domain.SwimThreshold
+import com.triforge.domain.coach.DayLeft
 import com.triforge.domain.coach.KeyMeal
 import com.triforge.domain.coach.PlannedSession
 import com.triforge.domain.coach.TodayAdvice
 import com.triforge.domain.coach.TodayCard
+import java.time.LocalTime
 import kotlin.math.roundToInt
 
 /**
- * Board 3c, «Oggi tocca a»: what to do today in one card. One sentence that
- * puts recovery and form together, the session with its main set, and the
- * meal that counts. Once today is done or free it is about tomorrow.
+ * Board 3d: what to do today, in a card no bigger than what it has to say.
+ * Today first: the sessions still to do, or in a word how the day stands
+ * («Giorno libero», «Allenamento fatto»), and one sentence that puts
+ * recovery and form together. Tomorrow comes under its own label, in a line
+ * or in full once today has nothing left, so the two days are never mixed.
  */
 @Composable
 internal fun TodayAdviceCard(card: TodayCard, profile: AthleteProfile, onOpenCoach: () -> Unit, onOpenNutri: () -> Unit) {
-    val shape = RoundedCornerShape(20.dp)
-    val palette = CoachPalette.Coach
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(palette.highlight)
-            .border(1.dp, palette.highlightBorder, shape)
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                stringResource(if (card.tomorrow) R.string.today_card_tomorrow else R.string.today_card_today).uppercase(),
-                style = MaterialTheme.typography.labelMedium,
-                color = palette.softText,
-                modifier = Modifier.weight(1f).semantics { heading() },
-            )
-            card.time?.let { time ->
-                Text(
-                    stringResource(R.string.today_card_at, "%d:%02d".format(time.hour, time.minute)),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+    TriCard(padding = 16.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                DayLabel(R.string.today_card_today, card.time)
+                val title = when (card.left) {
+                    DayLeft.FREE -> R.string.today_card_free
+                    DayLeft.DONE -> R.string.today_card_done
+                    // With a session to do the rows say it; with one not known as done, the line below does.
+                    DayLeft.SESSION, DayLeft.OPEN -> null
+                }
+                title?.let { Text(stringResource(it), style = MaterialTheme.typography.titleSmall) }
             }
+            card.sessions.forEach { session -> SessionRow(session, profile, mainSet = true, onOpen = onOpenCoach) }
+            // A session of today whose time is gone: the card does not skip it in silence.
+            card.earlier?.let { earlier -> Note(earlier) }
+            if (card.sentence.isNotBlank()) {
+                Text(card.sentence, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD5DAE1))
+            }
+            if (card.sessions.isNotEmpty()) card.meal?.let { MealRow(it, onOpenNutri) }
+            if (card.tomorrow.isNotEmpty()) {
+                HorizontalDivider(color = TriColors.border)
+                DayLabel(R.string.today_card_tomorrow, card.tomorrowTime)
+                card.tomorrow.forEach { session -> SessionRow(session, profile, mainSet = false, onOpen = onOpenCoach) }
+                card.meal?.let { MealRow(it, onOpenNutri) }
+            }
+            card.next?.let { next -> Note(next) }
         }
-        // A session of today whose time is gone comes before tomorrow: the card does not skip it in silence.
-        card.earlier?.let { earlier ->
-            Text(earlier, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFE6E9EE))
-        }
-        if (card.sentence.isNotBlank()) {
-            Text(card.sentence, style = MaterialTheme.typography.bodyLarge, color = Color(0xFFE6E9EE))
-        }
-        if (card.sessions.isEmpty()) {
+    }
+}
+
+/** «OGGI», «DOMANI»: the day a part of the card is about, with the usual time of its first session. */
+@Composable
+private fun DayLabel(day: Int, time: LocalTime?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            stringResource(day).uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = CoachPalette.Coach.softText,
+            modifier = Modifier.weight(1f).semantics { heading() },
+        )
+        time?.let {
             Text(
-                stringResource(if (card.tomorrow) R.string.today_card_free_tomorrow else R.string.today_card_free),
-                style = MaterialTheme.typography.bodyMedium,
+                stringResource(R.string.today_card_at, "%d:%02d".format(it.hour, it.minute)),
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-        card.sessions.forEach { session -> SessionRow(session, profile, onOpenCoach) }
-        card.meal?.let { MealRow(it, onOpenNutri) }
-        card.next?.let { next ->
-            Text(next, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun SessionRow(session: PlannedSession, profile: AthleteProfile, onOpen: () -> Unit) {
+private fun Note(text: String) {
+    Text(text, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** A session in two or three lines; the main set only for today's, tomorrow's stays short. */
+@Composable
+private fun SessionRow(session: PlannedSession, profile: AthleteProfile, mainSet: Boolean, onOpen: () -> Unit) {
     val sport = session.sport ?: return
     InnerRow(onOpen) {
         SportIconBox(sport)
@@ -118,8 +131,8 @@ private fun SessionRow(session: PlannedSession, profile: AthleteProfile, onOpen:
             Text(session.title, style = MaterialTheme.typography.titleSmall)
             val line = TodayAdvice.summary(session, profile) + if (session.own) " · " + stringResource(R.string.today_card_own) else ""
             Text(line, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TodayAdvice.mainSet(session, profile)?.let { set ->
-                Text(stringResource(R.string.today_card_main_set, set), fontSize = 13.sp, lineHeight = 18.sp, color = Color(0xFFD5DAE1))
+            if (mainSet) TodayAdvice.mainSet(session, profile)?.let { set ->
+                Text(stringResource(R.string.today_card_main_set, set), fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Chevron()
@@ -133,26 +146,23 @@ private fun MealRow(meal: KeyMeal, onOpen: () -> Unit) {
             Icon(TriIcons.Nutrition, contentDescription = null, tint = CoachPalette.Nutri.softText, modifier = Modifier.size(22.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(stringResource(R.string.today_card_meal), fontSize = 12.sp, color = CoachPalette.Nutri.softText)
+            Text(stringResource(R.string.today_card_meal), fontSize = 12.sp, lineHeight = 16.sp, color = CoachPalette.Nutri.softText)
             Text(meal.title, style = MaterialTheme.typography.titleSmall)
-            Text(meal.text, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(meal.text, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Chevron()
     }
 }
 
+/** A row of the card that opens something: flat, with no box of its own, so the card stays light. */
 @Composable
 private fun InnerRow(onOpen: () -> Unit, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 64.dp)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, TriColors.border, shape)
-            .clickable(role = Role.Button, onClick = onOpen)
-            .padding(12.dp),
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(role = Role.Button, onClick = onOpen),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         content = content,

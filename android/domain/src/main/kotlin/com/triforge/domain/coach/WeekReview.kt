@@ -112,7 +112,7 @@ data class WeekReview(val days: List<ReviewedDay>) {
             plan.plannedFrom?.let { !day.date.isBefore(it) } ?: day.sessions.none { it.focus == CoachTable.DONE }
 
         /** Whether [activity] is a training that can stand for a planned one: not a walk, not a stretch. */
-        private fun isTraining(activity: Activity): Boolean = activity.durationSec >= MIN_REPLACEMENT_SEC &&
+        internal fun isTraining(activity: Activity): Boolean = activity.durationSec >= MIN_REPLACEMENT_SEC &&
             (activity.sport != Sport.OTHER || activity.kind == OtherKind.CARDIO || activity.kind == OtherKind.HIKE)
 
         private fun review(day: PlannedDay, recorded: List<Activity>, covered: Boolean, gone: Boolean): List<ReviewedSession> {

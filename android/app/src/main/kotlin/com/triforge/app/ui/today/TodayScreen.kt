@@ -127,7 +127,7 @@ fun TodayScreen(
     modifier: Modifier = Modifier,
     avatar: ByteArray? = null,
     onConnectSource: () -> Unit = onOpenProfile,
-    /** What the coaches have for today: «Oggi tocca a» and the swim threshold to check. */
+    /** What the coaches have for today: the card of what to do and the swim threshold to check. */
     advice: TodayUi = TodayUi(),
     profile: AthleteProfile = AthleteProfile(),
     swimMode: SportMode = SportMode.AI,

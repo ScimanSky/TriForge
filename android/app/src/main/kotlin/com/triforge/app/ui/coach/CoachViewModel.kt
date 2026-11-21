@@ -82,7 +82,7 @@ data class ProposalView(
 
 /** What Oggi shows of the coaches' work. */
 data class TodayUi(
-    /** «Oggi tocca a»; null without a week. */
+    /** The card on top of Oggi, what to do today; null without a week. */
     val card: TodayCard? = null,
     /**
      * The swim threshold does not fit the swims: while it is so, load and
@@ -205,7 +205,7 @@ class CoachViewModel(
         val today: TodayUi,
     )
 
-    /** Oggi's card follows the clock: a session whose time is gone gives way to tomorrow's. */
+    /** Oggi's card follows the clock: once a session's time is gone, tomorrow's are shown in full. */
     private val clockTicks: Flow<Unit> = flow {
         while (true) {
             emit(Unit)

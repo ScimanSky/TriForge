@@ -360,18 +360,26 @@ tolto e aggiunto, e perché, lo dice una volta sulla settimana («Il profilo è
 cambiato», tavola 6i): `ProposalPreview.notice`, salvato nel campo `notice` di
 `coaching/coach` fino a «Va bene» o al cambio successivo della settimana.
 
-### Oggi tocca a
+### Che cosa fare oggi
 
-`TodayAdvice.card` è la scheda in cima a Oggi (tavola 3c): le sedute di oggi
-ancora da fare, o quelle di domani quando oggi è fatto, libero o finito; una
-frase sola che legge insieme recupero e forma (la risposta del corpo viene
-prima, il carico la spiega), e il pasto che conta per NutriAI. Nessun modello
-viene chiamato: è tutto calcolato dalla settimana e dai dati già caricati. Una
-seduta di oggi non ancora registrata resta «di oggi» fino a un'ora dopo la sua
-fine all'orario abituale. Dopo, la scheda passa a domani ma non la salta in
-silenzio: «Oggi c'era … : non risulta ancora fatta» (`TodayCard.earlier`),
-perché l'app non distingue una seduta saltata da una che l'orologio non ha
-ancora mandato.
+`TodayAdvice.card` è la scheda in cima a Oggi (tavola 3d, che sostituisce la
+3c «Oggi tocca a»). Parla sempre prima di oggi: le sedute ancora da fare,
+oppure in due parole come sta la giornata (`DayLeft`: «Giorno libero»,
+«Allenamento fatto»), e una frase sola che legge insieme recupero e forma (la
+risposta del corpo viene prima, il carico la spiega) con il consiglio adatto a
+quello che resta di oggi. Domani sta sotto la sua etichetta e non si mescola
+mai con oggi: in una riga («Domani: giorno libero.») oppure con le sedute per
+intero quando oggi non resta niente da fare. Il pasto che conta per NutriAI
+accompagna le sedute mostrate. Nessun modello viene chiamato: è tutto
+calcolato dalla settimana e dai dati già caricati.
+
+Una seduta di oggi non ancora registrata resta da fare fino a un'ora dopo la
+sua fine all'orario abituale. Dopo, la scheda non la salta in silenzio: «Oggi
+c'era … : non risulta ancora fatta» (`TodayCard.earlier`), perché l'app non
+distingue una seduta saltata da una che l'orologio non ha ancora mandato; in
+quel caso la frase dice solo come sta l'atleta, senza consiglio. La scheda è
+una card normale, senza sfondo colorato, ed è alta quanto quello che ha da
+dire: in un giorno libero sono poche righe.
 
 I coach ricevono lo stesso giudizio che l'atleta legge in Oggi
 (`TodayAdvice.state`) e il check-in sulla sua scala vera (ogni voce da 1,
