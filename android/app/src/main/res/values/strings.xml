@@ -76,11 +76,11 @@
     <string name="today_fitness">Fitness</string>
     <string name="today_fatigue">Fatica</string>
     <string name="today_form">Forma</string>
-    <string name="today_card_today">Oggi tocca a</string>
-    <string name="today_card_tomorrow">Domani tocca a</string>
+    <string name="today_card_today">Oggi</string>
+    <string name="today_card_tomorrow">Domani</string>
     <string name="today_card_at">alle %1$s</string>
-    <string name="today_card_free">Oggi nessuna seduta in programma.</string>
-    <string name="today_card_free_tomorrow">Giorno libero: nessuna seduta in programma.</string>
+    <string name="today_card_free">Giorno libero</string>
+    <string name="today_card_done">Allenamento fatto</string>
     <string name="today_card_own">seduta tua</string>
     <string name="today_card_main_set">Serie centrale: %1$s</string>
     <string name="today_card_meal">Il pasto che conta · NutriAI</string>

@@ -56,55 +56,90 @@ class TodayAdviceTest {
     private fun card(now: LocalTime, activities: List<Activity> = emptyList(), today: LocalDate = friday) =
         TodayAdvice.card(plan, activities, today, zone, now, recovery(RecoveryLight.GREEN), FormZone.OVERLOAD, availability)
 
+    private val swimDone = Activity(
+        id = "s", source = ActivitySource.GARMIN, sport = Sport.SWIM, name = "",
+        startTime = friday.atTime(13, 0).toInstant(ZoneOffset.UTC), durationSec = 3600, distanceMeters = 2400.0,
+    )
+
     @Test
-    fun `in the morning the card is about today's session`() {
+    fun `in the morning the card is about today's session, with tomorrow in a line`() {
         val card = assertNotNull(card(LocalTime.of(8, 0)))
-        assertFalse(card.tomorrow)
-        assertEquals(friday, card.date)
+        assertEquals(DayLeft.SESSION, card.left)
         assertEquals(listOf(swim), card.sessions)
         assertEquals(LocalTime.of(13, 0), card.time)
         assertEquals("Hai recuperato bene, ma il carico delle ultime settimane è alto: fai la seduta prevista e non aggiungere altro.", card.sentence)
         assertEquals("Domani: Palestra, 1 h 30′ alle 19:00 (seduta tua).", card.next)
+        assertTrue(card.tomorrow.isEmpty())
     }
 
     @Test
-    fun `once the swim is recorded the card moves to tomorrow`() {
-        val done = Activity(
-            id = "s", source = ActivitySource.GARMIN, sport = Sport.SWIM, name = "",
-            startTime = friday.atTime(13, 0).toInstant(ZoneOffset.UTC), durationSec = 3600, distanceMeters = 2400.0,
-        )
-        val card = assertNotNull(card(LocalTime.of(15, 0), listOf(done)))
-        assertTrue(card.tomorrow)
-        assertEquals(listOf(gym), card.sessions)
-        assertEquals(LocalTime.of(19, 0), card.time)
-        assertNull(card.next)
-        assertTrue(card.sentence.endsWith("oggi non aggiungere allenamenti."))
+    fun `once the swim is recorded today is done and tomorrow is shown in full`() {
+        val card = assertNotNull(card(LocalTime.of(15, 0), listOf(swimDone)))
+        assertEquals(DayLeft.DONE, card.left)
+        assertTrue(card.sessions.isEmpty())
+        assertNull(card.time)
+        assertEquals(listOf(gym), card.tomorrow)
+        assertEquals(LocalTime.of(19, 0), card.tomorrowTime)
+        assertNull(card.next, "tomorrow is said once")
+        // The sentence is about today, and says so: nothing in it can be read as tomorrow's.
+        assertEquals("Hai recuperato bene, ma il carico delle ultime settimane è alto: per oggi non aggiungere altro.", card.sentence)
     }
 
     @Test
     fun `well after its usual time, and in the evening, a session is no longer today's`() {
-        assertFalse(assertNotNull(card(LocalTime.of(14, 30))).tomorrow)
-        assertTrue(assertNotNull(card(LocalTime.of(15, 5))).tomorrow)
-        assertTrue(assertNotNull(card(LocalTime.of(21, 30), today = friday.minusDays(1))).let { it.tomorrow && it.sessions == listOf(swim) })
+        assertEquals(DayLeft.SESSION, assertNotNull(card(LocalTime.of(14, 30))).left)
+        assertEquals(DayLeft.OPEN, assertNotNull(card(LocalTime.of(15, 5))).left)
+        // Thursday evening: the day was free, Friday's swim is shown in full.
+        val evening = assertNotNull(card(LocalTime.of(21, 30), today = friday.minusDays(1)))
+        assertEquals(DayLeft.FREE, evening.left)
+        assertEquals(listOf(swim), evening.tomorrow)
+        assertEquals("Hai recuperato bene, ma il carico delle ultime settimane è alto.", evening.sentence, "nothing left to advise in the evening")
+    }
+
+    @Test
+    fun `a free day says so, with a sentence about today and tomorrow in a line`() {
+        // Thursday morning: free, with the swim tomorrow.
+        val thursday = assertNotNull(card(LocalTime.of(9, 0), today = friday.minusDays(1)))
+        assertEquals(DayLeft.FREE, thursday.left)
+        assertTrue(thursday.sessions.isEmpty())
+        assertEquals("Hai recuperato bene, ma il carico delle ultime settimane è alto: oggi non aggiungere allenamenti.", thursday.sentence)
+        assertEquals(listOf(swim), thursday.tomorrow)
+        assertNull(thursday.next)
+        // Monday: free, and tomorrow too.
+        val mondayCard = assertNotNull(card(LocalTime.of(9, 0), today = monday))
+        assertEquals(DayLeft.FREE, mondayCard.left)
+        assertTrue(mondayCard.tomorrow.isEmpty())
+        assertEquals("Domani: giorno libero.", mondayCard.next)
+        assertTrue(mondayCard.sentence.isNotBlank())
+    }
+
+    @Test
+    fun `a training outside the programme makes a free day done, a walk does not`() {
+        fun recorded(sport: Sport, minutes: Long) = Activity(
+            id = "x", source = ActivitySource.GARMIN, sport = sport, name = "",
+            startTime = monday.atTime(18, 0).toInstant(ZoneOffset.UTC), durationSec = minutes * 60, distanceMeters = 0.0,
+        )
+        assertEquals(DayLeft.DONE, assertNotNull(card(LocalTime.of(20, 0), listOf(recorded(Sport.RUN, 40)), today = monday)).left)
+        assertEquals(DayLeft.FREE, assertNotNull(card(LocalTime.of(20, 0), listOf(recorded(Sport.OTHER, 40)), today = monday)).left)
+        assertEquals(DayLeft.FREE, assertNotNull(card(LocalTime.of(20, 0), listOf(recorded(Sport.RUN, 10)), today = monday)).left)
     }
 
     @Test
     fun `a session of today not known as done is not skipped in silence`() {
-        // 16:24, the swim of 13:00 is not recorded: the card is about tomorrow, but says today had one.
+        // 16:24, the swim of 13:00 is not recorded: the card says today had one, and shows tomorrow.
         val card = assertNotNull(card(LocalTime.of(16, 24)))
-        assertTrue(card.tomorrow)
+        assertEquals(DayLeft.OPEN, card.left)
+        assertEquals(listOf(gym), card.tomorrow)
         assertEquals(
             "Oggi c'era «Nuoto tecnica e fondo» alle 13:00: non risulta ancora fatta. " +
                 "Se l'hai fatta, comparirà quando l'orologio si sincronizza; se l'hai saltata, puoi chiedere al coach di spostarla.",
             card.earlier,
         )
+        // Skipped or not synced yet: the app cannot tell, so it says how the athlete is and advises nothing.
+        assertEquals("Hai recuperato bene, ma il carico delle ultime settimane è alto.", card.sentence)
         // Before its time, and once it is recorded, there is nothing to say.
         assertNull(assertNotNull(card(LocalTime.of(8, 0))).earlier)
-        val done = Activity(
-            id = "s", source = ActivitySource.GARMIN, sport = Sport.SWIM, name = "",
-            startTime = friday.atTime(13, 0).toInstant(ZoneOffset.UTC), durationSec = 3600, distanceMeters = 2400.0,
-        )
-        assertNull(assertNotNull(card(LocalTime.of(16, 24), listOf(done))).earlier)
+        assertNull(assertNotNull(card(LocalTime.of(16, 24), listOf(swimDone))).earlier)
         // The athlete's own session is theirs to move: no coach to ask. Two sessions are told together.
         assertEquals(
             "Oggi c'era «Palestra» alle 19:00: non risulta ancora fatta. Se l'hai fatta, comparirà quando l'orologio si sincronizza.",
@@ -115,31 +150,38 @@ class TodayAdviceTest {
     }
 
     @Test
-    fun `a free day with nothing tomorrow still gives the sentence`() {
-        val card = assertNotNull(card(LocalTime.of(9, 0), today = monday))
-        assertTrue(card.tomorrow)
-        assertTrue(card.sessions.isEmpty())
-        assertTrue(card.sentence.isNotBlank())
+    fun `no week, no card, and on Sunday nothing is said of tomorrow`() {
+        assertNull(TodayAdvice.card(null, emptyList(), friday, zone, LocalTime.NOON, null, null, availability))
+        // A free Sunday: next week is not written yet, the card is about today only.
+        val sunday = assertNotNull(card(LocalTime.of(9, 0), today = monday.plusDays(6)))
+        assertEquals(DayLeft.FREE, sunday.left)
+        assertNull(sunday.next)
+        assertTrue(sunday.tomorrow.isEmpty())
     }
 
     @Test
-    fun `no week, no card`() {
-        assertNull(TodayAdvice.card(null, emptyList(), friday, zone, LocalTime.NOON, null, null, availability))
-        assertNull(card(LocalTime.of(9, 0), today = monday.plusDays(6)), "a free Sunday: next week is not written yet")
+    fun `the advice follows what is left of the day`() {
+        val green = recovery(RecoveryLight.GREEN)
+        assertEquals("Hai recuperato bene e il carico è quello giusto per migliorare: fai la seduta come è scritta.", TodayAdvice.sentence(green, FormZone.PRODUCTIVE, DayLeft.SESSION))
+        assertEquals("Hai recuperato bene e il carico è quello giusto per migliorare: il giorno libero ci sta.", TodayAdvice.sentence(green, FormZone.PRODUCTIVE, DayLeft.FREE))
+        assertEquals("Hai recuperato bene e il carico è quello giusto per migliorare: per oggi va bene così.", TodayAdvice.sentence(green, FormZone.PRODUCTIVE, DayLeft.DONE))
+        assertEquals("Hai recuperato bene e il carico è quello giusto per migliorare.", TodayAdvice.sentence(green, FormZone.PRODUCTIVE, DayLeft.OPEN))
+        assertEquals("I segnali di fatica durano da giorni.", TodayAdvice.sentence(recovery(RecoveryLight.RED, level = 3), null, DayLeft.OPEN))
+        assertEquals("", TodayAdvice.sentence(null, null, DayLeft.OPEN))
     }
 
     @Test
     fun `the body's response comes before the load`() {
-        assertTrue(TodayAdvice.sentence(recovery(RecoveryLight.RED, level = 3), FormZone.FRESH, hasSession = true).contains("riposo"))
-        assertTrue(TodayAdvice.sentence(recovery(RecoveryLight.GREEN, pattern = LoadResponsePattern.ILLNESS), FormZone.FRESH, true).contains("non stai bene"))
-        assertTrue(TodayAdvice.sentence(recovery(RecoveryLight.ORANGE, level = 2), FormZone.NEUTRAL, true).contains("più facile"))
-        assertEquals("", TodayAdvice.sentence(null, null, true))
-        assertTrue(TodayAdvice.sentence(null, FormZone.OVERLOAD, true).startsWith("Il carico delle ultime settimane è alto"))
+        assertTrue(TodayAdvice.sentence(recovery(RecoveryLight.RED, level = 3), FormZone.FRESH, DayLeft.SESSION).contains("riposo"))
+        assertTrue(TodayAdvice.sentence(recovery(RecoveryLight.GREEN, pattern = LoadResponsePattern.ILLNESS), FormZone.FRESH, DayLeft.SESSION).contains("non stai bene"))
+        assertTrue(TodayAdvice.sentence(recovery(RecoveryLight.ORANGE, level = 2), FormZone.NEUTRAL, DayLeft.SESSION).contains("più facile"))
+        assertEquals("", TodayAdvice.sentence(null, null, DayLeft.SESSION))
+        assertTrue(TodayAdvice.sentence(null, FormZone.OVERLOAD, DayLeft.SESSION).startsWith("Il carico delle ultime settimane è alto"))
     }
 
     @Test
     fun `a threshold in doubt softens the load`() {
-        assertTrue(TodayAdvice.sentence(recovery(RecoveryLight.GREEN), FormZone.OVERLOAD, true, loadInDoubt = true).contains("risulta alto"))
+        assertTrue(TodayAdvice.sentence(recovery(RecoveryLight.GREEN), FormZone.OVERLOAD, DayLeft.SESSION, loadInDoubt = true).contains("risulta alto"))
     }
 
     @Test

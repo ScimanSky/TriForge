@@ -14,29 +14,49 @@ import java.time.ZoneId
 /** The meal Oggi points at: the one that matters most around the day's training. */
 data class KeyMeal(val title: String, val text: String)
 
+/** What is left of today when the athlete reads Oggi. */
+enum class DayLeft {
+    /** A session still to do. */
+    SESSION,
+
+    /** No session in the programme, and no training recorded. */
+    FREE,
+
+    /** Today's training is recorded: the day is done. */
+    DONE,
+
+    /** A session whose time is gone and that is not known as done: skipped, or not synced yet. */
+    OPEN,
+}
+
 /**
- * What Oggi tells the athlete to do: the sessions still to do today, or
- * tomorrow's once today is done, free or over, with one sentence that puts
- * recovery and form together and the meal that counts.
+ * What Oggi tells the athlete to do. It is always about today first: the
+ * sessions still to do, or in a word how the day stands («Giorno libero»,
+ * «Allenamento fatto»), with one sentence that puts recovery and form
+ * together. Tomorrow comes after, and is never mixed with today: in a line,
+ * or in full once today has nothing left to do.
  */
 data class TodayCard(
-    val date: LocalDate,
-    /** The card is about tomorrow: today is done, free or over. */
-    val tomorrow: Boolean,
-    /** Recovery and form in one sentence; blank when the app knows neither. */
+    val left: DayLeft,
+    /** Recovery and form in one sentence, with what follows for today; blank when the app knows neither. */
     val sentence: String,
-    /** The sessions of [date] still to do, the coaches' and the athlete's own; empty on a free day. */
+    /** Today's sessions still to do, the coaches' and the athlete's own. */
     val sessions: List<PlannedSession>,
-    /** The usual time of the first session, when the profile gives one. */
+    /** The usual time of the first of [sessions], when the profile gives one. */
     val time: LocalTime?,
+    /** The meal that counts around the sessions shown: today's, or tomorrow's when [tomorrow] is. */
     val meal: KeyMeal?,
-    /** Tomorrow in a line, when the card is about today and the week reaches tomorrow. */
+    /** Tomorrow in a line: beside today's sessions, or when tomorrow is free. Null when [tomorrow] says it, or the week ends today. */
     val next: String?,
     /**
      * Today's sessions whose time is gone and that are not known as done,
-     * in a line: the card moves on, but does not pretend they were not there.
+     * in a line: the card does not pretend they were not there.
      */
     val earlier: String? = null,
+    /** Tomorrow's sessions in full, once today has none left to do. */
+    val tomorrow: List<PlannedSession> = emptyList(),
+    /** The usual time of the first of [tomorrow]. */
+    val tomorrowTime: LocalTime? = null,
 )
 
 /**
@@ -69,22 +89,36 @@ object TodayAdvice {
         val over = CoachTable.planningDay(today, now) != today
         val todays = if (over) emptyList() else open(today).filter { stillAhead(it, availability, now) }
         val gone = open(today).filter { it !in todays }
+        // A planned session the watch recorded, or a training outside the programme: either way the day is done.
+        val trained = review.day(today)?.items.orEmpty().any { item ->
+            item.activity != null && (item.state == ReviewState.DONE || WeekReview.isTraining(item.activity))
+        }
+        val left = when {
+            todays.isNotEmpty() -> DayLeft.SESSION
+            gone.isNotEmpty() -> DayLeft.OPEN
+            trained -> DayLeft.DONE
+            else -> DayLeft.FREE
+        }
         val nextDay = today.plusDays(1)
-        val tomorrows = open(nextDay)
-        val aboutTomorrow = todays.isEmpty()
-        // Sunday is over and next week is not written yet: nothing to say of tomorrow.
-        if (aboutTomorrow && plan.day(nextDay) == null) return null
-        val date = if (aboutTomorrow) nextDay else today
-        val sessions = if (aboutTomorrow) tomorrows else todays
+        // Sunday: next week is not written yet, there is nothing to say of tomorrow.
+        val reachesTomorrow = plan.day(nextDay) != null
+        val tomorrows = if (reachesTomorrow) open(nextDay) else emptyList()
+        val inFull = todays.isEmpty() && tomorrows.isNotEmpty()
         return TodayCard(
-            date = date,
-            tomorrow = aboutTomorrow,
-            sentence = sentence(recovery, form, hasSession = todays.isNotEmpty(), loadInDoubt = loadInDoubt),
-            sessions = sessions,
-            time = sessions.firstOrNull()?.let { time(it, availability) },
-            meal = nutrition[date]?.let(::keyMeal),
-            next = if (aboutTomorrow || plan.day(nextDay) == null) null else line(tomorrows, availability),
+            left = left,
+            // In the evening of a free day there is nothing left to advise: only how the athlete is.
+            sentence = if (over && left == DayLeft.FREE) stateOnly(recovery, form, loadInDoubt) else sentence(recovery, form, left, loadInDoubt),
+            sessions = todays,
+            time = todays.firstOrNull()?.let { time(it, availability) },
+            meal = when {
+                todays.isNotEmpty() -> nutrition[today]
+                inFull -> nutrition[nextDay]
+                else -> null
+            }?.let(::keyMeal),
+            next = if (inFull || !reachesTomorrow) null else line(tomorrows, availability),
             earlier = earlier(gone, availability),
+            tomorrow = if (inFull) tomorrows else emptyList(),
+            tomorrowTime = if (inFull) time(tomorrows.first(), availability) else null,
         )
     }
 
@@ -128,7 +162,7 @@ object TodayAdvice {
 
     /** «Domani: Palestra, 1 h 30′ alle 19:00 (seduta tua).» */
     private fun line(sessions: List<PlannedSession>, availability: TrainingAvailability): String =
-        if (sessions.isEmpty()) "Domani: riposo."
+        if (sessions.isEmpty()) "Domani: giorno libero."
         else "Domani: " + sessions.joinToString("; ") { session ->
             val at = time(session, availability)?.let { " alle %d:%02d".format(it.hour, it.minute) }.orEmpty()
             val own = if (session.own) " (seduta tua)" else ""
@@ -174,20 +208,31 @@ object TodayAdvice {
      * these words, so the chat and Oggi do not tell two different stories.
      */
     fun state(recovery: RecoveryDay?, form: FormZone?, loadInDoubt: Boolean = false): String =
-        sentence(recovery, form, hasSession = false, loadInDoubt = loadInDoubt).substringBefore(':').trim().trimEnd('.')
+        sentence(recovery, form, DayLeft.FREE, loadInDoubt).substringBefore(':').trim().trimEnd('.')
+
+    /** [state] as a sentence of its own, for when there is nothing to advise. */
+    private fun stateOnly(recovery: RecoveryDay?, form: FormZone?, loadInDoubt: Boolean): String =
+        state(recovery, form, loadInDoubt).let { if (it.isBlank()) "" else "$it." }
 
     /**
-     * Recovery and form in one sentence, with what follows for today. The
-     * body's response comes first: when it shows fatigue, the load only
-     * explains it. When the body is fine, a high load still says not to add.
+     * Recovery and form in one sentence, with what follows for today given
+     * what is [left] of it. The body's response comes first: when it shows
+     * fatigue, the load only explains it. When the body is fine, a high load
+     * still says not to add. With a session not known as done the app cannot
+     * tell how the day went, so it says how the athlete is and nothing more.
      */
-    fun sentence(recovery: RecoveryDay?, form: FormZone?, hasSession: Boolean, loadInDoubt: Boolean = false): String {
+    fun sentence(recovery: RecoveryDay?, form: FormZone?, left: DayLeft, loadInDoubt: Boolean = false): String {
+        if (left == DayLeft.OPEN) return stateOnly(recovery, form, loadInDoubt)
         if (recovery?.pattern == LoadResponsePattern.ILLNESS) {
             return "Hai segnato che non stai bene: oggi riposo, l'allenamento può aspettare."
         }
         val light = recovery?.light
         val high = if (loadInDoubt) "risulta alto" else "è alto"
-        fun say(state: String, withSession: String, without: String) = "$state: ${if (hasSession) withSession else without}."
+        fun say(state: String, session: String, free: String, done: String) = state + ": " + when (left) {
+            DayLeft.SESSION -> session
+            DayLeft.DONE -> done
+            else -> free
+        } + "."
         return when {
             light == RecoveryLight.RED || (recovery?.level ?: 0) >= 3 ->
                 "I segnali di fatica durano da giorni: oggi riposo o solo movimento leggero."
@@ -195,17 +240,20 @@ object TodayAdvice {
                 "Il corpo mostra fatica accumulata",
                 "fai la seduta più facile del previsto, oppure spostala",
                 "tieni il giorno libero per recuperare",
+                "per oggi basta così, ora pensa a recuperare",
             )
             light == RecoveryLight.YELLOW -> when (form) {
                 FormZone.OVERLOAD -> say(
                     "Qualche segnale di fatica, e il carico delle ultime settimane $high",
                     "tieni la seduta facile e non aggiungere altro",
                     "oggi non aggiungere allenamenti",
+                    "per oggi non aggiungere altro",
                 )
                 else -> say(
                     "Qualche segnale di fatica, niente di più",
                     "fai la seduta prevista e ascolta le sensazioni",
                     "oggi non serve aggiungere altro",
+                    "per oggi basta così",
                 )
             }
             light == RecoveryLight.GREEN -> when (form) {
@@ -213,34 +261,40 @@ object TodayAdvice {
                     "Hai recuperato bene, ma il carico delle ultime settimane $high",
                     "fai la seduta prevista e non aggiungere altro",
                     "oggi non aggiungere allenamenti",
+                    "per oggi non aggiungere altro",
                 )
                 FormZone.PRODUCTIVE -> say(
                     "Hai recuperato bene e il carico è quello giusto per migliorare",
                     "fai la seduta come è scritta",
                     "il giorno libero ci sta",
+                    "per oggi va bene così",
                 )
                 FormZone.NEUTRAL -> say(
                     "Hai recuperato bene e il carico è leggero",
                     "la seduta di oggi puoi farla con convinzione",
                     "c'è spazio per allenarti, se ne hai voglia",
+                    "per oggi va bene così",
                 )
                 FormZone.FRESH -> say(
                     "Hai recuperato del tutto e hai energie da spendere",
                     "è il momento giusto per una seduta di qualità",
                     "c'è spazio per allenarti, se ne hai voglia",
+                    "per oggi va bene così",
                 )
                 FormZone.DETRAINING -> say(
                     "Hai riposato molto e la forma comincia a scendere",
                     "fai la seduta prevista e riprendi con regolarità",
                     "riprendi ad allenarti con regolarità",
+                    "continua così, con regolarità",
                 )
-                null -> say("Hai recuperato bene", "fai la seduta prevista", "il giorno libero ci sta")
+                null -> say("Hai recuperato bene", "fai la seduta prevista", "il giorno libero ci sta", "per oggi va bene così")
             }
             // No recovery reading yet: only the load can speak.
             form == FormZone.OVERLOAD -> say(
                 "Il carico delle ultime settimane $high",
                 "fai la seduta prevista e non aggiungere altro",
                 "oggi non aggiungere allenamenti",
+                "per oggi non aggiungere altro",
             )
             else -> ""
         }
