@@ -2,12 +2,15 @@ package com.triforge.app.ui.today
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +22,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -28,8 +35,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,6 +47,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,7 +66,6 @@ import com.triforge.app.ui.common.BulletBar
 import com.triforge.app.ui.common.CardHeader
 import com.triforge.app.ui.common.Avatar
 import com.triforge.app.ui.common.CenteredMessage
-import com.triforge.app.ui.common.CollapsibleCard
 import com.triforge.app.ui.common.DayAxis
 import com.triforge.app.ui.common.FormBandColor
 import com.triforge.app.ui.common.FormBars
@@ -62,7 +74,6 @@ import com.triforge.app.ui.common.LegendDot
 import com.triforge.app.ui.common.LoadChart
 import com.triforge.app.ui.common.LoadingBox
 import com.triforge.app.ui.common.PrimaryButton
-import com.triforge.app.ui.common.SectionLabel
 import com.triforge.app.ui.common.SportDot
 import com.triforge.app.ui.common.StackedWeekBars
 import com.triforge.app.ui.common.TriCard
@@ -90,20 +101,41 @@ import com.triforge.domain.SwimSets
 import com.triforge.domain.TrainingStats
 import com.triforge.domain.WeekGlance
 import com.triforge.domain.WeekGlanceModel
+import com.triforge.domain.WeekSummary
 import com.triforge.domain.coach.SportMode
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Sessions listed under "Ultime sessioni". */
-private const val RECENT_COUNT = 3
+/** Sessions listed in the «Sessioni» page. */
+private const val RECENT_COUNT = 5
 
-/** Weeks in the collapsed volume chart. */
+/** Weeks in the volume chart. */
 private const val VOLUME_WEEKS = 12
+
+/** The screen's side margin: the carousel runs edge to edge, everything else keeps this. */
+private val EDGE = 16.dp
+
+/** The gap between two cards of the carousel: with [EDGE], the card beside shows as a sliver. */
+private val PAGE_GAP = 8.dp
+
+/**
+ * Board 3e: the cards of Oggi that sit side by side, one at a time. Oggi
+ * was a long column to scroll; now what to do stays on top and the numbers
+ * are a swipe away, each under its name.
+ */
+private enum class TodayPage(val label: Int) {
+    RECOVERY(R.string.today_tab_recovery),
+    FORM(R.string.today_tab_form),
+    WEEK(R.string.today_tab_week),
+    SESSIONS(R.string.today_tab_sessions),
+    VOLUME(R.string.today_tab_volume),
+}
 
 /** Past weeks needed before "usual" is shown: one week is an anecdote. */
 private const val MIN_REFERENCE_WEEKS = 2
@@ -209,9 +241,11 @@ fun TodayScreen(
 }
 
 /**
- * The Today tab answers, top to bottom: how am I today, is my fitness
- * building safely, am I on track this week, what did I just do. Every number
- * comes with what it is compared to.
+ * The Today tab answers: what do I do today, then, a swipe apart, how am I,
+ * is my fitness building safely, am I on track this week, what did I just
+ * do. What to do stays on top; the rest is a carousel of cards (board 3e),
+ * so the screen is about one page long instead of five. Every number comes
+ * with what it is compared to.
  */
 @Composable
 private fun Dashboard(
@@ -243,87 +277,178 @@ private fun Dashboard(
     val trend = remember(loaded) { loaded?.let { FitnessTrend.from(it.report.history) } }
     val loads = loaded?.loads.orEmpty()
 
+    val check = advice.cssCheck
+    val hasForm = recovery is RecoveryState.Loading || (trend != null && trend.points.isNotEmpty())
+    val pages = remember(hasForm) { TodayPage.entries.filter { it != TodayPage.FORM || hasForm } }
+    // Saved with the screen: coming back to Oggi shows the card the athlete was on.
+    val pager = rememberPagerState { pages.size }
+    val scope = rememberCoroutineScope()
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item(key = "header") { Header(today, name, avatar, onOpenProfile) }
+        item(key = "header") { Inset { Header(today, name, avatar, onOpenProfile) } }
 
         if (activities.isEmpty()) {
-            item(key = "empty") { EmptyCard(onConnectSource) }
+            item(key = "empty") { Inset { EmptyCard(onConnectSource) } }
             return@LazyColumn
         }
 
-        // What to do comes first: the numbers below are its reasons.
+        // What to do comes first and is always in sight: the cards below are its reasons.
         advice.card?.let { card ->
-            item(key = "advice") { TodayAdviceCard(card, profile, onOpenCoach, onOpenNutri) }
+            item(key = "advice") { Inset { TodayAdviceCard(card, profile, onOpenCoach, onOpenNutri) } }
         }
         // Board 5e: asked once about the latest pool swim, while it is fresh in the memory.
         gearSwim?.let { swim ->
             item(key = "gear") {
                 val days = ChronoUnit.DAYS.between(swim.startTime.atZone(zone).toLocalDate(), today)
-                SwimGearQuestionCard(swim, days, onYes = { onMarkGear(swim.id) }, onNo = { onNoGear(swim.id) })
+                Inset { SwimGearQuestionCard(swim, days, onYes = { onMarkGear(swim.id) }, onNo = { onNoGear(swim.id) }) }
             }
         }
-        val check = advice.cssCheck
         if (check != null && !advice.cssSnoozed) {
-            item(key = "css") { CssNoticeCard(check, onVerifyCss) }
+            item(key = "css") { Inset { CssNoticeCard(check, onVerifyCss) } }
         }
 
-        if (recovery is RecoveryState.Loading) {
-            // The two cards take a couple of seconds to compute: their place is held, so the week does not jump down when they arrive.
-            item(key = "recovery") { PendingCard(stringResource(R.string.recovery_title), RECOVERY_CARD_HEIGHT) }
-            item(key = "load") { PendingCard(stringResource(R.string.load_card_title), LOAD_CARD_HEIGHT) }
-        } else {
-            item(key = "recovery") { RecoveryCard(recovery, onOpen = onOpenRecovery, onCheckIn = onCheckIn) }
+        item(key = "tabs") {
+            PageTabs(pages, selected = pager.currentPage, onSelect = { scope.launch { pager.animateScrollToPage(it) } })
         }
-        if (trend != null && trend.points.isNotEmpty()) {
-            item(key = "load") {
-                val firstDay = activities.minOf { it.startTime.atZone(zone).toLocalDate() }
-                LoadCard(
-                    trend,
-                    loads.values,
-                    estimate = firstDay.isAfter(today.minusDays(42)),
-                    onOpen = onOpenRecovery,
-                    onVerifyCss = onVerifyCss.takeIf { check != null },
-                )
-            }
-        }
-        item(key = "week") {
-            val weekLoads = loads.values.filter {
-                !it.activity.startTime.atZone(zone).toLocalDate().isBefore(glance.weekStart)
-            }
-            WeekCard(glance, weekLoad = if (loads.isEmpty()) null else weekLoads.sumOf { it.tss }, onOpenStats = onOpenStats)
-        }
+        item(key = "pages") {
+            HorizontalPager(
+                state = pager,
+                // A card is as tall as what it holds: the screen follows the one in sight.
+                modifier = Modifier.animateContentSize(),
+                contentPadding = PaddingValues(horizontal = EDGE),
+                pageSpacing = PAGE_GAP,
+                verticalAlignment = Alignment.Top,
+                key = { pages[it] },
+            ) { index ->
+                when (pages[index]) {
+                    TodayPage.RECOVERY ->
+                        // The card takes a couple of seconds to compute: its place is held.
+                        if (recovery is RecoveryState.Loading) PendingCard(stringResource(R.string.recovery_title), RECOVERY_CARD_HEIGHT)
+                        else RecoveryCard(recovery, onOpen = onOpenRecovery, onCheckIn = onCheckIn)
 
-        item(key = "recent-title") { SectionLabel(stringResource(R.string.today_recent_sessions)) }
-        items(activities.take(RECENT_COUNT), key = { it.id }) { activity ->
-            ActivityRow(activity, onClick = { onOpenActivity(activity.id) })
-        }
+                    TodayPage.FORM ->
+                        if (trend != null && trend.points.isNotEmpty()) {
+                            val firstDay = activities.minOf { it.startTime.atZone(zone).toLocalDate() }
+                            LoadCard(
+                                trend,
+                                loads.values,
+                                estimate = firstDay.isAfter(today.minusDays(42)),
+                                onOpen = onOpenRecovery,
+                                onVerifyCss = onVerifyCss.takeIf { check != null },
+                            )
+                        } else {
+                            PendingCard(stringResource(R.string.load_card_title), LOAD_CARD_HEIGHT)
+                        }
 
-        item(key = "volume") {
-            val average = volume.dropLast(1).filter { it.durationSec > 0 }.map { it.durationSec }.average()
-            CollapsibleCard(
-                title = stringResource(R.string.today_volume_title, VOLUME_WEEKS),
-                summary = if (average.isNaN()) null else stringResource(R.string.today_volume_summary, Formatters.duration(average.toLong())),
-            ) {
-                StackedWeekBars(
-                    trend = volume,
-                    description = stringResource(R.string.today_volume_chart, VOLUME_WEEKS),
-                )
-                FlowRow(
-                    modifier = Modifier.padding(top = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    // Swim, bike and run always; the gym and the rest when the weeks hold any.
-                    TrainingStats.allSports.filter { sport ->
-                        sport in TrainingStats.triathlonSports || volume.any { it.of(sport).sessions > 0 }
-                    }.forEach { sport ->
-                        LegendDot(SportColors.of(sport), stringResource(sport.labelRes()))
+                    TodayPage.WEEK -> {
+                        val weekLoads = loads.values.filter {
+                            !it.activity.startTime.atZone(zone).toLocalDate().isBefore(glance.weekStart)
+                        }
+                        WeekCard(glance, weekLoad = if (loads.isEmpty()) null else weekLoads.sumOf { it.tss }, onOpenStats = onOpenStats)
                     }
+
+                    TodayPage.SESSIONS -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        activities.take(RECENT_COUNT).forEach { activity ->
+                            ActivityRow(activity, onClick = { onOpenActivity(activity.id) })
+                        }
+                    }
+
+                    TodayPage.VOLUME -> VolumeCard(volume)
                 }
+            }
+        }
+    }
+}
+
+/** A part of Oggi that keeps the side margin; the carousel does not. */
+@Composable
+private fun Inset(content: @Composable () -> Unit) {
+    Box(Modifier.padding(horizontal = EDGE)) { content() }
+}
+
+/**
+ * The names of the cards, as in Attività: the one in sight is underlined,
+ * and a touch on a name goes to its card. On a narrow phone the row scrolls
+ * and follows the card in sight.
+ */
+@Composable
+private fun PageTabs(pages: List<TodayPage>, selected: Int, onSelect: (Int) -> Unit) {
+    val scroll = rememberScrollState()
+    var viewport by remember { mutableIntStateOf(0) }
+    // Where each name sits in the row: its left edge and its width.
+    val spots = remember { mutableStateMapOf<Int, Pair<Int, Int>>() }
+    val spot = spots[selected]
+    LaunchedEffect(selected, viewport, spot) {
+        val (left, width) = spot ?: return@LaunchedEffect
+        scroll.animateScrollTo((left + width / 2 - viewport / 2).coerceIn(0, scroll.maxValue))
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onSizeChanged { viewport = it.width }
+            .horizontalScroll(scroll)
+            .padding(horizontal = 6.dp)
+            .selectableGroup(),
+        // Spread over the screen when they fit, in a row to scroll when they do not.
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        pages.forEachIndexed { index, page ->
+            val isSelected = index == selected
+            val color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            Column(
+                modifier = Modifier
+                    .width(IntrinsicSize.Max)
+                    .height(48.dp)
+                    .onGloballyPositioned {
+                        // Called on every scroll of the screen too: written only when it changes.
+                        val now = it.positionInParent().x.roundToInt() to it.size.width
+                        if (spots[index] != now) spots[index] = now
+                    }
+                    .selectable(selected = isSelected, role = Role.Tab, onClick = { onSelect(index) }),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(Modifier.weight(1f).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+                    Text(stringResource(page.label), style = MaterialTheme.typography.labelLarge, color = color, maxLines = 1)
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent),
+                )
+            }
+        }
+    }
+}
+
+/** Hours a week by sport, twelve weeks back: open, now that it has a page of its own. */
+@Composable
+private fun VolumeCard(volume: List<WeekSummary>) {
+    val average = volume.dropLast(1).filter { it.durationSec > 0 }.map { it.durationSec }.average()
+    TriCard {
+        CardHeader(
+            title = stringResource(R.string.today_volume_title, VOLUME_WEEKS),
+            trailing = if (average.isNaN()) null else stringResource(R.string.today_volume_summary, Formatters.duration(average.toLong())),
+        )
+        StackedWeekBars(
+            trend = volume,
+            description = stringResource(R.string.today_volume_chart, VOLUME_WEEKS),
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        FlowRow(
+            modifier = Modifier.padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            // Swim, bike and run always; the gym and the rest when the weeks hold any.
+            TrainingStats.allSports.filter { sport ->
+                sport in TrainingStats.triathlonSports || volume.any { it.of(sport).sessions > 0 }
+            }.forEach { sport ->
+                LegendDot(SportColors.of(sport), stringResource(sport.labelRes()))
             }
         }
     }
