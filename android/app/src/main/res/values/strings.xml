@@ -133,7 +133,11 @@
     <string name="css_keep">Lascia %1$s per ora</string>
     <string name="css_keep_hint">L\'avviso torna tra 3 settimane, se le nuotate dicono ancora la stessa cosa.</string>
     <string name="css_after">La soglia non cambia mai da sola: la scegli tu. Dopo la scelta l\'app ricalcola zone, carico e forma del nuoto, e i ritmi delle sedute.</string>
-    <string name="today_recent_sessions">Ultime sessioni</string>
+    <string name="today_tab_recovery">Recupero</string>
+    <string name="today_tab_form">Forma</string>
+    <string name="today_tab_week">Settimana</string>
+    <string name="today_tab_sessions">Sessioni</string>
+    <string name="today_tab_volume">Volume</string>
     <string name="today_volume_title">Volume %1$d settimane</string>
     <string name="today_volume_summary">media %1$s a sett.</string>
     <string name="today_volume_chart">Ore di allenamento per sport nelle ultime %1$d settimane.</string>
