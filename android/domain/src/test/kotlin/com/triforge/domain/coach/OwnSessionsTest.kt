@@ -429,6 +429,9 @@ class OwnSessionsTest {
         assertEquals(62 + 36 + 38 + 58, review.doneMinutes)
         assertEquals(listOf(monday to week.days[0].sessions[1]), review.missed)
         assertTrue(review.hasPast)
+        // The days gone in three numbers: today's own recording is not in them yet.
+        assertEquals(PastTally(done = 3, missed = 1), review.past(wednesday))
+        assertEquals(PastTally(), review.past(monday))
 
         val text = review.describe(wednesday)
         assertTrue(text.contains("lunedì $monday: nuoto Tuo allenatore (seduta dell'atleta): previsti 60 min, fatti 62 min"), text)
@@ -479,6 +482,8 @@ class OwnSessionsTest {
         assertEquals(Sport.RUN, tuesday.items[0].sport, "the line stays the planned run")
         assertFalse(tuesday.items[0].differs)
         assertTrue("non fatta, al suo posto palestra, 88 min" in WeekReview.of(week, done, wednesday, zone).describe(wednesday))
+        // Monday's swim and gym were missed; Tuesday's run was replaced, and the walk was done.
+        assertEquals(PastTally(done = 1, replaced = 1, missed = 2), WeekReview.of(week, done, wednesday, zone).past(wednesday))
         // A walk alone does not stand for a run, and today's session is still to do.
         val walked = WeekReview.of(week, done.drop(1), wednesday, zone).days[1]
         assertEquals(listOf(ReviewState.MISSED, ReviewState.EXTRA), walked.items.map { it.state })

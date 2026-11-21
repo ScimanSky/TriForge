@@ -1,5 +1,6 @@
 package com.triforge.app.ui.coach
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,7 +26,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.triforge.app.R
+import com.triforge.app.ui.common.CollapsibleCard
 import com.triforge.app.ui.common.TriCard
 import com.triforge.app.ui.common.kindLabelRes
 import com.triforge.app.ui.theme.SportColors
@@ -55,6 +56,7 @@ import com.triforge.domain.AthleteProfile
 import com.triforge.domain.Formatters
 import com.triforge.domain.Sport
 import com.triforge.domain.coach.CoachTable
+import com.triforge.domain.coach.PastTally
 import com.triforge.domain.coach.PlannedDay
 import com.triforge.domain.coach.PlannedSession
 import com.triforge.domain.coach.ReviewState
@@ -210,10 +212,11 @@ fun WeekSummary(plan: WeekPlan, review: WeekReview? = null, availability: Traini
 }
 
 /**
- * Boards 6c and 6f, the seven days in one card: every session in its coach's
- * colour, the athlete's own ones with a border. On the days gone each line
- * says whether it was done and for how long, and what the watch recorded
- * outside the programme is listed with them.
+ * Boards 6c, 6f and 6j, the days of the week: every session in its coach's
+ * colour, the athlete's own ones with a border. Today and the days to come
+ * are first, the days gone are under them in a card that opens, the most
+ * recent at the top: there each line says whether it was done and for how
+ * long, and what the watch recorded outside the programme is listed with it.
  */
 @Composable
 fun WeekDays(
@@ -224,69 +227,116 @@ fun WeekDays(
     availability: TrainingAvailability = TrainingAvailability(),
 ) {
     val today = LocalDate.now()
-    TriCard(padding = 0.dp) {
-        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)) {
-            plan.days.forEachIndexed { position, day ->
-                if (position > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(TriColors.border))
-                val past = day.date.isBefore(today)
-                val isToday = day.date == today
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).alpha(if (past) 0.7f else 1f),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Column(Modifier.width(44.dp).padding(top = 6.dp)) {
-                        Text(
-                            day.date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALIAN).replaceFirstChar { it.uppercase() },
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isToday) TriColors.accentText else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            day.date.dayOfMonth.toString(),
-                            style = numberStyle(18.sp),
-                            color = if (isToday) TriColors.accentText else MaterialTheme.colorScheme.onSurface,
-                        )
+    val (gone, ahead) = plan.days.sortedBy { it.date }.partition { it.date.isBefore(today) }
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // A week with nothing left to come is read whole, from its Monday.
+        val first = ahead.ifEmpty { gone }
+        TriCard(padding = 0.dp) {
+            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)) {
+                first.forEachIndexed { position, day ->
+                    if (position > 0) DayDivider()
+                    DayRow(plan, day, today, profile, review, availability, onOpen)
+                }
+            }
+        }
+        if (ahead.isNotEmpty() && gone.isNotEmpty()) {
+            CollapsibleCard(title = stringResource(R.string.coach_past_days), summary = pastSummary(review.past(today))) {
+                gone.asReversed().forEachIndexed { position, day ->
+                    if (position > 0) DayDivider()
+                    DayRow(plan, day, today, profile, review, availability, onOpen)
+                }
+            }
+        }
+    }
+}
+
+/** «1 fatta · 2 sostituite · 1 non fatta»: the days gone in the words their lines carry. */
+@Composable
+private fun pastSummary(tally: PastTally): String? = listOfNotNull(
+    countLabel(tally.done, R.string.coach_past_done_one, R.string.coach_past_done_many),
+    countLabel(tally.replaced, R.string.coach_past_replaced_one, R.string.coach_past_replaced_many),
+    countLabel(tally.missed, R.string.coach_past_missed_one, R.string.coach_past_missed_many),
+).joinToString(" · ").ifBlank { null }
+
+@Composable
+private fun countLabel(n: Int, @StringRes one: Int, @StringRes many: Int): String? = when (n) {
+    0 -> null
+    1 -> stringResource(one)
+    else -> stringResource(many, n)
+}
+
+@Composable
+private fun DayDivider() {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(TriColors.border))
+}
+
+/** One day of the week: its name and number, and its lines. */
+@Composable
+private fun DayRow(
+    plan: WeekPlan,
+    day: PlannedDay,
+    today: LocalDate,
+    profile: AthleteProfile,
+    review: WeekReview,
+    availability: TrainingAvailability,
+    onOpen: (String) -> Unit,
+) {
+    val past = day.date.isBefore(today)
+    val isToday = day.date == today
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(Modifier.width(44.dp).padding(top = 6.dp)) {
+            Text(
+                day.date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ITALIAN).replaceFirstChar { it.uppercase() },
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isToday) TriColors.accentText else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                day.date.dayOfMonth.toString(),
+                style = numberStyle(18.sp),
+                color = if (isToday) TriColors.accentText else MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Without a review (the activities are still loading) the day shows its programme as written.
+            val items = review.day(day.date)?.items
+                ?: day.sessions.map { ReviewedSession(ReviewState.TODO, it) }
+            val lines = items.filter { item ->
+                item.activity != null || item.session?.let { it.sport != null || it.durationMin > 0 } == true
+            }
+            if (lines.isEmpty()) {
+                val rest = availability.restDay
+                RestRow(
+                    stringResource(
+                        when {
+                            past && plan.fromTable -> R.string.coach_nothing_done
+                            rest != null && day.date.dayOfWeek != rest -> R.string.coach_free
+                            else -> R.string.coach_rest
+                        },
+                    ),
+                )
+            } else {
+                lines.forEach { item ->
+                    val session = item.session
+                    val index = if (session != null) day.sessions.indexOf(session) else -1
+                    val time = when {
+                        session == null || !session.own -> null
+                        session.sport == Sport.STRENGTH -> availability.gym.time
+                        else -> session.sport?.let(availability::slot)?.time
                     }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // Without a review (the activities are still loading) the day shows its programme as written.
-                        val items = review.day(day.date)?.items
-                            ?: day.sessions.map { ReviewedSession(ReviewState.TODO, it) }
-                        val lines = items.filter { item ->
-                            item.activity != null || item.session?.let { it.sport != null || it.durationMin > 0 } == true
-                        }
-                        if (lines.isEmpty()) {
-                            val rest = availability.restDay
-                            RestRow(
-                                stringResource(
-                                    when {
-                                        past && plan.fromTable -> R.string.coach_nothing_done
-                                        rest != null && day.date.dayOfWeek != rest -> R.string.coach_free
-                                        else -> R.string.coach_rest
-                                    },
-                                ),
-                            )
+                    ReviewRow(
+                        item = item,
+                        profile = profile,
+                        time = time,
+                        onOpen = if (session != null && index >= 0 && session.hasDetail()) {
+                            { onOpen(sessionKey(day.date, index)) }
                         } else {
-                            lines.forEach { item ->
-                                val session = item.session
-                                val index = if (session != null) day.sessions.indexOf(session) else -1
-                                val time = when {
-                                    session == null || !session.own -> null
-                                    session.sport == Sport.STRENGTH -> availability.gym.time
-                                    else -> session.sport?.let(availability::slot)?.time
-                                }
-                                ReviewRow(
-                                    item = item,
-                                    profile = profile,
-                                    time = time,
-                                    onOpen = if (session != null && index >= 0 && session.hasDetail()) {
-                                        { onOpen(sessionKey(day.date, index)) }
-                                    } else {
-                                        null
-                                    },
-                                )
-                            }
-                        }
-                    }
+                            null
+                        },
+                    )
                 }
             }
         }

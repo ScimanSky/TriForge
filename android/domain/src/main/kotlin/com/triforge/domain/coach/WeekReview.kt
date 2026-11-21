@@ -53,6 +53,9 @@ data class ReviewedSession(
 
 data class ReviewedDay(val date: LocalDate, val items: List<ReviewedSession>)
 
+/** The days gone, counted by the word each of their lines carries: «Fatta», «Sostituita», «Non fatta». */
+data class PastTally(val done: Int = 0, val replaced: Int = 0, val missed: Int = 0)
+
 /**
  * The week as planned next to the week as it went. A planned session is
  * done when the watch recorded the same sport on the same day; what the
@@ -68,6 +71,16 @@ data class WeekReview(val days: List<ReviewedDay>) {
 
     val missed: List<Pair<LocalDate, PlannedSession>>
         get() = days.flatMap { day -> day.items.filter { it.state == ReviewState.MISSED }.mapNotNull { item -> item.session?.let { day.date to it } } }
+
+    /** How the days before [today] went: what was recorded, planned or not, what was replaced, what was missed. */
+    fun past(today: LocalDate): PastTally {
+        val items = days.filter { it.date.isBefore(today) }.flatMap { it.items }
+        return PastTally(
+            done = items.count { it.activity != null && it.state != ReviewState.REPLACED },
+            replaced = items.count { it.state == ReviewState.REPLACED },
+            missed = items.count { it.state == ReviewState.MISSED },
+        )
+    }
 
     /** Whether there is anything to say about the days gone. */
     val hasPast: Boolean get() = days.any { day -> day.items.any { it.state != ReviewState.TODO } }
